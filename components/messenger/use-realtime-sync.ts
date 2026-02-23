@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-const FALLBACK_SYNC_INTERVAL_MS = 25_000;
+const FALLBACK_SYNC_INTERVAL_MS = 6_000;
 const RECONNECT_DELAY_MS = 1_500;
 const MIN_SYNC_GAP_MS = 350;
 const FALLBACK_THRESHOLD_ERRORS = 3;

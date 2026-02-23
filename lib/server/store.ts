@@ -1008,6 +1008,36 @@ async function writeStoreFile(store: StoreData): Promise<void> {
   lastValidFileStoreSnapshot = sanitizedNextStore;
 }
 
+export async function getStoreUpdateMarker(): Promise<number> {
+  if (USE_DATABASE_STORE) {
+    await ensureDatabaseStore();
+    const currentPool = getPool();
+    if (!currentPool) {
+      return 0;
+    }
+    const result = await currentPool.query<{ updated_at_ms: number | string }>(
+      `
+        SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_at_ms
+        FROM clore_store
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [STORE_ROW_ID]
+    );
+    const rawValue = result.rows[0]?.updated_at_ms;
+    const marker = typeof rawValue === "number" ? rawValue : Number(rawValue);
+    return Number.isFinite(marker) ? marker : 0;
+  }
+
+  try {
+    await ensureStoreFile();
+    const stats = await fs.stat(STORE_FILE_PATH);
+    return Number.isFinite(stats.mtimeMs) ? stats.mtimeMs : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function getStore(): Promise<StoreData> {
   ensureDatabaseConfigured();
   if (USE_DATABASE_STORE) {
