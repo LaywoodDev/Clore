@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { updateStore } from "@/lib/server/store";
+import { canModerateGroup, updateStore } from "@/lib/server/store";
 
 type GroupProfilePayload = {
   userId?: string;
@@ -31,6 +31,9 @@ export async function PATCH(request: Request) {
       if (!thread) {
         throw new Error("Group not found.");
       }
+      if (!canModerateGroup(thread, userId)) {
+        throw new Error("Only group owner or admin can update group profile.");
+      }
 
       thread.avatarUrl = avatarUrl;
       thread.bannerUrl = bannerUrl;
@@ -39,7 +42,12 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update group profile.";
-    const status = message === "Group not found." ? 404 : 400;
+    const status =
+      message === "Group not found."
+        ? 404
+        : message === "Only group owner or admin can update group profile."
+          ? 403
+          : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

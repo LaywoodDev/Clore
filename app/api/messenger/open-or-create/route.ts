@@ -28,10 +28,15 @@ export async function POST(request: Request) {
 
   try {
     const result = await updateStore<{ chatId: string; created: boolean }>((store) => {
-      const hasUser = store.users.some((user) => user.id === userId);
-      const hasTarget = store.users.some((user) => user.id === targetUserId);
-      if (!hasUser || !hasTarget) {
+      const user = store.users.find((candidate) => candidate.id === userId);
+      const targetUser = store.users.find((candidate) => candidate.id === targetUserId);
+      if (!user || !targetUser) {
         throw new Error("User not found.");
+      }
+      const userBlockedTarget = user.blockedUserIds.includes(targetUserId);
+      const targetBlockedUser = targetUser.blockedUserIds.includes(userId);
+      if (userBlockedTarget || targetBlockedUser) {
+        throw new Error("Cannot open chat because one of users is blocked.");
       }
 
       const existing = store.threads.find(
@@ -65,6 +70,9 @@ export async function POST(request: Request) {
           [targetUserId]: 0,
         },
         pinnedBy: {},
+        mutedBy: {},
+        typingBy: {},
+        groupRoles: {},
       };
       store.threads.push(nextThread);
 
@@ -77,7 +85,12 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create chat.";
-    const status = message === "User not found." ? 404 : 400;
+    const status =
+      message === "User not found."
+        ? 404
+        : message === "Cannot open chat because one of users is blocked."
+          ? 403
+          : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

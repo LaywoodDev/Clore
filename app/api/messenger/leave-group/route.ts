@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { updateStore } from "@/lib/server/store";
+import { isGroupOwner, updateStore } from "@/lib/server/store";
 
 type LeaveGroupPayload = {
   userId?: string;
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
       if (thread.threadType !== "group") {
         throw new Error("Only groups can be left.");
       }
-      if (thread.createdById === userId) {
-        throw new Error("Group creator cannot leave. Delete group instead.");
+      if (isGroupOwner(thread, userId)) {
+        throw new Error("Group owner cannot leave. Transfer ownership or delete group.");
       }
 
       thread.memberIds = thread.memberIds.filter((memberId) => memberId !== userId);
@@ -37,6 +37,12 @@ export async function POST(request: Request) {
       thread.readBy = restReadBy;
       const { [userId]: _removedPin, ...restPinnedBy } = thread.pinnedBy;
       thread.pinnedBy = restPinnedBy;
+      const { [userId]: _removedMuted, ...restMutedBy } = thread.mutedBy;
+      thread.mutedBy = restMutedBy;
+      const { [userId]: _removedTyping, ...restTypingBy } = thread.typingBy;
+      thread.typingBy = restTypingBy;
+      const { [userId]: _removedRole, ...restGroupRoles } = thread.groupRoles;
+      thread.groupRoles = restGroupRoles;
     });
 
     return NextResponse.json({ ok: true });
@@ -45,7 +51,7 @@ export async function POST(request: Request) {
     const status =
       message === "Chat not found."
         ? 404
-        : message === "Group creator cannot leave. Delete group instead."
+        : message === "Group owner cannot leave. Transfer ownership or delete group."
           ? 403
           : 400;
     return NextResponse.json({ error: message }, { status });

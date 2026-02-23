@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   createEntityId,
+  getStore,
   type StoredCallSignal,
   updateStore,
 } from "@/lib/server/store";
@@ -120,58 +121,41 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await updateStore<{
-      signals: Array<{
-        id: string;
-        chatId: string;
-        fromUserId: string;
-        toUserId: string;
-        type: StoredCallSignal["type"];
-        data: unknown;
-        createdAt: number;
-      }>;
-    }>((store) => {
-      store.callSignals = pruneExpiredSignals(store.callSignals);
+    const store = await getStore();
+    const hasUser = store.users.some((user) => user.id === userId);
+    if (!hasUser) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
 
-      const outgoing: Array<{
-        id: string;
-        chatId: string;
-        fromUserId: string;
-        toUserId: string;
-        type: StoredCallSignal["type"];
-        data: unknown;
-        createdAt: number;
-      }> = [];
-      const remaining: StoredCallSignal[] = [];
+    const prunedSignals = pruneExpiredSignals(store.callSignals);
+    const outgoing = prunedSignals
+      .filter((signal) => signal.toUserId === userId)
+      .map((signal) => ({
+        id: signal.id,
+        chatId: signal.chatId,
+        fromUserId: signal.fromUserId,
+        toUserId: signal.toUserId,
+        type: signal.type,
+        data: parseSignalPayload(signal.payload),
+        createdAt: signal.createdAt,
+      }))
+      .sort((a, b) => a.createdAt - b.createdAt);
 
-      for (const signal of store.callSignals) {
-        if (signal.toUserId === userId) {
-          outgoing.push({
-            id: signal.id,
-            chatId: signal.chatId,
-            fromUserId: signal.fromUserId,
-            toUserId: signal.toUserId,
-            type: signal.type,
-            data: parseSignalPayload(signal.payload),
-            createdAt: signal.createdAt,
-          });
-        } else {
-          remaining.push(signal);
-        }
-      }
+    const hadPrunedSignals = prunedSignals.length !== store.callSignals.length;
+    if (outgoing.length > 0 || hadPrunedSignals) {
+      // Persist cleanup and consume delivered signals.
+      await updateStore<void>((mutableStore) => {
+        const cleaned = pruneExpiredSignals(mutableStore.callSignals);
+        mutableStore.callSignals = cleaned.filter(
+          (signal) => signal.toUserId !== userId
+        );
+      }).catch(() => undefined);
+    }
 
-      store.callSignals = remaining;
-      outgoing.sort((a, b) => a.createdAt - b.createdAt);
-
-      return {
-        signals: outgoing,
-      };
-    });
-
-    return NextResponse.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load call signals.";
-    const status = 400;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ signals: outgoing });
+  } catch {
+    // Do not break chat UI because signaling queue is unavailable.
+    // Frontend treats empty list as "no pending call updates".
+    return NextResponse.json({ signals: [] });
   }
 }

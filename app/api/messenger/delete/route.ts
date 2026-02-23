@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { updateStore } from "@/lib/server/store";
+import { isGroupOwner, updateStore } from "@/lib/server/store";
 
 type DeletePayload = {
   userId?: string;
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
       if (!thread) {
         throw new Error("Chat not found.");
       }
-      if (thread.threadType === "group" && thread.createdById !== userId) {
-        throw new Error("Only group creator can delete the group.");
+      if (thread.threadType === "group" && !isGroupOwner(thread, userId)) {
+        throw new Error("Only group owner can delete the group.");
       }
 
       store.threads = store.threads.filter((candidate) => candidate.id !== chatId);
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const status =
       message === "Chat not found."
         ? 404
-        : message === "Only group creator can delete the group."
+        : message === "Only group owner can delete the group."
           ? 403
           : 400;
     return NextResponse.json({ error: message }, { status });

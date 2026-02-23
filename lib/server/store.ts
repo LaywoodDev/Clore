@@ -3,21 +3,26 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Pool } from "pg";
 
+import { publishStoreUpdate } from "@/lib/server/realtime";
+
 export type StoredUser = {
   id: string;
   name: string;
   username: string;
   email: string;
   password: string;
+  blockedUserIds: string[];
   bio: string;
   birthday: string;
   showLastSeen: boolean;
   lastSeenVisibility: "everyone" | "selected" | "nobody";
   avatarVisibility: "everyone" | "selected" | "nobody";
   bioVisibility: "everyone" | "selected" | "nobody";
+  birthdayVisibility: "everyone" | "selected" | "nobody";
   lastSeenAllowedUserIds: string[];
   avatarAllowedUserIds: string[];
   bioAllowedUserIds: string[];
+  birthdayAllowedUserIds: string[];
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
@@ -28,19 +33,24 @@ export type PublicUser = {
   name: string;
   username: string;
   email: string;
+  blockedUserIds: string[];
   bio: string;
   birthday: string;
   showLastSeen: boolean;
   lastSeenVisibility: "everyone" | "selected" | "nobody";
   avatarVisibility: "everyone" | "selected" | "nobody";
   bioVisibility: "everyone" | "selected" | "nobody";
+  birthdayVisibility: "everyone" | "selected" | "nobody";
   lastSeenAllowedUserIds: string[];
   avatarAllowedUserIds: string[];
   bioAllowedUserIds: string[];
+  birthdayAllowedUserIds: string[];
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
 };
+
+export type GroupRole = "owner" | "admin" | "member";
 
 export type StoredChatThread = {
   id: string;
@@ -54,6 +64,9 @@ export type StoredChatThread = {
   updatedAt: number;
   readBy: Record<string, number>;
   pinnedBy: Record<string, boolean>;
+  mutedBy: Record<string, boolean>;
+  typingBy: Record<string, number>;
+  groupRoles: Record<string, GroupRole>;
 };
 
 export type StoredChatMessage = {
@@ -62,7 +75,9 @@ export type StoredChatMessage = {
   authorId: string;
   text: string;
   attachments: StoredChatAttachment[];
+  replyToMessageId: string;
   createdAt: number;
+  editedAt: number;
 };
 
 export type StoredChatAttachment = {
@@ -89,6 +104,51 @@ export type StoreData = {
   messages: StoredChatMessage[];
   callSignals: StoredCallSignal[];
 };
+
+export const BOT_USER_ID = "bot-chatgpt";
+export const BOT_USERNAME = "chatgpt";
+
+function createBotStoredUser(): StoredUser {
+  const now = Date.now();
+  return {
+    id: BOT_USER_ID,
+    name: "ChatGPT",
+    username: BOT_USERNAME,
+    email: "chatgpt@clore.bot",
+    password: "__bot_account__",
+    blockedUserIds: [],
+    bio: "AI assistant bot",
+    birthday: "",
+    showLastSeen: true,
+    lastSeenVisibility: "everyone",
+    avatarVisibility: "everyone",
+    bioVisibility: "everyone",
+    birthdayVisibility: "everyone",
+    lastSeenAllowedUserIds: [],
+    avatarAllowedUserIds: [],
+    bioAllowedUserIds: [],
+    birthdayAllowedUserIds: [],
+    lastSeenAt: now,
+    avatarUrl: "",
+    bannerUrl: "",
+  };
+}
+
+function ensureBotUserInStore(store: StoreData): void {
+  const hasBot = store.users.some((user) => user.id === BOT_USER_ID);
+  if (hasBot) {
+    return;
+  }
+  store.users.push(createBotStoredUser());
+}
+
+export function isBotUserId(userId: string): boolean {
+  return userId.trim() === BOT_USER_ID;
+}
+
+export function getBotPublicUser(): PublicUser {
+  return toPublicUser(createBotStoredUser());
+}
 
 const IS_VERCEL_RUNTIME =
   process.env.VERCEL === "1" ||
@@ -142,6 +202,8 @@ const STORE_ROW_ID = "main";
 const STORE_FILE_PATH =
   process.env.CLORE_STORE_FILE_PATH?.trim() ??
   path.join(process.cwd(), "data", "clore-store.json");
+const STORE_BACKUP_FILE_PATH = `${STORE_FILE_PATH}.backup`;
+const STORE_TMP_FILE_PATH = `${STORE_FILE_PATH}.tmp`;
 const EMPTY_STORE: StoreData = {
   users: [],
   threads: [],
@@ -152,6 +214,7 @@ const EMPTY_STORE: StoreData = {
 let writeQueue: Promise<void> = Promise.resolve();
 let pool: Pool | null = null;
 let ensureDatabaseReadyPromise: Promise<void> | null = null;
+let lastValidFileStoreSnapshot: StoreData | null = null;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") {
@@ -178,15 +241,18 @@ export function toPublicUser(user: StoredUser): PublicUser {
     name: user.name,
     username: user.username,
     email: user.email,
+    blockedUserIds: user.blockedUserIds,
     bio: user.bio,
     birthday: user.birthday,
     showLastSeen: user.showLastSeen,
     lastSeenVisibility: user.lastSeenVisibility,
     avatarVisibility: user.avatarVisibility,
     bioVisibility: user.bioVisibility,
+    birthdayVisibility: user.birthdayVisibility,
     lastSeenAllowedUserIds: user.lastSeenAllowedUserIds,
     avatarAllowedUserIds: user.avatarAllowedUserIds,
     bioAllowedUserIds: user.bioAllowedUserIds,
+    birthdayAllowedUserIds: user.birthdayAllowedUserIds,
     lastSeenAt: user.lastSeenAt,
     avatarUrl: user.avatarUrl,
     bannerUrl: user.bannerUrl,
@@ -195,6 +261,67 @@ export function toPublicUser(user: StoredUser): PublicUser {
 
 export function createEntityId(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
+}
+
+function isGroupRole(value: unknown): value is GroupRole {
+  return value === "owner" || value === "admin" || value === "member";
+}
+
+export function getGroupRole(
+  thread: StoredChatThread,
+  userId: string
+): GroupRole | null {
+  if (thread.threadType !== "group" || !thread.memberIds.includes(userId)) {
+    return null;
+  }
+  const directRole = thread.groupRoles[userId];
+  if (isGroupRole(directRole)) {
+    return directRole;
+  }
+  return thread.createdById === userId ? "owner" : "member";
+}
+
+export function isGroupOwner(thread: StoredChatThread, userId: string): boolean {
+  return getGroupRole(thread, userId) === "owner";
+}
+
+export function canModerateGroup(
+  thread: StoredChatThread,
+  userId: string
+): boolean {
+  const role = getGroupRole(thread, userId);
+  return role === "owner" || role === "admin";
+}
+
+export function canRemoveGroupMember(
+  thread: StoredChatThread,
+  actorUserId: string,
+  targetUserId: string
+): boolean {
+  if (
+    thread.threadType !== "group" ||
+    actorUserId === targetUserId ||
+    !thread.memberIds.includes(actorUserId) ||
+    !thread.memberIds.includes(targetUserId)
+  ) {
+    return false;
+  }
+
+  const actorRole = getGroupRole(thread, actorUserId);
+  const targetRole = getGroupRole(thread, targetUserId);
+  if (!actorRole || !targetRole) {
+    return false;
+  }
+  if (targetRole === "owner") {
+    return false;
+  }
+  if (actorRole === "owner") {
+    return true;
+  }
+  if (actorRole === "admin") {
+    return targetRole === "member";
+  }
+  return false;
 }
 
 function ensureDatabaseConfigured() {
@@ -253,6 +380,26 @@ async function ensureStoreFile() {
   }
 }
 
+function isPotentiallyDataLossStore(store: StoreData): boolean {
+  const hasNonBotUsers = store.users.some((user) => !isBotUserId(user.id));
+  return (
+    !hasNonBotUsers &&
+    store.threads.length === 0 &&
+    store.messages.length === 0 &&
+    store.callSignals.length === 0
+  );
+}
+
+async function readStoreSnapshotFromPath(filePath: string): Promise<StoreData | null> {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    return sanitizeStore(parsed);
+  } catch {
+    return null;
+  }
+}
+
 function sanitizeUsers(rawUsers: unknown): StoredUser[] {
   if (!Array.isArray(rawUsers)) {
     return [];
@@ -294,6 +441,7 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       }
       return [...unique];
     };
+    const blockedUserIds = sanitizeAllowedUserIds(user.blockedUserIds);
     const rawLastSeenVisibility =
       typeof user.lastSeenVisibility === "string"
         ? user.lastSeenVisibility.trim()
@@ -304,6 +452,10 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
         : "";
     const rawBioVisibility =
       typeof user.bioVisibility === "string" ? user.bioVisibility.trim() : "";
+    const rawBirthdayVisibility =
+      typeof user.birthdayVisibility === "string"
+        ? user.birthdayVisibility.trim()
+        : "";
     const lastSeenVisibility =
       rawLastSeenVisibility === "everyone" ||
       rawLastSeenVisibility === "selected" ||
@@ -330,11 +482,22 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
         : rawBioVisibility === "contacts"
           ? "selected"
         : "everyone";
+    const birthdayVisibility =
+      rawBirthdayVisibility === "everyone" ||
+      rawBirthdayVisibility === "selected" ||
+      rawBirthdayVisibility === "nobody"
+        ? rawBirthdayVisibility
+        : rawBirthdayVisibility === "contacts"
+          ? "selected"
+        : "everyone";
     const lastSeenAllowedUserIds = sanitizeAllowedUserIds(
       user.lastSeenAllowedUserIds
     );
     const avatarAllowedUserIds = sanitizeAllowedUserIds(user.avatarAllowedUserIds);
     const bioAllowedUserIds = sanitizeAllowedUserIds(user.bioAllowedUserIds);
+    const birthdayAllowedUserIds = sanitizeAllowedUserIds(
+      user.birthdayAllowedUserIds
+    );
     const showLastSeen = lastSeenVisibility !== "nobody";
     const lastSeenAt = normalizeNumber(user.lastSeenAt, 0);
     const avatarUrl =
@@ -352,15 +515,18 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       username,
       email,
       password,
+      blockedUserIds,
       bio,
       birthday,
       showLastSeen,
       lastSeenVisibility,
       avatarVisibility,
       bioVisibility,
+      birthdayVisibility,
       lastSeenAllowedUserIds,
       avatarAllowedUserIds,
       bioAllowedUserIds,
+      birthdayAllowedUserIds,
       lastSeenAt,
       avatarUrl,
       bannerUrl,
@@ -389,15 +555,16 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       .filter((value): value is string => typeof value === "string")
       .map((value) => value.trim())
       .filter(Boolean);
+    const uniqueMemberIds = [...new Set(memberIds)];
 
-    if (!id || memberIds.length < 2) {
+    if (!id || uniqueMemberIds.length < 2) {
       continue;
     }
 
     const threadType =
       thread.threadType === "group" || thread.threadType === "direct"
         ? thread.threadType
-        : memberIds.length > 2
+        : uniqueMemberIds.length > 2
           ? "group"
           : "direct";
     const title = typeof thread.title === "string" ? thread.title.trim() : "";
@@ -405,27 +572,81 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       typeof thread.avatarUrl === "string" ? thread.avatarUrl.trim() : "";
     const bannerUrl =
       typeof thread.bannerUrl === "string" ? thread.bannerUrl.trim() : "";
-    const createdById =
+    const createdByCandidate =
       typeof thread.createdById === "string" && thread.createdById.trim()
         ? thread.createdById.trim()
-        : memberIds[0] ?? "";
+        : uniqueMemberIds[0] ?? "";
+    let createdById = uniqueMemberIds.includes(createdByCandidate)
+      ? createdByCandidate
+      : (uniqueMemberIds[0] ?? "");
     const createdAt = normalizeNumber(thread.createdAt, Date.now());
     const updatedAt = normalizeNumber(thread.updatedAt, createdAt);
     const readByRaw = asRecord(thread.readBy) ?? {};
     const pinnedByRaw = asRecord(thread.pinnedBy) ?? {};
+    const mutedByRaw = asRecord(thread.mutedBy) ?? {};
+    const typingByRaw = asRecord(thread.typingBy) ?? {};
+    const groupRolesRaw = asRecord(thread.groupRoles) ?? {};
     const readBy: Record<string, number> = {};
     const pinnedBy: Record<string, boolean> = {};
+    const mutedBy: Record<string, boolean> = {};
+    const typingBy: Record<string, number> = {};
+    const groupRoles: Record<string, GroupRole> = {};
 
-    for (const [memberId, readAt] of Object.entries(readByRaw)) {
-      readBy[memberId] = normalizeNumber(readAt, 0);
+    for (const memberId of uniqueMemberIds) {
+      readBy[memberId] = normalizeNumber(readByRaw[memberId], 0);
     }
     for (const [memberId, pinned] of Object.entries(pinnedByRaw)) {
+      if (!uniqueMemberIds.includes(memberId)) {
+        continue;
+      }
       pinnedBy[memberId] = pinned === true;
+    }
+    for (const [memberId, muted] of Object.entries(mutedByRaw)) {
+      if (!uniqueMemberIds.includes(memberId)) {
+        continue;
+      }
+      mutedBy[memberId] = muted === true;
+    }
+    for (const [memberId, typingAt] of Object.entries(typingByRaw)) {
+      if (!uniqueMemberIds.includes(memberId)) {
+        continue;
+      }
+      typingBy[memberId] = normalizeNumber(typingAt, 0);
+    }
+    if (threadType === "group") {
+      const fallbackOwnerId = createdById || uniqueMemberIds[0] || "";
+      for (const memberId of uniqueMemberIds) {
+        const nextRole = groupRolesRaw[memberId];
+        if (isGroupRole(nextRole)) {
+          groupRoles[memberId] = nextRole;
+        } else {
+          groupRoles[memberId] = memberId === fallbackOwnerId ? "owner" : "member";
+        }
+      }
+
+      const ownerIds = uniqueMemberIds.filter(
+        (memberId) => groupRoles[memberId] === "owner"
+      );
+      if (ownerIds.length === 0 && fallbackOwnerId) {
+        groupRoles[fallbackOwnerId] = "owner";
+      } else if (ownerIds.length > 1) {
+        for (const memberId of ownerIds.slice(1)) {
+          groupRoles[memberId] = "admin";
+        }
+      }
+
+      const normalizedOwnerId =
+        uniqueMemberIds.find((memberId) => groupRoles[memberId] === "owner") ??
+        fallbackOwnerId;
+      if (normalizedOwnerId) {
+        groupRoles[normalizedOwnerId] = "owner";
+        createdById = normalizedOwnerId;
+      }
     }
 
     byId.set(id, {
       id,
-      memberIds: [...new Set(memberIds)],
+      memberIds: uniqueMemberIds,
       threadType,
       title,
       avatarUrl,
@@ -435,6 +656,9 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       updatedAt,
       readBy,
       pinnedBy,
+      mutedBy,
+      typingBy,
+      groupRoles,
     });
   }
 
@@ -491,7 +715,12 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
         };
       })
       .filter((attachment): attachment is StoredChatAttachment => attachment !== null);
+    const replyToMessageId =
+      typeof message.replyToMessageId === "string"
+        ? message.replyToMessageId.trim()
+        : "";
     const createdAt = normalizeNumber(message.createdAt, Date.now());
+    const editedAt = normalizeNumber(message.editedAt, 0);
 
     if (!id || !chatId || !authorId || (!text.trim() && attachments.length === 0)) {
       continue;
@@ -503,7 +732,9 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
       authorId,
       text,
       attachments,
+      replyToMessageId,
       createdAt,
+      editedAt,
     });
   }
 
@@ -667,6 +898,8 @@ async function updateStoreInDatabase<T>(
       );
     }
 
+    ensureBotUserInStore(store);
+
     const result = await updater(store);
     await client.query(
       `
@@ -690,20 +923,89 @@ async function updateStoreInDatabase<T>(
 async function readStoreFile(): Promise<StoreData> {
   await ensureStoreFile();
 
-  try {
-    const raw = await fs.readFile(STORE_FILE_PATH, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    return sanitizeStore(parsed);
-  } catch {
-    return {
-      ...EMPTY_STORE,
-    };
+  const maybeRestoreFromBackup = async (
+    primarySnapshot: StoreData
+  ): Promise<StoreData> => {
+    if (!isPotentiallyDataLossStore(primarySnapshot)) {
+      return primarySnapshot;
+    }
+    const backupSnapshot = await readStoreSnapshotFromPath(STORE_BACKUP_FILE_PATH);
+    if (backupSnapshot && !isPotentiallyDataLossStore(backupSnapshot)) {
+      lastValidFileStoreSnapshot = backupSnapshot;
+      return backupSnapshot;
+    }
+    return primarySnapshot;
+  };
+
+  const firstAttempt = await readStoreSnapshotFromPath(STORE_FILE_PATH);
+  if (firstAttempt) {
+    const restored = await maybeRestoreFromBackup(firstAttempt);
+    lastValidFileStoreSnapshot = restored;
+    return restored;
   }
+
+  // In local file mode reads can overlap writes and briefly observe incomplete JSON.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const secondAttempt = await readStoreSnapshotFromPath(STORE_FILE_PATH);
+  if (secondAttempt) {
+    const restored = await maybeRestoreFromBackup(secondAttempt);
+    lastValidFileStoreSnapshot = restored;
+    return restored;
+  }
+
+  const backupAttempt = await readStoreSnapshotFromPath(STORE_BACKUP_FILE_PATH);
+  if (backupAttempt) {
+    lastValidFileStoreSnapshot = backupAttempt;
+    return backupAttempt;
+  }
+
+  if (lastValidFileStoreSnapshot) {
+    return sanitizeStore(lastValidFileStoreSnapshot);
+  }
+
+  return {
+    ...EMPTY_STORE,
+  };
 }
 
 async function writeStoreFile(store: StoreData): Promise<void> {
   await ensureStoreFile();
-  await fs.writeFile(STORE_FILE_PATH, JSON.stringify(store, null, 2), "utf8");
+  const sanitizedNextStore = sanitizeStore(store);
+  const currentSnapshot = await readStoreSnapshotFromPath(STORE_FILE_PATH);
+
+  if (
+    currentSnapshot &&
+    !isPotentiallyDataLossStore(currentSnapshot) &&
+    isPotentiallyDataLossStore(sanitizedNextStore)
+  ) {
+    throw new Error(
+      "Refusing to overwrite non-empty store with potentially empty snapshot."
+    );
+  }
+
+  try {
+    const currentRaw = await fs.readFile(STORE_FILE_PATH, "utf8");
+    await fs.writeFile(STORE_BACKUP_FILE_PATH, currentRaw, "utf8");
+  } catch {
+    // Best-effort backup.
+  }
+
+  await fs.writeFile(
+    STORE_TMP_FILE_PATH,
+    JSON.stringify(sanitizedNextStore, null, 2),
+    "utf8"
+  );
+
+  try {
+    await fs.rename(STORE_TMP_FILE_PATH, STORE_FILE_PATH);
+  } catch {
+    await fs.unlink(STORE_FILE_PATH).catch(() => undefined);
+    await fs.rename(STORE_TMP_FILE_PATH, STORE_FILE_PATH);
+  } finally {
+    await fs.unlink(STORE_TMP_FILE_PATH).catch(() => undefined);
+  }
+
+  lastValidFileStoreSnapshot = sanitizedNextStore;
 }
 
 export async function getStore(): Promise<StoreData> {
@@ -726,13 +1028,16 @@ export function updateStore<T>(
         try {
           if (USE_DATABASE_STORE) {
             const result = await updateStoreInDatabase(updater);
+            publishStoreUpdate();
             resolve(result);
             return;
           }
 
           const store = await readStoreFile();
+          ensureBotUserInStore(store);
           const result = await updater(store);
           await writeStoreFile(store);
+          publishStoreUpdate();
           resolve(result);
         } catch (error) {
           reject(error);

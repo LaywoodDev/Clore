@@ -60,17 +60,88 @@ function ContextMenuRadioGroup({
 
 function ContextMenuContent({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
 }) {
+  const contentRef = React.useRef<HTMLDivElement | null>(null)
+  const [highlight, setHighlight] = React.useState<{
+    top: number
+    height: number
+    opacity: number
+  }>({
+    top: 0,
+    height: 0,
+    opacity: 0,
+  })
+
+  const updateHighlight = React.useCallback(() => {
+    const contentNode = contentRef.current
+    if (!contentNode) return
+
+    const activeItem = contentNode.querySelector<HTMLElement>(
+      '[data-slot="context-menu-item"][data-highlighted]'
+    )
+
+    if (!activeItem) {
+      setHighlight((prev) => ({ ...prev, opacity: 0 }))
+      return
+    }
+
+    setHighlight({
+      top: activeItem.offsetTop,
+      height: activeItem.offsetHeight,
+      opacity: 1,
+    })
+  }, [])
+
+  React.useEffect(() => {
+    const contentNode = contentRef.current
+    if (!contentNode) return
+
+    const observer = new MutationObserver(() => {
+      updateHighlight()
+    })
+
+    observer.observe(contentNode, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-highlighted"],
+    })
+
+    const rafId = requestAnimationFrame(() => {
+      updateHighlight()
+    })
+
+    return () => {
+      cancelAnimationFrame(rafId)
+      observer.disconnect()
+    }
+  }, [updateHighlight])
+
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
-        className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 bg-popover text-popover-foreground min-w-36 rounded-lg p-1 shadow-md ring-1 duration-100 z-50 max-h-(--radix-context-menu-content-available-height) origin-(--radix-context-menu-content-transform-origin) overflow-x-hidden overflow-y-auto", className )}
+        ref={contentRef}
+        onPointerMove={updateHighlight}
+        onFocus={updateHighlight}
+        className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 bg-popover text-popover-foreground min-w-36 rounded-lg p-1 shadow-md ring-1 duration-100 z-50 max-h-(--radix-context-menu-content-available-height) origin-(--radix-context-menu-content-transform-origin) overflow-x-hidden overflow-y-auto relative", className )}
         {...props}
-      />
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-1 right-1 z-0 rounded-xl bg-violet-500 transition-[transform,height,opacity] duration-150 ease-out will-change-transform"
+          style={{
+            height: highlight.height,
+            opacity: highlight.opacity,
+            transform: `translateY(${highlight.top}px)`,
+          }}
+        />
+        {children}
+      </ContextMenuPrimitive.Content>
     </ContextMenuPrimitive.Portal>
   )
 }
@@ -90,7 +161,7 @@ function ContextMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:text-destructive focus:*:[svg]:text-accent-foreground gap-1.5 rounded-md px-1.5 py-1 text-sm data-inset:pl-7 [&_svg:not([class*='size-'])]:size-4 group/context-menu-item relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "data-[highlighted]:bg-transparent data-[variant=destructive]:text-destructive data-[variant=destructive]:data-[highlighted]:bg-transparent dark:data-[variant=destructive]:data-[highlighted]:bg-transparent gap-1.5 rounded-md px-1.5 py-1 text-sm text-current data-inset:pl-7 [&_svg:not([class*='size-'])]:size-4 group/context-menu-item relative z-10 flex cursor-default items-center outline-hidden select-none transition-[color] duration-150 ease-out data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:text-current",
         className
       )}
       {...props}

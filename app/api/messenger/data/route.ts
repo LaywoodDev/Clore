@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 
-import { toPublicUser, updateStore } from "@/lib/server/store";
+import {
+  BOT_USER_ID,
+  getBotPublicUser,
+  getStore,
+  toPublicUser,
+  updateStore,
+} from "@/lib/server/store";
 
 type VisibilityScope = "everyone" | "contacts" | "nobody";
 type NextVisibilityScope = "everyone" | "selected" | "nobody";
+const LAST_SEEN_HEARTBEAT_MS = 15_000;
 
 function canViewByVisibility(
   visibility: VisibilityScope | NextVisibilityScope,
@@ -30,77 +37,123 @@ function canViewByVisibility(
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId")?.trim() ?? "";
+  const sinceRaw = searchParams.get("since")?.trim() ?? "";
+  const since = Number.parseInt(sinceRaw, 10);
+  const hasSince = Number.isFinite(since) && since > 0;
+  const now = Date.now();
 
   if (!userId) {
     return NextResponse.json({ error: "Missing userId." }, { status: 400 });
   }
 
-  const data = await updateStore((store) => {
-    const requester = store.users.find((candidate) => candidate.id === userId);
-    if (requester) {
-      requester.lastSeenAt = Date.now();
-    }
+  const store = await getStore();
+  const requester = store.users.find((candidate) => candidate.id === userId);
+  if (!requester) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
 
-    const threads = store.threads
-      .filter((thread) => thread.memberIds.includes(userId))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-    const contactIds = new Set<string>();
-    for (const thread of threads) {
-      for (const memberId of thread.memberIds) {
-        if (memberId !== userId) {
-          contactIds.add(memberId);
-        }
+  // Heartbeat writes are throttled to avoid a DB write on every poll.
+  if (now - requester.lastSeenAt >= LAST_SEEN_HEARTBEAT_MS) {
+    await updateStore<void>((mutableStore) => {
+      const mutableRequester = mutableStore.users.find(
+        (candidate) => candidate.id === userId
+      );
+      if (!mutableRequester) {
+        return;
+      }
+      if (now - mutableRequester.lastSeenAt >= LAST_SEEN_HEARTBEAT_MS) {
+        mutableRequester.lastSeenAt = now;
+      }
+    }).catch(() => undefined);
+    requester.lastSeenAt = now;
+  }
+
+  const allThreads = store.threads
+    .filter((thread) => thread.memberIds.includes(userId))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const contactIds = new Set<string>();
+  for (const thread of allThreads) {
+    for (const memberId of thread.memberIds) {
+      if (memberId !== userId) {
+        contactIds.add(memberId);
       }
     }
-    const users = store.users.map((user) => {
-      const publicUser = toPublicUser(user);
-      const isSelf = user.id === userId;
-      const isContact = contactIds.has(user.id);
-      const canViewLastSeen = canViewByVisibility(
-        publicUser.lastSeenVisibility,
-        publicUser.lastSeenAllowedUserIds,
-        isSelf,
-        userId,
-        isContact
-      );
-      const canViewAvatar = canViewByVisibility(
-        publicUser.avatarVisibility,
-        publicUser.avatarAllowedUserIds,
-        isSelf,
-        userId,
-        isContact
-      );
-      const canViewBio = canViewByVisibility(
-        publicUser.bioVisibility,
-        publicUser.bioAllowedUserIds,
-        isSelf,
-        userId,
-        isContact
-      );
+  }
 
-      return {
-        ...publicUser,
-        lastSeenAllowedUserIds: isSelf ? publicUser.lastSeenAllowedUserIds : [],
-        avatarAllowedUserIds: isSelf ? publicUser.avatarAllowedUserIds : [],
-        bioAllowedUserIds: isSelf ? publicUser.bioAllowedUserIds : [],
-        showLastSeen: canViewLastSeen && publicUser.showLastSeen,
-        lastSeenAt: canViewLastSeen ? publicUser.lastSeenAt : 0,
-        avatarUrl: canViewAvatar ? publicUser.avatarUrl : "",
-        bio: canViewBio ? publicUser.bio : "",
-      };
-    });
-
-    const threadIds = new Set(threads.map((thread) => thread.id));
-    const messages = store.messages
-      .filter((message) => threadIds.has(message.chatId))
-      .sort((a, b) => a.createdAt - b.createdAt);
+  const users = store.users.map((user) => {
+    const publicUser = toPublicUser(user);
+    const isSelf = user.id === userId;
+    const isContact = contactIds.has(user.id);
+    const canViewLastSeen = canViewByVisibility(
+      publicUser.lastSeenVisibility,
+      publicUser.lastSeenAllowedUserIds,
+      isSelf,
+      userId,
+      isContact
+    );
+    const canViewAvatar = canViewByVisibility(
+      publicUser.avatarVisibility,
+      publicUser.avatarAllowedUserIds,
+      isSelf,
+      userId,
+      isContact
+    );
+    const canViewBio = canViewByVisibility(
+      publicUser.bioVisibility,
+      publicUser.bioAllowedUserIds,
+      isSelf,
+      userId,
+      isContact
+    );
+    const canViewBirthday = canViewByVisibility(
+      publicUser.birthdayVisibility,
+      publicUser.birthdayAllowedUserIds,
+      isSelf,
+      userId,
+      isContact
+    );
 
     return {
-      users,
-      threads,
-      messages,
+      ...publicUser,
+      blockedUserIds: isSelf ? publicUser.blockedUserIds : [],
+      lastSeenAllowedUserIds: isSelf ? publicUser.lastSeenAllowedUserIds : [],
+      avatarAllowedUserIds: isSelf ? publicUser.avatarAllowedUserIds : [],
+      bioAllowedUserIds: isSelf ? publicUser.bioAllowedUserIds : [],
+      birthdayAllowedUserIds: isSelf ? publicUser.birthdayAllowedUserIds : [],
+      showLastSeen: canViewLastSeen && publicUser.showLastSeen,
+      lastSeenAt: canViewLastSeen ? publicUser.lastSeenAt : 0,
+      avatarUrl: canViewAvatar ? publicUser.avatarUrl : "",
+      bio: canViewBio ? publicUser.bio : "",
+      birthday: canViewBirthday ? publicUser.birthday : "",
     };
   });
 
-  return NextResponse.json(data);
+  if (!users.some((user) => user.id === BOT_USER_ID)) {
+    users.push(getBotPublicUser());
+  }
+
+  const threads = hasSince
+    ? allThreads.filter((thread) => {
+        if (thread.updatedAt >= since) {
+          return true;
+        }
+        return Object.values(thread.typingBy).some((typingAt) => typingAt >= since);
+      })
+    : allThreads;
+  const threadIds = new Set(allThreads.map((thread) => thread.id));
+  const messages = store.messages
+    .filter(
+      (message) =>
+        threadIds.has(message.chatId) &&
+        (!hasSince || message.createdAt >= since)
+    )
+    .sort((a, b) => a.createdAt - b.createdAt);
+
+  return NextResponse.json({
+    users,
+    threads,
+    messages,
+    fullSync: !hasSince,
+    serverTime: now,
+  });
 }

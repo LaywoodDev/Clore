@@ -1,27 +1,46 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
+  Bell,
+  BellOff,
+  Bold,
   Check,
   CheckCheck,
   Copy,
   Download,
-  Home,
-  Pin,
-  PinOff,
-  Plus,
-  MoreVertical,
-  Paperclip,
+  Eraser,
+  Mic,
+  MessageCircle,
+  EllipsisVertical as MoreVertical,
+  House as Home,
+  Italic,
+  ListChecks as List,
+  Pause,
+  PencilLine as Pencil,
   Phone,
   PhoneOff,
+  Play,
+  Plus,
   Search,
-  SendHorizontal,
-  Settings,
   Smile,
+  Square,
+  SquareCode as Code2,
+  Strikethrough,
+  TextQuote as Quote,
   Trash2,
-  UserRound,
+  Undo2 as CornerUpLeft,
   Users,
   X,
 } from "lucide-react";
@@ -44,6 +63,13 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -54,6 +80,150 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { requestJson } from "@/components/messenger/api";
+import { type AuthUser, type PrivacyVisibility } from "@/components/messenger/types";
+import { useRealtimeSync } from "@/components/messenger/use-realtime-sync";
+
+const ProfileSidebarIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+    <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+  </svg>
+);
+
+const SettingsSidebarIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" />
+    <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  </svg>
+);
+
+const ChatProfileSidebarIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12" />
+    <path d="M15 4l0 16" />
+  </svg>
+);
+
+const PinFilledIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4" />
+    <path d="M9 15l-4.5 4.5" />
+    <path d="M14.5 4l5.5 5.5" />
+  </svg>
+);
+
+const PinOffIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M3 3l18 18" />
+    <path d="M15 4.5l-3.249 3.249m-2.57 1.433l-2.181 .818l-1.5 1.5l7 7l1.5 -1.5l.82 -2.186m1.43 -2.563l3.25 -3.251" />
+    <path d="M9 15l-4.5 4.5" />
+    <path d="M14.5 4l5.5 5.5" />
+  </svg>
+);
+
+const ShareContactIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M13 4v4c-6.575 1.028 -9.02 6.788 -10 12c-.037 .206 5.384 -5.962 10 -6v4l8 -7l-8 -7" />
+  </svg>
+);
+
+const CHAT_ACTION_MENU_CONTENT_CLASS_NAME =
+  "w-56 rounded-2xl border border-zinc-700 bg-zinc-900/95 p-1 text-zinc-100 shadow-2xl ring-1 ring-foreground/5 backdrop-blur";
+const CHAT_ACTION_MENU_ITEM_CLASS_NAME =
+  "cursor-pointer gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-zinc-100 [&_svg]:text-zinc-100 data-[highlighted]:!text-zinc-100 data-[highlighted]:[&_svg]:!text-zinc-100";
+const CHAT_ACTION_MENU_DESTRUCTIVE_ITEM_CLASS_NAME =
+  "cursor-pointer gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-red-200 [&_svg]:text-red-200 data-[highlighted]:text-red-200 data-[highlighted]:[&_svg]:text-red-200";
+const CHAT_ACTION_MENU_SEPARATOR_CLASS_NAME = "mx-1 bg-zinc-700/80";
+const PROFILE_ACTION_MENU_CONTENT_CLASS_NAME =
+  "w-52 origin-top-right rounded-xl border border-zinc-700/90 bg-zinc-900/98 p-1 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur data-[state=open]:animate-[clore-profile-menu-in_180ms_cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:animate-[clore-profile-menu-out_120ms_ease-in]";
+const PROFILE_ACTION_MENU_ITEM_CLASS_NAME =
+  "cursor-pointer gap-2.5 rounded-xl px-3 py-2 text-sm font-medium !text-zinc-100 data-[highlighted]:!text-zinc-100 [&_svg]:text-zinc-300 data-[highlighted]:[&_svg]:!text-zinc-100";
+const PROFILE_ACTION_MENU_SEPARATOR_CLASS_NAME = "mx-1 bg-zinc-700/70";
+const EMPTY_USER_IDS: string[] = [];
+const PRIVACY_VISIBILITY_OPTIONS: PrivacyVisibility[] = [
+  "everyone",
+  "selected",
+  "nobody",
+];
 
 type StoredChatThread = {
   id: string;
@@ -67,6 +237,9 @@ type StoredChatThread = {
   updatedAt: number;
   readBy: Record<string, number>;
   pinnedBy: Record<string, boolean>;
+  mutedBy: Record<string, boolean>;
+  typingBy: Record<string, number>;
+  groupRoles: Record<string, GroupRole>;
 };
 
 type StoredChatMessage = {
@@ -75,7 +248,9 @@ type StoredChatMessage = {
   authorId: string;
   text: string;
   attachments: StoredChatAttachment[];
+  replyToMessageId: string;
   createdAt: number;
+  editedAt: number;
 };
 
 type StoredChatAttachment = {
@@ -91,7 +266,7 @@ type RenderAttachment = {
   name: string;
   size: number;
   url: string;
-  kind: "image" | "video" | "file";
+  kind: "image" | "video" | "audio" | "file";
 };
 
 type PendingAttachment = {
@@ -100,25 +275,41 @@ type PendingAttachment = {
   type: string;
   size: number;
   url: string;
-  kind: "image" | "video" | "file";
+  kind: "image" | "video" | "audio" | "file";
 };
 
 type RenderMessage = {
   id: string;
+  chatId: string;
+  authorId: string;
   author: "me" | "them";
+  authorLabel: string;
+  authorUsername: string;
   text: string;
   time: string;
+  createdAt: number;
   attachments: RenderAttachment[];
   isReadByPeer: boolean;
+  groupReadByCount: number;
+  groupReadByLabels: string[];
+  isEdited: boolean;
+  reply: {
+    targetMessageId: string;
+    authorLabel: string;
+    previewText: string;
+    missing: boolean;
+  } | null;
 };
 
 type ChatListItem = {
   id: string;
   memberId: string | null;
   memberIds: string[];
+  groupRoles: Record<string, GroupRole>;
   isGroup: boolean;
   createdById: string;
   isGroupCreator: boolean;
+  myGroupRole: GroupRole | null;
   name: string;
   username: string;
   avatarUrl: string;
@@ -129,6 +320,7 @@ type ChatListItem = {
   unread: number;
   updatedAt: number;
   isPinned: boolean;
+  isMuted: boolean;
 };
 
 type SidebarItem = {
@@ -146,30 +338,46 @@ type ProfileData = {
   bannerUrl: string;
 };
 
-type ProfileTabId = "media" | "links";
+type ProfileTabId = "media" | "audio" | "links";
+type ProfileMediaItem = {
+  id: string;
+  url: string;
+  name: string;
+  kind: "image" | "video";
+  time: string;
+};
+type ProfileAudioItem = {
+  id: string;
+  url: string;
+  time: string;
+};
 type SettingsSectionId = "privacy" | "security" | "appearance";
-type PrivacyVisibility = "everyone" | "selected" | "nobody";
+type ToastAction = {
+  label: string;
+  onClick: () => void;
+};
+
+type InlineToast = {
+  id: number;
+  message: string;
+  action?: ToastAction;
+};
 
 type AppLanguage = "en" | "ru";
-
-export type AuthUser = {
-  id: string;
-  name: string;
-  username: string;
-  email: string;
-  bio: string;
-  birthday: string;
-  showLastSeen: boolean;
-  lastSeenVisibility: PrivacyVisibility;
-  avatarVisibility: PrivacyVisibility;
-  bioVisibility: PrivacyVisibility;
-  lastSeenAllowedUserIds: string[];
-  avatarAllowedUserIds: string[];
-  bioAllowedUserIds: string[];
-  lastSeenAt: number;
-  avatarUrl: string;
-  bannerUrl: string;
+type UiDensity = "comfortable" | "compact";
+type UiFontSize = "small" | "default" | "large";
+type UiRadius = "sharp" | "normal" | "rounded";
+type UiFontFamily = "default" | "modern" | "readable" | "comfortaa";
+type ChatWallpaper = "none" | "aurora" | "sunset" | "ocean" | "graphite";
+type ChatWallpaperSetting = ChatWallpaper | "inherit";
+type ChatFontSizeSetting = UiFontSize | "inherit";
+type ChatPersonalization = {
+  wallpaper: ChatWallpaperSetting;
+  fontSize: ChatFontSizeSetting;
+  autoLoadMedia: boolean;
 };
+type GroupRole = "owner" | "admin" | "member";
+type TextFormattingAction = "bold" | "italic" | "strike" | "code" | "quote" | "list";
 
 type WebMessengerProps = {
   currentUser: AuthUser;
@@ -183,23 +391,54 @@ type WebMessengerProps = {
       | "lastSeenVisibility"
       | "avatarVisibility"
       | "bioVisibility"
+      | "birthdayVisibility"
       | "lastSeenAllowedUserIds"
       | "avatarAllowedUserIds"
       | "bioAllowedUserIds"
+      | "birthdayAllowedUserIds"
     >
   ) => void | Promise<void>;
 };
 
 const sidebarItems: SidebarItem[] = [
   { id: "home", label: "Home", icon: Home },
-  { id: "profile", label: "Profile", icon: UserRound },
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "profile", label: "Profile", icon: ProfileSidebarIcon },
+  { id: "settings", label: "Settings", icon: SettingsSidebarIcon },
 ];
+const SIDEBAR_ITEM_IDS: SidebarItem["id"][] = ["home", "profile", "settings"];
+const DEFAULT_SIDEBAR_VISIBILITY: Record<SidebarItem["id"], boolean> = {
+  home: true,
+  profile: true,
+  settings: true,
+};
+const CHAT_WALLPAPER_OPTIONS: ChatWallpaper[] = [
+  "none",
+  "aurora",
+  "sunset",
+  "ocean",
+  "graphite",
+];
+const CHAT_WALLPAPER_BACKGROUNDS: Record<ChatWallpaper, string> = {
+  none: "radial-gradient(circle at top, rgba(139,92,246,0.1), transparent 45%)",
+  aurora:
+    "radial-gradient(circle at 15% 20%, rgba(16,185,129,0.22), transparent 45%), radial-gradient(circle at 85% 0%, rgba(59,130,246,0.2), transparent 38%), linear-gradient(180deg, #0b1220 0%, #111827 100%)",
+  sunset:
+    "radial-gradient(circle at 22% 18%, rgba(251,146,60,0.2), transparent 46%), radial-gradient(circle at 86% 9%, rgba(244,63,94,0.22), transparent 40%), linear-gradient(180deg, #2b1421 0%, #1f1125 100%)",
+  ocean:
+    "radial-gradient(circle at 18% 14%, rgba(6,182,212,0.2), transparent 42%), radial-gradient(circle at 82% 0%, rgba(14,165,233,0.2), transparent 36%), linear-gradient(180deg, #0b1b2b 0%, #0f172a 100%)",
+  graphite:
+    "radial-gradient(circle at 20% 18%, rgba(161,161,170,0.16), transparent 42%), radial-gradient(circle at 80% 0%, rgba(113,113,122,0.16), transparent 36%), linear-gradient(180deg, #18181b 0%, #09090b 100%)",
+};
+const DEFAULT_CHAT_PERSONALIZATION: ChatPersonalization = {
+  wallpaper: "inherit",
+  fontSize: "inherit",
+  autoLoadMedia: true,
+};
 
 const accentPalette = [
   "from-orange-500 to-amber-400",
   "from-cyan-500 to-sky-400",
-  "from-emerald-500 to-lime-500",
+  "from-purple-500 to-violet-500",
   "from-violet-500 to-fuchsia-500",
   "from-rose-500 to-pink-500",
   "from-blue-500 to-indigo-500",
@@ -217,11 +456,30 @@ const initialProfile: ProfileData = {
 const LANGUAGE_STORAGE_KEY = "clore_app_language_v1";
 const PUSH_NOTIFICATIONS_STORAGE_KEY = "clore_push_notifications_v1";
 const MESSAGE_SOUND_STORAGE_KEY = "clore_message_sound_v1";
+const UI_DENSITY_STORAGE_KEY = "clore_ui_density_v1";
+const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
+const UI_RADIUS_STORAGE_KEY = "clore_ui_radius_v1";
+const UI_FONT_FAMILY_STORAGE_KEY = "clore_ui_font_family_v1";
+const GLOBAL_CHAT_WALLPAPER_STORAGE_KEY = "clore_global_chat_wallpaper_v1";
+const SIDEBAR_LAYOUT_STORAGE_KEY_PREFIX = "clore_sidebar_layout_v1_";
+const CHAT_PERSONALIZATION_STORAGE_KEY_PREFIX = "clore_chat_personalization_v1_";
+const PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY =
+  "clore_personalization_onboarding_done_v1";
+const CHAT_CLEAR_HISTORY_STORAGE_PREFIX = "clore_chat_clear_history_v1_";
+const CHAT_DRAFTS_STORAGE_PREFIX = "clore_chat_drafts_v1_";
 const INCOMING_MESSAGE_SOUND_PATH = "/sounds/meet-message-sound-1.mp3";
 const MAX_PINNED_CHATS = 5;
 const MIN_BIRTH_YEAR = 1900;
 const ONLINE_STATUS_WINDOW_MS = 20_000;
-
+const INCREMENTAL_FULL_SYNC_INTERVAL_MS = 30_000;
+const TYPING_ACTIVE_WINDOW_MS = 7_000;
+const TYPING_PING_INTERVAL_MS = 2_500;
+const MESSAGE_APPEAR_ANIMATION_MS = 220;
+const MESSAGE_TARGET_HIGHLIGHT_MS = 1_200;
+const UNDO_WINDOW_MS = 5_000;
+const GROUP_TITLE_MIN_LENGTH = 3;
+const GROUP_TITLE_MAX_LENGTH = 64;
+const GROUP_MAX_MEMBERS = 50;
 const translations = {
   en: {
     home: "Home",
@@ -239,6 +497,29 @@ const translations = {
     members: "members",
     participants: "Participants",
     creator: "Creator",
+    owner: "Owner",
+    admin: "Admin",
+    member: "Member",
+    yourRole: "Your role",
+    renameGroup: "Rename group",
+    groupNameMinError: `Group name must be at least ${GROUP_TITLE_MIN_LENGTH} characters`,
+    groupNameMaxError: `Group name must be at most ${GROUP_TITLE_MAX_LENGTH} characters`,
+    groupMembersMinError: "Select at least 2 members",
+    groupMembersLimitHint: `Up to ${GROUP_MAX_MEMBERS} members`,
+    addMembers: "Add members",
+    addMember: "Add",
+    removeMember: "Remove member",
+    promoteToAdmin: "Make admin",
+    demoteToMember: "Remove admin",
+    transferOwnership: "Transfer ownership",
+    openGroupSettings: "Open settings",
+    hideGroupSettings: "Hide settings",
+    groupRenamedToast: "Group renamed",
+    memberAddedToast: "Member added",
+    memberRemovedToast: "Member removed",
+    roleUpdatedToast: "Role updated",
+    ownershipTransferredToast: "Ownership transferred",
+    readBy: "Read by",
     noChatsOrUsersFound: "No chats or users found",
     noChatsYet: "No chats yet. Register another account to start chatting.",
     yesterday: "Yesterday",
@@ -247,13 +528,25 @@ const translations = {
     offline: "Offline",
     lastSeenAt: "Last seen at",
     lastSeenHidden: "Last seen hidden",
+    typingNow: "Typing...",
     noMessagesYet: "No messages yet",
     copyText: "Copy",
+    replyToMessage: "Reply",
+    replyingTo: "Replying to",
+    cancelReply: "Cancel reply",
+    originalMessageUnavailable: "Original message not found",
+    editMessage: "Edit",
+    editingMessage: "Editing message",
+    cancelEdit: "Cancel edit",
+    saveEdit: "Save",
+    editedLabel: "edited",
     copyAttachmentLink: "Copy attachment link",
     deleteMessage: "Delete message",
     pinChat: "Pin chat",
     unpinChat: "Unpin chat",
-    deleteForBoth: "Delete for both",
+    muteChat: "Mute chat",
+    unmuteChat: "Unmute chat",
+    deleteForBoth: "Delete chat",
     deleteGroup: "Delete group",
     leaveGroup: "Leave group",
     call: "Call",
@@ -274,17 +567,64 @@ const translations = {
     callBrowserNotSupported: "Audio calls are not supported in this browser",
     callDirectOnly: "Audio calls are available only in direct chats",
     menu: "Menu",
+    collapseSidebar: "Collapse sidebar",
+    expandSidebar: "Expand sidebar",
+    searchInChat: "Search in chat",
+    deleteOptions: "Delete options",
+    clearHistoryForMe: "Clear history for me",
+    historyClearedForMe: "History cleared only for you",
+    noMessagesFound: "No messages found",
+    unreadMessages: "Unread messages",
+    draftLabel: "Draft",
+    searchAdvancedHint:
+      "Filters: from:@username has:attachment|image|video|audio|file on:YYYY-MM-DD before:YYYY-MM-DD after:YYYY-MM-DD",
+    jumpToDate: "Jump to date",
+    date: "Date",
+    deleteChatAction: "Delete chat",
+    deleteChatConfirmTitle: "Delete this chat?",
+    deleteChatConfirmDescription:
+      "This action removes the chat for all participants. You can undo for a few seconds after delete.",
     typeMessage: "Type a message...",
+    formattingHint: "Formatting",
+    formattingHotkeyHint: "Enter to send, Shift+Enter for new line",
+    formatBold: "Bold",
+    formatItalic: "Italic",
+    formatStrike: "Strikethrough",
+    formatCode: "Code",
+    formatQuote: "Quote",
+    formatList: "List",
     attachFiles: "Attach files",
+    voiceMessage: "Voice message",
+    startVoiceRecording: "Start recording",
+    stopVoiceRecording: "Stop recording",
+    cancelVoiceRecording: "Cancel recording",
+    recordingVoice: "Recording",
+    voiceBrowserNotSupported: "Voice messages are not supported in this browser",
+    voiceMessageCaptured: "Voice message added",
     send: "Send",
     attachment: "Attachment",
     removeAttachment: "Remove attachment",
+    undo: "Undo",
+    messageDeleted: "Message deleted",
+    chatDeleted: "Chat deleted",
+    chatMutedToast: "Chat muted",
+    chatUnmutedToast: "Chat unmuted",
+    actionFailed: "Action failed. Try again.",
     previousImage: "Previous image",
     nextImage: "Next image",
     closeViewer: "Close viewer",
     download: "Download",
     selectChat: "Select a chat",
+    openChat: "Open chat",
     editProfile: "Edit profile",
+    shareContact: "Share contact",
+    selectChatToShareContact: "Select a chat to share this contact",
+    contactSharedToast: "Contact shared",
+    sharingContact: "Sharing...",
+    blockUser: "Block user",
+    unblockUser: "Unblock user",
+    userBlockedToast: "User blocked",
+    userUnblockedToast: "User unblocked",
     cancel: "Cancel",
     save: "Save",
     chatProfile: "Chat profile",
@@ -297,6 +637,7 @@ const translations = {
       "Profile activity is based on chat history and appears in other users' profiles.",
     messages: "Messages",
     media: "Media",
+    audio: "Audio",
     links: "Links",
     noSharedActivity: "No shared activity in this chat yet.",
     privacy: "Privacy",
@@ -313,6 +654,7 @@ const translations = {
     lastSeenVisibility: "Who can see last seen",
     avatarVisibility: "Who can see avatar",
     bioVisibility: "Who can see bio",
+    birthdayVisibility: "Who can see birthday",
     privacyScopeHint: "Set who can view this profile data",
     everyone: "Everyone",
     selected: "Selected people",
@@ -326,6 +668,17 @@ const translations = {
     logOut: "Log out",
     language: "Language",
     languageHint: "Choose interface language",
+    accentColor: "Accent color",
+    accentColorHint: "Choose the main color for buttons and highlights",
+    accentViolet: "Violet",
+    accentBlue: "Blue",
+    accentEmerald: "Emerald",
+    accentRose: "Rose",
+    accentAmber: "Amber",
+    sidebarVisibility: "Sidebar",
+    sidebarVisibilityHint: "Show or hide the main left sidebar",
+    hideSidebar: "Hide sidebar",
+    showSidebar: "Show sidebar",
     russian: "Русский",
     english: "English",
     you: "You",
@@ -338,6 +691,57 @@ const translations = {
     bannerActionsHint: "Choose what to do with your banner image.",
     avatarSizeHint: "Recommended avatar size: 512x512 px (1:1).",
     bannerSizeHint: "Recommended banner size: 1500x500 px (3:1).",
+    syncConnected: "Realtime connected",
+    syncReconnecting: "Realtime reconnecting",
+    syncFallback: "Fallback sync",
+    onboardingTitle: "Personalize your messenger",
+    onboardingDescription: "Choose your defaults. You can change them later in settings.",
+    density: "UI density",
+    densityHint: "Controls spacing in lists and compactness",
+    densityComfortable: "Comfortable",
+    densityCompact: "Compact",
+    fontSize: "Font size",
+    fontSizeHint: "Controls text size across chat interface",
+    fontSizeSmall: "Small",
+    fontSizeDefault: "Default",
+    fontSizeLarge: "Large",
+    fontFamily: "Font family",
+    fontFamilyHint: "Controls the typeface across interface",
+    fontFamilyDefault: "Default",
+    fontFamilyModern: "Modern",
+    fontFamilyReadable: "Readable",
+    fontFamilyComfortaa: "Comfortaa",
+    radius: "Corner radius",
+    radiusHint: "Controls roundness of cards, buttons and bubbles",
+    radiusSharp: "Sharp",
+    radiusNormal: "Normal",
+    radiusRounded: "Rounded",
+    chatWallpaper: "Chat wallpaper",
+    chatWallpaperHint: "Choose default wallpaper for chats",
+    wallpaperNone: "None",
+    wallpaperAurora: "Aurora",
+    wallpaperSunset: "Sunset",
+    wallpaperOcean: "Ocean",
+    wallpaperGraphite: "Graphite",
+    navigationTabs: "Navigation tabs",
+    navigationTabsHint: "Choose which tabs are visible and their order",
+    showTab: "Show tab",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    keepAtLeastOneTab: "Keep at least one tab visible",
+    chatPersonalization: "Chat personalization",
+    chatPersonalizationHint: "Settings for this chat only",
+    openChatPersonalization: "Personalization",
+    muteThisChat: "Mute this chat",
+    chatWallpaperPerChat: "Chat wallpaper",
+    chatWallpaperPerChatHint: "Override wallpaper only for this chat",
+    chatFontSize: "Chat font size",
+    chatFontSizeHint: "Override text size only in this chat",
+    inheritGlobal: "Inherit global",
+    autoLoadMedia: "Auto-load media",
+    autoLoadMediaHint: "Automatically load images and videos in this chat",
+    loadMedia: "Load media",
+    onboardingApply: "Apply",
   },
   ru: {
     home: "Главная",
@@ -355,6 +759,29 @@ const translations = {
     members: "участников",
     participants: "Участники",
     creator: "Создатель",
+    owner: "Владелец",
+    admin: "Админ",
+    member: "Участник",
+    yourRole: "Ваша роль",
+    renameGroup: "Переименовать группу",
+    groupNameMinError: `Название группы минимум ${GROUP_TITLE_MIN_LENGTH} символа`,
+    groupNameMaxError: `Название группы максимум ${GROUP_TITLE_MAX_LENGTH} символа`,
+    groupMembersMinError: "Выберите минимум 2 участников",
+    groupMembersLimitHint: `До ${GROUP_MAX_MEMBERS} участников`,
+    addMembers: "Добавить участников",
+    addMember: "Добавить",
+    removeMember: "Удалить участника",
+    promoteToAdmin: "Сделать админом",
+    demoteToMember: "Снять админа",
+    transferOwnership: "Передать владение",
+    openGroupSettings: "Открыть настройки",
+    hideGroupSettings: "Скрыть настройки",
+    groupRenamedToast: "Группа переименована",
+    memberAddedToast: "Участник добавлен",
+    memberRemovedToast: "Участник удален",
+    roleUpdatedToast: "Роль обновлена",
+    ownershipTransferredToast: "Владелец изменен",
+    readBy: "Прочитали",
     noChatsOrUsersFound: "Чаты или пользователи не найдены",
     noChatsYet: "Чатов пока нет. Зарегистрируйте другой аккаунт, чтобы начать переписку.",
     yesterday: "Вчера",
@@ -363,12 +790,24 @@ const translations = {
     offline: "Не в сети",
     lastSeenAt: "Был(а) в",
     lastSeenHidden: "Последний вход скрыт",
+    typingNow: "Печатает...",
     noMessagesYet: "Сообщений пока нет",
     copyText: "Скопировать",
+    replyToMessage: "Ответить",
+    replyingTo: "Ответ на",
+    cancelReply: "Отменить ответ",
+    originalMessageUnavailable: "Исходное сообщение не найдено",
+    editMessage: "Редактировать",
+    editingMessage: "Редактирование сообщения",
+    cancelEdit: "Отменить редактирование",
+    saveEdit: "Сохранить",
+    editedLabel: "изменено",
     copyAttachmentLink: "Скопировать ссылку вложения",
     deleteMessage: "Удалить сообщение",
     pinChat: "Закрепить чат",
     unpinChat: "Открепить чат",
+    muteChat: "Выключить уведомления",
+    unmuteChat: "Включить уведомления",
     deleteForBoth: "Удалить у обоих",
     deleteGroup: "Удалить группу",
     leaveGroup: "Выйти из группы",
@@ -390,17 +829,64 @@ const translations = {
     callBrowserNotSupported: "Браузер не поддерживает аудиозвонки",
     callDirectOnly: "Аудиозвонки доступны только в личных чатах",
     menu: "Меню",
+    collapseSidebar: "Свернуть боковую панель",
+    expandSidebar: "Развернуть боковую панель",
+    searchInChat: "Поиск в чате",
+    deleteOptions: "Удаление",
+    clearHistoryForMe: "Очистить историю у меня",
+    historyClearedForMe: "История очищена только у вас",
+    noMessagesFound: "Сообщения не найдены",
+    unreadMessages: "Непрочитанные сообщения",
+    draftLabel: "Черновик",
+    searchAdvancedHint:
+      "Фильтры: from:@username has:attachment|image|video|audio|file on:YYYY-MM-DD before:YYYY-MM-DD after:YYYY-MM-DD",
+    jumpToDate: "К дате",
+    date: "Дата",
+    deleteChatAction: "Удалить чат",
+    deleteChatConfirmTitle: "Удалить этот чат?",
+    deleteChatConfirmDescription:
+      "Это действие удалит чат у всех участников. После удаления можно отменить в течение нескольких секунд.",
     typeMessage: "Введите сообщение...",
+    formattingHint: "Форматирование",
+    formattingHotkeyHint: "Enter отправить, Shift+Enter новая строка",
+    formatBold: "Жирный",
+    formatItalic: "Курсив",
+    formatStrike: "Зачеркнутый",
+    formatCode: "Код",
+    formatQuote: "Цитата",
+    formatList: "Список",
     attachFiles: "Прикрепить файлы",
+    voiceMessage: "Голосовое сообщение",
+    startVoiceRecording: "Начать запись",
+    stopVoiceRecording: "Остановить запись",
+    cancelVoiceRecording: "Отменить запись",
+    recordingVoice: "Идет запись",
+    voiceBrowserNotSupported: "Голосовые сообщения не поддерживаются в этом браузере",
+    voiceMessageCaptured: "Голосовое сообщение добавлено",
     send: "Отправить",
     attachment: "Вложение",
     removeAttachment: "Удалить вложение",
+    undo: "Отменить",
+    messageDeleted: "Сообщение удалено",
+    chatDeleted: "Чат удален",
+    chatMutedToast: "Чат заглушен",
+    chatUnmutedToast: "Звук чата включен",
+    actionFailed: "Не удалось выполнить действие. Попробуйте снова.",
     previousImage: "Предыдущее изображение",
     nextImage: "Следующее изображение",
     closeViewer: "Закрыть просмотр",
     download: "Скачать",
     selectChat: "Выберите чат",
+    openChat: "Открыть чат",
     editProfile: "Редактировать профиль",
+    shareContact: "Поделиться контактом",
+    selectChatToShareContact: "Выберите чат, куда отправить контакт",
+    contactSharedToast: "Контакт отправлен",
+    sharingContact: "Отправка...",
+    blockUser: "Заблокировать",
+    unblockUser: "Разблокировать",
+    userBlockedToast: "Пользователь заблокирован",
+    userUnblockedToast: "Пользователь разблокирован",
     cancel: "Отмена",
     save: "Сохранить",
     chatProfile: "Профиль чата",
@@ -415,6 +901,7 @@ const translations = {
       "Активность профиля формируется по истории чата и отображается в профилях других пользователей.",
     messages: "Сообщения",
     media: "Медиа",
+    audio: "Аудио",
     links: "Ссылки",
     noSharedActivity: "В этом чате пока нет общей активности.",
     privacy: "Приватность",
@@ -431,6 +918,7 @@ const translations = {
     lastSeenVisibility: "Кто видит последний вход",
     avatarVisibility: "Кто видит аватар",
     bioVisibility: "Кто видит био",
+    birthdayVisibility: "Кто видит день рождения",
     privacyScopeHint: "Выберите, кто может видеть эти данные профиля",
     everyone: "Все",
     selected: "Выбранные люди",
@@ -444,8 +932,19 @@ const translations = {
     logOut: "Выйти",
     language: "Язык",
     languageHint: "Выберите язык интерфейса",
+    accentColor: "Акцентный цвет",
+    accentColorHint: "Выберите основной цвет кнопок и акцентов",
+    accentViolet: "Фиолетовый",
+    accentBlue: "Синий",
+    accentEmerald: "Изумрудный",
+    accentRose: "Розовый",
+    accentAmber: "Янтарный",
+    sidebarVisibility: "Сайдбар",
+    sidebarVisibilityHint: "Показывать или скрывать левый основной сайдбар",
+    hideSidebar: "Скрыть сайдбар",
+    showSidebar: "Показать сайдбар",
     russian: "Русский",
-    english: "English",
+    english: "Английский",
     you: "Вы",
     youLabel: "(вы)",
     remove: "Удалить",
@@ -456,22 +955,75 @@ const translations = {
     bannerActionsHint: "Выберите действие для изображения баннера.",
     avatarSizeHint: "Рекомендуемый размер аватара: 512x512 px (1:1).",
     bannerSizeHint: "Рекомендуемый размер баннера: 1500x500 px (3:1).",
+    syncConnected: "Синхронизация подключена",
+    syncReconnecting: "Переподключение синхронизации",
+    syncFallback: "Резервная синхронизация",
+    onboardingTitle: "Персонализируйте мессенджер",
+    onboardingDescription: "Выберите параметры по умолчанию. Позже их можно изменить в настройках.",
+    density: "Плотность интерфейса",
+    densityHint: "Управляет отступами и компактностью списков",
+    densityComfortable: "Обычная",
+    densityCompact: "Компактная",
+    fontSize: "Размер шрифта",
+    fontSizeHint: "Управляет размером текста в интерфейсе чата",
+    fontSizeSmall: "Маленький",
+    fontSizeDefault: "Стандартный",
+    fontSizeLarge: "Крупный",
+    fontFamily: "Семейство шрифта",
+    fontFamilyHint: "Управляет гарнитурой интерфейса",
+    fontFamilyDefault: "По умолчанию",
+    fontFamilyModern: "Современный",
+    fontFamilyReadable: "Читабельный",
+    fontFamilyComfortaa: "Comfortaa",
+    radius: "Радиус углов",
+    radiusHint: "Управляет скруглением карточек, кнопок и пузырей",
+    radiusSharp: "Острый",
+    radiusNormal: "Нормальный",
+    radiusRounded: "Скругленный",
+    chatWallpaper: "Обои чата",
+    chatWallpaperHint: "Выберите обои по умолчанию для чатов",
+    wallpaperNone: "Без обоев",
+    wallpaperAurora: "Аврора",
+    wallpaperSunset: "Закат",
+    wallpaperOcean: "Океан",
+    wallpaperGraphite: "Графит",
+    navigationTabs: "Вкладки навигации",
+    navigationTabsHint: "Выберите видимые вкладки и их порядок",
+    showTab: "Показывать вкладку",
+    moveUp: "Вверх",
+    moveDown: "Вниз",
+    keepAtLeastOneTab: "Хотя бы одна вкладка должна быть видимой",
+    chatPersonalization: "Персонализация чата",
+    chatPersonalizationHint: "Настройки только для этого чата",
+    openChatPersonalization: "Открыть персонализацию чата",
+    muteThisChat: "Выключить уведомления чата",
+    chatWallpaperPerChat: "Обои этого чата",
+    chatWallpaperPerChatHint: "Переопределяет обои только для этого чата",
+    chatFontSize: "Размер шрифта чата",
+    chatFontSizeHint: "Переопределяет размер текста только в этом чате",
+    inheritGlobal: "Наследовать глобальные",
+    autoLoadMedia: "Автозагрузка медиа",
+    autoLoadMediaHint: "Автоматически загружать изображения и видео в этом чате",
+    loadMedia: "Загрузить медиа",
+    onboardingApply: "Применить",
   },
 } as const;
-
-type ApiErrorResponse = {
-  error?: string;
-};
 
 type MessengerDataResponse = {
   users: AuthUser[];
   threads: StoredChatThread[];
   messages: StoredChatMessage[];
+  fullSync?: boolean;
+  serverTime?: number;
 };
 
 type OpenOrCreateResponse = {
   chatId: string;
   created: boolean;
+};
+
+type BlockUserResponse = {
+  user: AuthUser;
 };
 
 type CreateGroupResponse = {
@@ -515,32 +1067,6 @@ type CallSessionState = {
   startedAt: number | null;
 };
 
-async function requestJson<T>(
-  input: string,
-  init?: RequestInit
-): Promise<T> {
-  const response = await fetch(input, {
-    cache: "no-store",
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  const payload = (await response
-    .json()
-    .catch(() => null)) as (T & ApiErrorResponse) | null;
-  if (!response.ok) {
-    throw new Error(payload?.error ?? "Request failed.");
-  }
-  if (!payload) {
-    throw new Error("Empty response.");
-  }
-
-  return payload as T;
-}
-
 function formatChatTime(timestamp: number, language: AppLanguage): string {
   const date = new Date(timestamp);
   const now = new Date();
@@ -567,7 +1093,7 @@ function formatChatTime(timestamp: number, language: AppLanguage): string {
     date.getDate() === yesterday.getDate();
 
   if (isYesterday) {
-    return language === "ru" ? "Вчера" : "Yesterday";
+    return language === "ru" ? "Р’С‡РµСЂР°" : "Yesterday";
   }
 
   return date.toLocaleDateString(locale, {
@@ -576,9 +1102,22 @@ function formatChatTime(timestamp: number, language: AppLanguage): string {
   });
 }
 
+function formatMessageTime(timestamp: number, language: AppLanguage): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const locale = language === "ru" ? "ru-RU" : "en-US";
+  return date.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function formatLastSeen(timestamp: number, language: AppLanguage): string {
   if (!timestamp || timestamp <= 0) {
-    return language === "ru" ? "недавно" : "recently";
+    return language === "ru" ? "РЅРµРґР°РІРЅРѕ" : "recently";
   }
 
   const date = new Date(timestamp);
@@ -658,6 +1197,98 @@ function normalizeSearchQuery(value: string) {
   };
 }
 
+function getLocalDayRangeFromIsoDate(value: string): { start: number; end: number } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const start = date.getTime();
+  const end = start + 24 * 60 * 60 * 1000;
+  return { start, end };
+}
+
+function parseActiveChatSearchQuery(rawValue: string) {
+  const source = rawValue.trim();
+  if (!source) {
+    return {
+      textTerms: [] as string[],
+      authorTerm: "",
+      hasKinds: new Set<RenderAttachment["kind"]>(),
+      requireAttachment: false,
+      onDayRange: null as { start: number; end: number } | null,
+      beforeTs: null as number | null,
+      afterTs: null as number | null,
+    };
+  }
+
+  const textTerms: string[] = [];
+  let authorTerm = "";
+  let requireAttachment = false;
+  const hasKinds = new Set<RenderAttachment["kind"]>();
+  let onDayRange: { start: number; end: number } | null = null;
+  let beforeTs: number | null = null;
+  let afterTs: number | null = null;
+
+  for (const part of source.split(/\s+/)) {
+    const token = part.trim();
+    if (!token) {
+      continue;
+    }
+
+    if (token.startsWith("from:")) {
+      authorTerm = token.slice(5).replace(/^@+/, "").toLowerCase();
+      continue;
+    }
+
+    if (token.startsWith("has:")) {
+      const value = token.slice(4).toLowerCase();
+      if (value === "attachment") {
+        requireAttachment = true;
+      } else if (
+        value === "image" ||
+        value === "video" ||
+        value === "audio" ||
+        value === "file"
+      ) {
+        hasKinds.add(value);
+      }
+      continue;
+    }
+
+    if (token.startsWith("on:")) {
+      onDayRange = getLocalDayRangeFromIsoDate(token.slice(3));
+      continue;
+    }
+
+    if (token.startsWith("before:")) {
+      const dayRange = getLocalDayRangeFromIsoDate(token.slice(7));
+      beforeTs = dayRange ? dayRange.start : null;
+      continue;
+    }
+
+    if (token.startsWith("after:")) {
+      const dayRange = getLocalDayRangeFromIsoDate(token.slice(6));
+      afterTs = dayRange ? dayRange.end : null;
+      continue;
+    }
+
+    textTerms.push(token.toLowerCase());
+  }
+
+  return {
+    textTerms,
+    authorTerm,
+    hasKinds,
+    requireAttachment,
+    onDayRange,
+    beforeTs,
+    afterTs,
+  };
+}
+
 function normalizePrivacyVisibility(
   value: string | null | undefined,
   fallback: PrivacyVisibility
@@ -675,21 +1306,190 @@ function normalizePrivacyVisibility(
   return fallback;
 }
 
+function normalizeGroupRole(
+  value: string | null | undefined,
+  fallback: GroupRole
+): GroupRole {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "owner" || normalized === "admin" || normalized === "member") {
+    return normalized;
+  }
+  return fallback;
+}
+
+function getThreadRoleForUser(thread: StoredChatThread, userId: string): GroupRole | null {
+  if (thread.threadType !== "group" || !thread.memberIds.includes(userId)) {
+    return null;
+  }
+  if (thread.createdById === userId) {
+    return "owner";
+  }
+  return normalizeGroupRole(thread.groupRoles?.[userId], "member");
+}
+
 const URL_PATTERN = /https?:\/\/[^\s)]+/gi;
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|bmp|svg)(\?[^?\s]*)?$/i;
 const MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*]\((https?:\/\/[^\s)]+)\)/gi;
+const INLINE_LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/gi;
+const INLINE_STYLE_PATTERN = /(\*\*[^*\n]+?\*\*|\*[^*\n]+?\*|~~[^~\n]+?~~|`[^`\n]+?`)/g;
+const ORDERED_FORMATTING_ACTIONS: TextFormattingAction[] = [
+  "bold",
+  "italic",
+  "strike",
+  "code",
+  "quote",
+  "list",
+];
 const CHAT_SMILEY_EMOJIS = [
-  "😀","😃","😄","😁","😆","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰",
-  "😘","😗","😙","😚","😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🥳","😏","😒",
-  "😞","😔","😟","😕","🙁","☹️","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡",
-  "🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓","🤗","🤔","🫣","🤭","🫢","🫠",
-  "😶","🫥","😐","🫤","😑","😬","🫨","🙄","😯","😦","😧","😮","😲","🥱","😴","🤤",
-  "😪","😵","🤐","🥴","🤢","🤮","🤧","😷","🤒","🤕","🤑","🤠","😈","👿","💀","👻",
-  "🤡","💩","🤖","😺","😸","😹","😻","😼","😽","🙀","😿","😾",
+  "\u{1F600}", "\u{1F603}", "\u{1F604}", "\u{1F601}", "\u{1F606}", "\u{1F605}",
+  "\u{1F602}", "\u{1F923}", "\u{1F60A}", "\u{1F609}", "\u{1F60D}", "\u{1F618}",
+  "\u{1F617}", "\u{1F61A}", "\u{1F61C}", "\u{1F61D}", "\u{1F60E}", "\u{1F973}",
+  "\u{1F914}", "\u{1F928}", "\u{1F644}", "\u{1F62E}", "\u{1F62F}", "\u{1F632}",
+  "\u{1F60F}", "\u{1F610}", "\u{1F611}", "\u{1F636}", "\u{1F62C}", "\u{1F634}",
+  "\u{1F62A}", "\u{1F924}", "\u{1F915}", "\u{1F912}", "\u{1F922}", "\u{1F92E}",
+  "\u{1F92F}", "\u{1F975}", "\u{1F976}", "\u{1F630}", "\u{1F628}", "\u{1F627}",
+  "\u{1F622}", "\u{1F62D}", "\u{1F621}", "\u{1F620}", "\u{1F92C}", "\u{1F479}",
+  "\u{1F47B}", "\u{1F47D}", "\u{1F916}", "\u{1F4A9}", "\u{1F63A}", "\u{1F638}",
+  "\u{1F639}", "\u{1F63B}", "\u{1F63C}", "\u{1F63D}", "\u{1F640}", "\u{1F63F}",
+  "\u{1F63E}", "\u{1F64C}", "\u{1F44D}", "\u{1F44E}", "\u{1F44F}", "\u{1F64F}",
+  "\u{1F91D}", "\u{1F525}", "\u{1F4AF}", "\u{2764}\u{FE0F}", "\u{1FAE1}",
+  "\u{1F48E}", "\u{1F389}", "\u{1F381}", "\u{1F381}", "\u{1F381}", "\u{1F680}",
 ] as const;
 
 function extractUrls(text: string): string[] {
   return text.match(URL_PATTERN) ?? [];
+}
+
+function renderInlineStyledText(segment: string, keyPrefix: string): ReactNode[] {
+  if (!segment) {
+    return [];
+  }
+
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let tokenIndex = 0;
+
+  for (const match of segment.matchAll(INLINE_STYLE_PATTERN)) {
+    const full = match[0];
+    const start = match.index ?? 0;
+    if (start > lastIndex) {
+      nodes.push(segment.slice(lastIndex, start));
+    }
+
+    const tokenKey = `${keyPrefix}-style-${tokenIndex}`;
+    if (full.startsWith("**") && full.endsWith("**")) {
+      nodes.push(<strong key={tokenKey}>{full.slice(2, -2)}</strong>);
+    } else if (full.startsWith("*") && full.endsWith("*")) {
+      nodes.push(<em key={tokenKey}>{full.slice(1, -1)}</em>);
+    } else if (full.startsWith("~~") && full.endsWith("~~")) {
+      nodes.push(<s key={tokenKey}>{full.slice(2, -2)}</s>);
+    } else if (full.startsWith("`") && full.endsWith("`")) {
+      nodes.push(
+        <code
+          key={tokenKey}
+          className="rounded bg-zinc-900/25 px-1 py-0.5 font-mono text-[0.92em]"
+        >
+          {full.slice(1, -1)}
+        </code>
+      );
+    } else {
+      nodes.push(full);
+    }
+
+    lastIndex = start + full.length;
+    tokenIndex += 1;
+  }
+
+  if (lastIndex < segment.length) {
+    nodes.push(segment.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function renderFormattedInlineContent(text: string, keyPrefix: string): ReactNode[] {
+  if (!text) {
+    return [];
+  }
+
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let tokenIndex = 0;
+
+  for (const match of text.matchAll(INLINE_LINK_PATTERN)) {
+    const start = match.index ?? 0;
+    if (start > lastIndex) {
+      nodes.push(
+        ...renderInlineStyledText(text.slice(lastIndex, start), `${keyPrefix}-plain-${tokenIndex}`)
+      );
+    }
+
+    const label = match[1];
+    const markdownHref = match[2];
+    const plainHref = match[3];
+    const href = markdownHref ?? plainHref;
+    const linkText = label ?? href;
+
+    if (href) {
+      nodes.push(
+        <a
+          key={`${keyPrefix}-link-${tokenIndex}`}
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-current/50 underline-offset-4 hover:decoration-current"
+        >
+          {linkText}
+        </a>
+      );
+    }
+
+    lastIndex = start + match[0].length;
+    tokenIndex += 1;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(
+      ...renderInlineStyledText(text.slice(lastIndex), `${keyPrefix}-plain-tail`)
+    );
+  }
+
+  return nodes;
+}
+
+function renderFormattedMessageText(text: string): ReactNode {
+  const lines = text.split("\n");
+
+  return (
+    <div className="space-y-1 leading-6 break-words">
+      {lines.map((line, index) => {
+        const key = `line-${index}`;
+
+        if (line.startsWith("> ")) {
+          return (
+            <div key={key} className="border-l-2 border-violet-400/70 pl-2 opacity-95">
+              {renderFormattedInlineContent(line.slice(2), `${key}-quote`)}
+            </div>
+          );
+        }
+
+        if (line.startsWith("- ") || line.startsWith("* ")) {
+          return (
+            <div key={key} className="flex items-start gap-2">
+              <span className="mt-2 inline-block size-1.5 shrink-0 rounded-full bg-current/80" />
+              <span>{renderFormattedInlineContent(line.slice(2), `${key}-list`)}</span>
+            </div>
+          );
+        }
+
+        return (
+          <div key={key} className="whitespace-pre-wrap">
+            {renderFormattedInlineContent(line, `${key}-text`)}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function extractMediaUrls(text: string): string[] {
@@ -708,6 +1508,9 @@ function getAttachmentKind(type: string): RenderAttachment["kind"] {
   }
   if (type.startsWith("video/")) {
     return "video";
+  }
+  if (type.startsWith("audio/")) {
+    return "audio";
   }
   return "file";
 }
@@ -838,6 +1641,204 @@ function formatCallDuration(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function readBlobAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Unsupported file result."));
+    };
+    reader.onerror = () => reject(new Error("Unable to read file."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function pickVoiceMimeType(): string {
+  if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
+    return "";
+  }
+  const candidates = [
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+  ];
+  for (const candidate of candidates) {
+    if (MediaRecorder.isTypeSupported(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
+function resolvePlayableAudioMimeTypeFallback(): string {
+  if (typeof document === "undefined") {
+    return "audio/webm";
+  }
+  const audio = document.createElement("audio");
+  const candidates = ["audio/mp4", "audio/webm", "audio/ogg"];
+  for (const candidate of candidates) {
+    const support = audio.canPlayType(candidate);
+    if (support === "probably" || support === "maybe") {
+      return candidate;
+    }
+  }
+  return "audio/webm";
+}
+
+function getVoiceExtension(mimeType: string): string {
+  if (mimeType.includes("mp4")) {
+    return "m4a";
+  }
+  if (mimeType.includes("ogg")) {
+    return "ogg";
+  }
+  if (mimeType.includes("webm")) {
+    return "webm";
+  }
+  return "bin";
+}
+
+function buildVoiceAttachmentName(timestamp: number, mimeType: string): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  const extension = getVoiceExtension(mimeType);
+  return `voice-${year}${month}${day}-${hours}${minutes}${seconds}.${extension}`;
+}
+
+let activeAudioAttachmentElement: HTMLAudioElement | null = null;
+
+type AudioAttachmentPlayerProps = {
+  src: string;
+};
+
+function AudioAttachmentPlayer({
+  src,
+}: AudioAttachmentPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    const handleLoadedMetadata = () => {
+      const value = Number.isFinite(audio.duration) ? audio.duration : 0;
+      setDuration(Math.max(0, value));
+    };
+    const handleTimeUpdate = () => {
+      const value = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      setCurrentTime(Math.max(0, value));
+    };
+    const handlePlay = () => {
+      if (
+        activeAudioAttachmentElement &&
+        activeAudioAttachmentElement !== audio
+      ) {
+        activeAudioAttachmentElement.pause();
+      }
+      activeAudioAttachmentElement = audio;
+      setIsPlaying(true);
+    };
+    const handlePause = () => {
+      if (activeAudioAttachmentElement === audio) {
+        activeAudioAttachmentElement = null;
+      }
+      setIsPlaying(false);
+    };
+    const handleEnded = () => {
+      if (activeAudioAttachmentElement === audio) {
+        activeAudioAttachmentElement = null;
+      }
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ended", handleEnded);
+      if (activeAudioAttachmentElement === audio) {
+        activeAudioAttachmentElement = null;
+        audio.pause();
+      }
+    };
+  }, []);
+
+  const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const togglePlayback = () => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+    if (audio.paused) {
+      if (
+        activeAudioAttachmentElement &&
+        activeAudioAttachmentElement !== audio
+      ) {
+        activeAudioAttachmentElement.pause();
+      }
+      void audio
+        .play()
+        .then(() => {
+          activeAudioAttachmentElement = audio;
+        })
+        .catch(() => undefined);
+      return;
+    }
+    audio.pause();
+  };
+
+  return (
+    <div className="w-[248px] max-w-full rounded-xl border border-zinc-600/70 bg-zinc-800/70 px-2.5 py-2">
+      <audio ref={audioRef} preload="metadata" src={src} className="hidden" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          aria-label={isPlaying ? "Pause audio" : "Play audio"}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-500 bg-zinc-700 text-zinc-100 hover:bg-zinc-600"
+        >
+          {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-zinc-700">
+            <div
+              className="h-full rounded-full bg-violet-400 transition-[width] duration-150"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-400">
+            {`${formatCallDuration(Math.floor(currentTime))} / ${
+              duration > 0 ? formatCallDuration(Math.floor(duration)) : "--:--"
+            }`}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function WebMessenger({
   currentUser,
   onLogout,
@@ -847,7 +1848,10 @@ export function WebMessenger({
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
   const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const messageInputRef = useRef<HTMLInputElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeChatSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  const chatPersonalizationDialogContentRef = useRef<HTMLDivElement | null>(null);
   const emojiMenuRef = useRef<HTMLDivElement | null>(null);
   const emojiCloseTimerRef = useRef<number | null>(null);
   const messageSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -862,23 +1866,139 @@ export function WebMessenger({
   const hasLoadedInitialChatDataRef = useRef(false);
   const hasNotificationBaselineRef = useRef(false);
   const seenMessageIdsRef = useRef<Set<string>>(new Set());
+  const animatedMessageIdsRef = useRef<Set<string>>(new Set());
+  const messageAnimationTimersRef = useRef<Map<string, number>>(new Map());
+  const messageNodeRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const highlightMessageTimerRef = useRef<number | null>(null);
+  const skipNextDraftPersistRef = useRef(false);
+  const hasInitializedMessageAnimationsRef = useRef(false);
+  const messagesRef = useRef<StoredChatMessage[]>([]);
+  const draftRef = useRef("");
+  const lastTypingChatIdRef = useRef<string | null>(null);
+  const isTypingStateSentRef = useRef(false);
+  const lastDataSyncTimestampRef = useRef(0);
+  const lastFullSyncAtRef = useRef(0);
   const baseDocumentTitleRef = useRef("Clore");
+  const toastTimerRef = useRef<number | null>(null);
+  const toastProgressAnimationRef = useRef<number | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceRecorderStreamRef = useRef<MediaStream | null>(null);
+  const voiceRecorderChunksRef = useRef<Blob[]>([]);
+  const voiceRecorderDiscardRef = useRef(false);
+  const voiceRecordingTimerRef = useRef<number | null>(null);
+  const pendingMessageDeletionRef = useRef<
+    Map<string, { timeoutId: number; message: StoredChatMessage; chatId: string }>
+  >(new Map());
+  const pendingChatDeletionRef = useRef<
+    Map<
+      string,
+      {
+        timeoutId: number;
+        thread: StoredChatThread;
+        messages: StoredChatMessage[];
+        wasActive: boolean;
+      }
+    >
+  >(new Map());
+  const [toast, setToast] = useState<InlineToast | null>(null);
+  const [toastProgress, setToastProgress] = useState(0);
+  const toastCounterRef = useRef(0);
+  const [activeChatSearchQuery, setActiveChatSearchQuery] = useState("");
+  const [activeChatJumpDate, setActiveChatJumpDate] = useState("");
+  const [isActiveChatSearchOpen, setIsActiveChatSearchOpen] = useState(false);
+  const [isActiveChatProfileSidebarOpen, setIsActiveChatProfileSidebarOpen] =
+    useState(false);
+  const [isDeleteChatDialogOpen, setIsDeleteChatDialogOpen] = useState(false);
+  const [chatIdToConfirmDelete, setChatIdToConfirmDelete] = useState<string | null>(null);
+  const [isShareContactDialogOpen, setIsShareContactDialogOpen] = useState(false);
+  const [shareContactQuery, setShareContactQuery] = useState("");
+  const [isSharingContact, setIsSharingContact] = useState(false);
+  const [clearedChatAtById, setClearedChatAtById] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+    try {
+      const raw = window.localStorage.getItem(
+        `${CHAT_CLEAR_HISTORY_STORAGE_PREFIX}${currentUser.id}`
+      );
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
+      return Object.entries(parsed as Record<string, unknown>).reduce<
+        Record<string, number>
+      >((acc, [chatId, value]) => {
+        if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+          acc[chatId] = value;
+        }
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
   const [threads, setThreads] = useState<StoredChatThread[]>([]);
   const [messages, setMessages] = useState<StoredChatMessage[]>([]);
+  const [animatingMessageIds, setAnimatingMessageIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [knownUsers, setKnownUsers] = useState<AuthUser[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeSidebar, setActiveSidebar] = useState<SidebarItem["id"]>("home");
   const [query, setQuery] = useState("");
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [groupMemberIdsDraft, setGroupMemberIdsDraft] = useState<string[]>([]);
+  const [groupRenameDraft, setGroupRenameDraft] = useState("");
+  const [groupMemberSearchDraft, setGroupMemberSearchDraft] = useState("");
+  const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+    try {
+      const raw = window.localStorage.getItem(`${CHAT_DRAFTS_STORAGE_PREFIX}${currentUser.id}`);
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
+      return Object.entries(parsed as Record<string, unknown>).reduce<Record<string, string>>(
+        (acc, [chatId, value]) => {
+          if (typeof value === "string") {
+            acc[chatId] = value;
+          }
+          return acc;
+        },
+        {}
+      );
+    } catch {
+      return {};
+    }
+  });
+  const [unreadBaselineByChatId, setUnreadBaselineByChatId] = useState<Record<string, number>>(
+    {}
+  );
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [replyToMessageId, setReplyToMessageId] = useState<string | null>(null);
+  const [formattingMenuPosition, setFormattingMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [isEmojiMenuOpen, setIsEmojiMenuOpen] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [viewerImageId, setViewerImageId] = useState<string | null>(null);
   const [viewerSource, setViewerSource] = useState<"chat" | "profile">("chat");
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState(false);
   const [profile, setProfile] = useState<ProfileData>(() => ({
     ...initialProfile,
     name: currentUser.name,
@@ -925,15 +2045,388 @@ export function WebMessenger({
     }
     return window.localStorage.getItem(MESSAGE_SOUND_STORAGE_KEY) !== "0";
   });
+  const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(() => {
+    if (typeof window === "undefined") {
+      return "default";
+    }
+    const stored = window.localStorage.getItem(UI_FONT_FAMILY_STORAGE_KEY);
+    return stored === "modern" || stored === "readable" || stored === "comfortaa"
+      ? stored
+      : "default";
+  });
+  const [uiDensity, setUiDensity] = useState<UiDensity>(() => {
+    if (typeof window === "undefined") {
+      return "comfortable";
+    }
+    const stored = window.localStorage.getItem(UI_DENSITY_STORAGE_KEY);
+    return stored === "compact" ? "compact" : "comfortable";
+  });
+  const [uiFontSize, setUiFontSize] = useState<UiFontSize>(() => {
+    if (typeof window === "undefined") {
+      return "default";
+    }
+    const stored = window.localStorage.getItem(UI_FONT_SIZE_STORAGE_KEY);
+    return stored === "small" || stored === "large" ? stored : "default";
+  });
+  const [uiRadius, setUiRadius] = useState<UiRadius>(() => {
+    if (typeof window === "undefined") {
+      return "normal";
+    }
+    const stored = window.localStorage.getItem(UI_RADIUS_STORAGE_KEY);
+    return stored === "sharp" || stored === "rounded" ? stored : "normal";
+  });
+  const [globalChatWallpaper, setGlobalChatWallpaper] = useState<ChatWallpaper>(() => {
+    if (typeof window === "undefined") {
+      return "none";
+    }
+    const stored = window.localStorage.getItem(GLOBAL_CHAT_WALLPAPER_STORAGE_KEY);
+    return CHAT_WALLPAPER_OPTIONS.includes(stored as ChatWallpaper)
+      ? (stored as ChatWallpaper)
+      : "none";
+  });
+  const [chatPersonalizationById, setChatPersonalizationById] = useState<
+    Record<string, ChatPersonalization>
+  >(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+    try {
+      const raw = window.localStorage.getItem(
+        `${CHAT_PERSONALIZATION_STORAGE_KEY_PREFIX}${currentUser.id}`
+      );
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
+      return Object.entries(parsed as Record<string, unknown>).reduce<
+        Record<string, ChatPersonalization>
+      >((acc, [chatId, value]) => {
+        if (!value || typeof value !== "object") {
+          return acc;
+        }
+        const candidate = value as Record<string, unknown>;
+        const wallpaper = candidate.wallpaper;
+        const fontSize = candidate.fontSize;
+        const autoLoadMedia = candidate.autoLoadMedia;
+        const normalizedWallpaper =
+          wallpaper === "inherit" || CHAT_WALLPAPER_OPTIONS.includes(wallpaper as ChatWallpaper)
+            ? (wallpaper as ChatWallpaperSetting)
+            : DEFAULT_CHAT_PERSONALIZATION.wallpaper;
+        const normalizedFontSize =
+          fontSize === "inherit" || fontSize === "small" || fontSize === "default" || fontSize === "large"
+            ? (fontSize as ChatFontSizeSetting)
+            : DEFAULT_CHAT_PERSONALIZATION.fontSize;
+        acc[chatId] = {
+          wallpaper: normalizedWallpaper,
+          fontSize: normalizedFontSize,
+          autoLoadMedia:
+            typeof autoLoadMedia === "boolean"
+              ? autoLoadMedia
+              : DEFAULT_CHAT_PERSONALIZATION.autoLoadMedia,
+        };
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
+  const [manuallyLoadedMediaIds, setManuallyLoadedMediaIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [sidebarItemOrder, setSidebarItemOrder] = useState<SidebarItem["id"][]>(() => {
+    if (typeof window === "undefined") {
+      return [...SIDEBAR_ITEM_IDS];
+    }
+    try {
+      const raw = window.localStorage.getItem(
+        `${SIDEBAR_LAYOUT_STORAGE_KEY_PREFIX}${currentUser.id}`
+      );
+      if (!raw) {
+        return [...SIDEBAR_ITEM_IDS];
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") {
+        return [...SIDEBAR_ITEM_IDS];
+      }
+      const orderRaw = (parsed as { order?: unknown }).order;
+      if (!Array.isArray(orderRaw)) {
+        return [...SIDEBAR_ITEM_IDS];
+      }
+      const unique = orderRaw.filter(
+        (id, index, arr): id is SidebarItem["id"] =>
+          SIDEBAR_ITEM_IDS.includes(id as SidebarItem["id"]) && arr.indexOf(id) === index
+      );
+      for (const id of SIDEBAR_ITEM_IDS) {
+        if (!unique.includes(id)) {
+          unique.push(id);
+        }
+      }
+      return unique;
+    } catch {
+      return [...SIDEBAR_ITEM_IDS];
+    }
+  });
+  const [sidebarItemVisibility, setSidebarItemVisibility] = useState<
+    Record<SidebarItem["id"], boolean>
+  >(() => {
+    if (typeof window === "undefined") {
+      return { ...DEFAULT_SIDEBAR_VISIBILITY };
+    }
+    try {
+      const raw = window.localStorage.getItem(
+        `${SIDEBAR_LAYOUT_STORAGE_KEY_PREFIX}${currentUser.id}`
+      );
+      if (!raw) {
+        return { ...DEFAULT_SIDEBAR_VISIBILITY };
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") {
+        return { ...DEFAULT_SIDEBAR_VISIBILITY };
+      }
+      const visibilityRaw = (parsed as { visibility?: unknown }).visibility;
+      if (!visibilityRaw || typeof visibilityRaw !== "object") {
+        return { ...DEFAULT_SIDEBAR_VISIBILITY };
+      }
+      const visibilityRecord = visibilityRaw as Record<string, unknown>;
+      return SIDEBAR_ITEM_IDS.reduce<Record<SidebarItem["id"], boolean>>((acc, id) => {
+        acc[id] =
+          typeof visibilityRecord[id] === "boolean"
+            ? (visibilityRecord[id] as boolean)
+            : DEFAULT_SIDEBAR_VISIBILITY[id];
+        return acc;
+      }, { ...DEFAULT_SIDEBAR_VISIBILITY });
+    } catch {
+      return { ...DEFAULT_SIDEBAR_VISIBILITY };
+    }
+  });
+  const [isPersonalizationOnboardingOpen, setIsPersonalizationOnboardingOpen] =
+    useState(() => {
+      if (typeof window === "undefined") {
+        return false;
+      }
+      return (
+        window.localStorage.getItem(PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY) !== "1"
+      );
+    });
   const [hiddenNotificationCount, setHiddenNotificationCount] = useState(0);
   const [callSession, setCallSession] = useState<CallSessionState | null>(null);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
   const [callNotice, setCallNotice] = useState("");
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("privacy");
+  const [isChatPersonalizationOpen, setIsChatPersonalizationOpen] = useState(false);
   const [privacyPickerField, setPrivacyPickerField] = useState<
-    "lastSeen" | "avatar" | "bio" | null
+    "lastSeen" | "avatar" | "bio" | "birthday" | null
   >(null);
   const [privacyPickerQuery, setPrivacyPickerQuery] = useState("");
+  const orderedSidebarItems = useMemo(() => {
+    const itemById = new Map(sidebarItems.map((item) => [item.id, item]));
+    const normalizedOrder: SidebarItem["id"][] = [];
+    for (const id of sidebarItemOrder) {
+      if (!SIDEBAR_ITEM_IDS.includes(id) || normalizedOrder.includes(id)) {
+        continue;
+      }
+      normalizedOrder.push(id);
+    }
+    for (const id of SIDEBAR_ITEM_IDS) {
+      if (!normalizedOrder.includes(id)) {
+        normalizedOrder.push(id);
+      }
+    }
+    return normalizedOrder
+      .map((id) => itemById.get(id))
+      .filter((item): item is SidebarItem => Boolean(item));
+  }, [sidebarItemOrder]);
+  const visibleSidebarItems = useMemo(
+    () =>
+      orderedSidebarItems.filter((item) => sidebarItemVisibility[item.id] !== false),
+    [orderedSidebarItems, sidebarItemVisibility]
+  );
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      `${CHAT_CLEAR_HISTORY_STORAGE_PREFIX}${currentUser.id}`,
+      JSON.stringify(clearedChatAtById)
+    );
+  }, [clearedChatAtById, currentUser.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      `${CHAT_DRAFTS_STORAGE_PREFIX}${currentUser.id}`,
+      JSON.stringify(draftsByChatId)
+    );
+  }, [draftsByChatId, currentUser.id]);
+
+  useEffect(() => {
+    setActiveChatSearchQuery("");
+    setActiveChatJumpDate("");
+    setIsActiveChatSearchOpen(false);
+
+    skipNextDraftPersistRef.current = true;
+    if (!activeChatId) {
+      setDraft("");
+      return;
+    }
+    setDraft(draftsByChatId[activeChatId] ?? "");
+  }, [activeChatId]);
+
+  useEffect(() => {
+    if (!activeChatId || activeChatId in unreadBaselineByChatId) {
+      return;
+    }
+    const thread = threads.find((candidate) => candidate.id === activeChatId);
+    if (!thread) {
+      return;
+    }
+    setUnreadBaselineByChatId((prev) => ({
+      ...prev,
+      [activeChatId]: thread.readBy?.[currentUser.id] ?? 0,
+    }));
+  }, [activeChatId, currentUser.id, threads, unreadBaselineByChatId]);
+
+  useEffect(() => {
+    if (!hasInitializedMessageAnimationsRef.current) {
+      animatedMessageIdsRef.current = new Set(messages.map((message) => message.id));
+      hasInitializedMessageAnimationsRef.current = true;
+      return;
+    }
+
+    const newlyAppearedIds: string[] = [];
+    for (const message of messages) {
+      if (animatedMessageIdsRef.current.has(message.id)) {
+        continue;
+      }
+      animatedMessageIdsRef.current.add(message.id);
+      newlyAppearedIds.push(message.id);
+    }
+
+    if (newlyAppearedIds.length === 0) {
+      return;
+    }
+
+    setAnimatingMessageIds((prev) => {
+      const next = new Set(prev);
+      for (const messageId of newlyAppearedIds) {
+        next.add(messageId);
+      }
+      return next;
+    });
+
+    for (const messageId of newlyAppearedIds) {
+      const existingTimer = messageAnimationTimersRef.current.get(messageId);
+      if (existingTimer) {
+        window.clearTimeout(existingTimer);
+      }
+      const timerId = window.setTimeout(() => {
+        setAnimatingMessageIds((prev) => {
+          if (!prev.has(messageId)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(messageId);
+          return next;
+        });
+        messageAnimationTimersRef.current.delete(messageId);
+      }, MESSAGE_APPEAR_ANIMATION_MS);
+      messageAnimationTimersRef.current.set(messageId, timerId);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      for (const timerId of messageAnimationTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
+      messageAnimationTimersRef.current.clear();
+      if (highlightMessageTimerRef.current) {
+        window.clearTimeout(highlightMessageTimerRef.current);
+        highlightMessageTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    if (!activeChatId || editingMessageId) {
+      return;
+    }
+    if (skipNextDraftPersistRef.current) {
+      skipNextDraftPersistRef.current = false;
+      return;
+    }
+
+    setDraftsByChatId((prev) => {
+      const current = prev[activeChatId] ?? "";
+      if (current === draft) {
+        return prev;
+      }
+      const next = { ...prev };
+      if (draft.length > 0) {
+        next[activeChatId] = draft;
+      } else {
+        delete next[activeChatId];
+      }
+      return next;
+    });
+  }, [activeChatId, draft, editingMessageId]);
+
+  useEffect(() => {
+    if (draft.trim().length > 0) {
+      return;
+    }
+    setFormattingMenuPosition(null);
+  }, [draft]);
+
+  useEffect(() => {
+    if (!formattingMenuPosition) {
+      return;
+    }
+
+    const closeMenuOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && composerRef.current?.contains(target)) {
+        return;
+      }
+      setFormattingMenuPosition(null);
+    };
+
+    const closeMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFormattingMenuPosition(null);
+      }
+    };
+
+    const closeMenu = () => setFormattingMenuPosition(null);
+
+    document.addEventListener("mousedown", closeMenuOnOutsideClick);
+    document.addEventListener("keydown", closeMenuOnEscape);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+
+    return () => {
+      document.removeEventListener("mousedown", closeMenuOnOutsideClick);
+      document.removeEventListener("keydown", closeMenuOnEscape);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [formattingMenuPosition]);
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const birthdayYearOptions = useMemo(
     () =>
@@ -969,6 +2462,52 @@ export function WebMessenger({
       translations[language][key],
     [language]
   );
+  const getRequestErrorMessage = useCallback(
+    (error: unknown) =>
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : t("actionFailed"),
+    [t]
+  );
+  const dismissToast = useCallback(() => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    if (toastProgressAnimationRef.current) {
+      window.cancelAnimationFrame(toastProgressAnimationRef.current);
+      toastProgressAnimationRef.current = null;
+    }
+    setToastProgress(0);
+    setToast(null);
+  }, []);
+  const showToast = useCallback(
+    (message: string, action?: ToastAction) => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      if (toastProgressAnimationRef.current) {
+        window.cancelAnimationFrame(toastProgressAnimationRef.current);
+      }
+      toastCounterRef.current += 1;
+      setToast({
+        id: toastCounterRef.current,
+        message,
+        action,
+      });
+      setToastProgress(100);
+      toastProgressAnimationRef.current = window.requestAnimationFrame(() => {
+        setToastProgress(0);
+        toastProgressAnimationRef.current = null;
+      });
+      toastTimerRef.current = window.setTimeout(() => {
+        setToastProgress(0);
+        setToast(null);
+        toastTimerRef.current = null;
+      }, UNDO_WINDOW_MS);
+    },
+    []
+  );
   const getPrivacyVisibilityLabel = useCallback(
     (value: unknown) => {
       if (typeof value !== "string") {
@@ -979,11 +2518,7 @@ export function WebMessenger({
     },
     [t]
   );
-  const privacyVisibilityOptions: PrivacyVisibility[] = [
-    "everyone",
-    "selected",
-    "nobody",
-  ];
+  const privacyVisibilityOptions = PRIVACY_VISIBILITY_OPTIONS;
   const currentLastSeenVisibility = normalizePrivacyVisibility(
     currentUser.lastSeenVisibility,
     currentUser.showLastSeen ? "everyone" : "nobody"
@@ -996,9 +2531,17 @@ export function WebMessenger({
     currentUser.bioVisibility,
     "everyone"
   );
-  const currentLastSeenAllowedUserIds = currentUser.lastSeenAllowedUserIds ?? [];
-  const currentAvatarAllowedUserIds = currentUser.avatarAllowedUserIds ?? [];
-  const currentBioAllowedUserIds = currentUser.bioAllowedUserIds ?? [];
+  const currentBirthdayVisibility = normalizePrivacyVisibility(
+    currentUser.birthdayVisibility,
+    "everyone"
+  );
+  const currentLastSeenAllowedUserIds =
+    currentUser.lastSeenAllowedUserIds ?? EMPTY_USER_IDS;
+  const currentAvatarAllowedUserIds =
+    currentUser.avatarAllowedUserIds ?? EMPTY_USER_IDS;
+  const currentBioAllowedUserIds = currentUser.bioAllowedUserIds ?? EMPTY_USER_IDS;
+  const currentBirthdayAllowedUserIds =
+    currentUser.birthdayAllowedUserIds ?? EMPTY_USER_IDS;
   const availablePrivacyUsers = useMemo(
     () => knownUsers.filter((user) => user.id !== currentUser.id),
     [currentUser.id, knownUsers]
@@ -1017,14 +2560,23 @@ export function WebMessenger({
   }, [availablePrivacyUsers, privacyPickerQuery]);
 
   const updatePrivacyVisibility = useCallback(
-    (field: "lastSeenVisibility" | "avatarVisibility" | "bioVisibility", value: PrivacyVisibility) => {
+    (
+      field:
+        | "lastSeenVisibility"
+        | "avatarVisibility"
+        | "bioVisibility"
+        | "birthdayVisibility",
+      value: PrivacyVisibility
+    ) => {
       const next = {
         lastSeenVisibility: currentLastSeenVisibility,
         avatarVisibility: currentAvatarVisibility,
         bioVisibility: currentBioVisibility,
+        birthdayVisibility: currentBirthdayVisibility,
         lastSeenAllowedUserIds: currentLastSeenAllowedUserIds,
         avatarAllowedUserIds: currentAvatarAllowedUserIds,
         bioAllowedUserIds: currentBioAllowedUserIds,
+        birthdayAllowedUserIds: currentBirthdayAllowedUserIds,
         [field]: value,
       };
       if (value !== "selected") {
@@ -1037,12 +2589,17 @@ export function WebMessenger({
         if (field === "bioVisibility") {
           next.bioAllowedUserIds = [];
         }
+        if (field === "birthdayVisibility") {
+          next.birthdayAllowedUserIds = [];
+        }
       }
       void onPrivacyUpdate?.(next);
     },
     [
       currentAvatarVisibility,
       currentAvatarAllowedUserIds,
+      currentBirthdayVisibility,
+      currentBirthdayAllowedUserIds,
       currentBioVisibility,
       currentBioAllowedUserIds,
       currentLastSeenVisibility,
@@ -1053,17 +2610,27 @@ export function WebMessenger({
 
   const toggleAllowedPrivacyUser = useCallback(
     (
-      field: "lastSeenAllowedUserIds" | "avatarAllowedUserIds" | "bioAllowedUserIds",
-      visibilityField: "lastSeenVisibility" | "avatarVisibility" | "bioVisibility",
+      field:
+        | "lastSeenAllowedUserIds"
+        | "avatarAllowedUserIds"
+        | "bioAllowedUserIds"
+        | "birthdayAllowedUserIds",
+      visibilityField:
+        | "lastSeenVisibility"
+        | "avatarVisibility"
+        | "bioVisibility"
+        | "birthdayVisibility",
       targetUserId: string
     ) => {
       const next = {
         lastSeenVisibility: currentLastSeenVisibility,
         avatarVisibility: currentAvatarVisibility,
         bioVisibility: currentBioVisibility,
+        birthdayVisibility: currentBirthdayVisibility,
         lastSeenAllowedUserIds: currentLastSeenAllowedUserIds,
         avatarAllowedUserIds: currentAvatarAllowedUserIds,
         bioAllowedUserIds: currentBioAllowedUserIds,
+        birthdayAllowedUserIds: currentBirthdayAllowedUserIds,
       };
       const currentIds = next[field];
       next[field] = currentIds.includes(targetUserId)
@@ -1075,6 +2642,8 @@ export function WebMessenger({
     [
       currentAvatarVisibility,
       currentAvatarAllowedUserIds,
+      currentBirthdayVisibility,
+      currentBirthdayAllowedUserIds,
       currentBioVisibility,
       currentBioAllowedUserIds,
       currentLastSeenVisibility,
@@ -1087,24 +2656,30 @@ export function WebMessenger({
       ? "lastSeenAllowedUserIds"
       : privacyPickerField === "avatar"
         ? "avatarAllowedUserIds"
-        : privacyPickerField === "bio"
+      : privacyPickerField === "bio"
           ? "bioAllowedUserIds"
+      : privacyPickerField === "birthday"
+          ? "birthdayAllowedUserIds"
           : null;
   const pickerVisibilityField =
     privacyPickerField === "lastSeen"
       ? "lastSeenVisibility"
       : privacyPickerField === "avatar"
         ? "avatarVisibility"
-        : privacyPickerField === "bio"
+      : privacyPickerField === "bio"
           ? "bioVisibility"
+      : privacyPickerField === "birthday"
+          ? "birthdayVisibility"
           : null;
   const pickerSelectedUserIds =
     privacyPickerField === "lastSeen"
       ? currentLastSeenAllowedUserIds
       : privacyPickerField === "avatar"
         ? currentAvatarAllowedUserIds
-        : privacyPickerField === "bio"
+      : privacyPickerField === "bio"
           ? currentBioAllowedUserIds
+      : privacyPickerField === "birthday"
+          ? currentBirthdayAllowedUserIds
           : [];
 
   useEffect(() => {
@@ -1217,6 +2792,52 @@ export function WebMessenger({
       messageSoundEnabled ? "1" : "0"
     );
   }, [messageSoundEnabled]);
+  useEffect(() => {
+    window.localStorage.setItem(UI_FONT_FAMILY_STORAGE_KEY, uiFontFamily);
+  }, [uiFontFamily]);
+
+  useEffect(() => {
+    window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, uiDensity);
+  }, [uiDensity]);
+  useEffect(() => {
+    window.localStorage.setItem(UI_FONT_SIZE_STORAGE_KEY, uiFontSize);
+  }, [uiFontSize]);
+  useEffect(() => {
+    window.localStorage.setItem(UI_RADIUS_STORAGE_KEY, uiRadius);
+  }, [uiRadius]);
+  useEffect(() => {
+    window.localStorage.setItem(GLOBAL_CHAT_WALLPAPER_STORAGE_KEY, globalChatWallpaper);
+  }, [globalChatWallpaper]);
+  useEffect(() => {
+    window.localStorage.setItem(
+      `${CHAT_PERSONALIZATION_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      JSON.stringify(chatPersonalizationById)
+    );
+  }, [chatPersonalizationById, currentUser.id]);
+  useEffect(() => {
+    window.localStorage.setItem(
+      `${SIDEBAR_LAYOUT_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      JSON.stringify({
+        order: sidebarItemOrder,
+        visibility: sidebarItemVisibility,
+      })
+    );
+  }, [sidebarItemOrder, sidebarItemVisibility, currentUser.id]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-clore-font-size", uiFontSize);
+  }, [uiFontSize]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-clore-radius", uiRadius);
+  }, [uiRadius]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-clore-font-family", uiFontFamily);
+  }, [uiFontFamily]);
+  useEffect(() => {
+    setManuallyLoadedMediaIds(new Set());
+  }, [activeChatId]);
 
   useEffect(() => {
     baseDocumentTitleRef.current = document.title || "Clore";
@@ -1280,20 +2901,65 @@ export function WebMessenger({
     currentUser.bannerUrl,
   ]);
 
-  const loadChatData = useCallback(async () => {
+  const loadChatData = useCallback(async (options?: { forceFullSync?: boolean }) => {
     try {
+      const now = Date.now();
+      const shouldRunFullSync =
+        options?.forceFullSync === true ||
+        !hasLoadedInitialChatDataRef.current ||
+        now - lastFullSyncAtRef.current >= INCREMENTAL_FULL_SYNC_INTERVAL_MS;
+      const sinceQuery =
+        !shouldRunFullSync && lastDataSyncTimestampRef.current > 0
+          ? `&since=${Math.max(0, lastDataSyncTimestampRef.current - 1)}`
+          : "";
       const data = await requestJson<MessengerDataResponse>(
-        `/api/messenger/data?userId=${encodeURIComponent(currentUser.id)}`,
+        `/api/messenger/data?userId=${encodeURIComponent(currentUser.id)}${sinceQuery}`,
         {
           method: "GET",
         }
       );
+
       setKnownUsers(data.users);
-      setThreads(data.threads);
-      setMessages(data.messages);
+
+      if (data.fullSync) {
+        setThreads(data.threads);
+        setMessages(data.messages);
+      } else {
+        if (data.threads.length > 0) {
+          setThreads((prev) => {
+            const byId = new Map(prev.map((thread) => [thread.id, thread]));
+            for (const thread of data.threads) {
+              byId.set(thread.id, thread);
+            }
+            return [...byId.values()];
+          });
+        }
+
+        if (data.messages.length > 0) {
+          setMessages((prev) => {
+            const byId = new Map(prev.map((message) => [message.id, message]));
+            for (const message of data.messages) {
+              byId.set(message.id, message);
+            }
+            return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
+          });
+        }
+      }
+
+      if (data.fullSync) {
+        lastFullSyncAtRef.current = now;
+      }
+      lastDataSyncTimestampRef.current =
+        typeof data.serverTime === "number" && Number.isFinite(data.serverTime)
+          ? data.serverTime
+          : now;
+
       hasLoadedInitialChatDataRef.current = true;
       if (!hasNotificationBaselineRef.current) {
-        seenMessageIdsRef.current = new Set(data.messages.map((message) => message.id));
+        const baselineMessages = data.fullSync ? data.messages : messagesRef.current;
+        seenMessageIdsRef.current = new Set(
+          baselineMessages.map((message) => message.id)
+        );
         hasNotificationBaselineRef.current = true;
       }
     } catch {
@@ -1303,13 +2969,6 @@ export function WebMessenger({
 
   useEffect(() => {
     void loadChatData();
-  }, [loadChatData]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      void loadChatData();
-    }, 2000);
-    return () => window.clearInterval(intervalId);
   }, [loadChatData]);
 
   const chatItems = useMemo<ChatListItem[]>(() => {
@@ -1365,14 +3024,26 @@ export function WebMessenger({
           : (directMember?.avatarUrl ?? "");
         const displayBannerUrl = isGroup ? thread.bannerUrl : "";
         const accentId = isGroup ? thread.id : directMemberId ?? thread.id;
+        const normalizedGroupRoles = Object.entries(thread.groupRoles ?? {}).reduce<
+          Record<string, GroupRole>
+        >((acc, [memberId, role]) => {
+          acc[memberId] = normalizeGroupRole(
+            role,
+            thread.createdById === memberId ? "owner" : "member"
+          );
+          return acc;
+        }, {});
+        const myGroupRole = isGroup ? getThreadRoleForUser(thread, currentUser.id) : null;
 
         return {
           id: thread.id,
           memberId: directMemberId,
           memberIds: thread.memberIds,
+          groupRoles: normalizedGroupRoles,
           isGroup,
           createdById: thread.createdById,
-          isGroupCreator: isGroup && thread.createdById === currentUser.id,
+          isGroupCreator: isGroup && myGroupRole === "owner",
+          myGroupRole,
           name: displayName,
           username: displayUsername,
           avatarUrl: displayAvatarUrl,
@@ -1386,6 +3057,7 @@ export function WebMessenger({
             isActiveChatVisible && thread.id === activeChatId ? 0 : unread,
           updatedAt: thread.updatedAt,
           isPinned: thread.pinnedBy?.[currentUser.id] === true,
+          isMuted: thread.mutedBy?.[currentUser.id] === true,
         };
       })
       .sort((a, b) => {
@@ -1425,14 +3097,6 @@ export function WebMessenger({
     });
   }, [chatItems, query]);
 
-  const visiblePinnedChats = useMemo(
-    () => filteredChats.filter((chat) => chat.isPinned),
-    [filteredChats]
-  );
-  const visibleRegularChats = useMemo(
-    () => filteredChats.filter((chat) => !chat.isPinned),
-    [filteredChats]
-  );
   const pinnedChatsCount = useMemo(
     () => chatItems.filter((chat) => chat.isPinned).length,
     [chatItems]
@@ -1449,6 +3113,52 @@ export function WebMessenger({
     chatItems.find((chat) => chat.id === activeChatId) ??
     filteredChats[0] ??
     null;
+  const activeChatPersonalization = useMemo<ChatPersonalization>(() => {
+    if (!activeChat) {
+      return { ...DEFAULT_CHAT_PERSONALIZATION };
+    }
+    const stored = chatPersonalizationById[activeChat.id];
+    if (!stored) {
+      return { ...DEFAULT_CHAT_PERSONALIZATION };
+    }
+    return {
+      wallpaper: stored.wallpaper ?? DEFAULT_CHAT_PERSONALIZATION.wallpaper,
+      fontSize: stored.fontSize ?? DEFAULT_CHAT_PERSONALIZATION.fontSize,
+      autoLoadMedia:
+        typeof stored.autoLoadMedia === "boolean"
+          ? stored.autoLoadMedia
+          : DEFAULT_CHAT_PERSONALIZATION.autoLoadMedia,
+    };
+  }, [activeChat, chatPersonalizationById]);
+  const activeChatEffectiveWallpaper: ChatWallpaper =
+    activeChatPersonalization.wallpaper === "inherit"
+      ? globalChatWallpaper
+      : activeChatPersonalization.wallpaper;
+  const activeChatEffectiveFontSize: UiFontSize =
+    activeChatPersonalization.fontSize === "inherit"
+      ? uiFontSize
+      : activeChatPersonalization.fontSize;
+  const activeChatAutoLoadMediaEnabled = activeChatPersonalization.autoLoadMedia;
+  const activeChatFontClassName =
+    activeChatEffectiveFontSize === "small"
+      ? "clore-chat-font-small"
+      : activeChatEffectiveFontSize === "large"
+        ? "clore-chat-font-large"
+        : "clore-chat-font-default";
+  const activeChatBackgroundStyle = useMemo(
+    () => ({
+      backgroundImage: CHAT_WALLPAPER_BACKGROUNDS[activeChatEffectiveWallpaper],
+    }),
+    [activeChatEffectiveWallpaper]
+  );
+
+  useEffect(() => {
+    if (activeChat) {
+      return;
+    }
+    setIsChatPersonalizationOpen(false);
+  }, [activeChat]);
+
   const activeChatUser = useMemo(
     () =>
       activeChat && !activeChat.isGroup && activeChat.memberId
@@ -1471,6 +3181,50 @@ export function WebMessenger({
     }
     return `${t("lastSeenAt")} ${formatLastSeen(activeChatUser.lastSeenAt, language)}`;
   }, [activeChatUser, t, language]);
+  const activeChatTypingText = useMemo(() => {
+    if (!activeChat) {
+      return "";
+    }
+
+    const activeThread = threads.find((thread) => thread.id === activeChat.id);
+    if (!activeThread) {
+      return "";
+    }
+
+    const typingUserIds = Object.entries(activeThread.typingBy ?? {})
+      .filter(([userId, typingAt]) => {
+        if (userId === currentUser.id) {
+          return false;
+        }
+        return Date.now() - typingAt <= TYPING_ACTIVE_WINDOW_MS;
+      })
+      .map(([userId]) => userId);
+
+    if (typingUserIds.length === 0) {
+      return "";
+    }
+
+    if (!activeChat.isGroup) {
+      return t("typingNow");
+    }
+
+    const typingUsers = typingUserIds
+      .map((userId) => knownUsers.find((user) => user.id === userId)?.name)
+      .filter((name): name is string => Boolean(name));
+
+    if (typingUsers.length === 0) {
+      return language === "ru" ? "РџРµС‡Р°С‚Р°СЋС‚..." : "Typing...";
+    }
+    if (typingUsers.length === 1) {
+      return language === "ru"
+        ? `${typingUsers[0]} РїРµС‡Р°С‚Р°РµС‚...`
+        : `${typingUsers[0]} is typing...`;
+    }
+
+    return language === "ru"
+      ? `${typingUsers.length} РїРµС‡Р°С‚Р°СЋС‚...`
+      : `${typingUsers.length} typing...`;
+  }, [activeChat, currentUser.id, knownUsers, language, t, threads]);
   const callStatusText = useMemo(() => {
     if (!callSession) {
       return "";
@@ -1484,7 +3238,7 @@ export function WebMessenger({
     if (callSession.phase === "connecting") {
       return t("connectingCall");
     }
-    return `${t("inCall")} · ${formatCallDuration(callDurationSeconds)}`;
+    return `${t("inCall")} В· ${formatCallDuration(callDurationSeconds)}`;
   }, [callSession, callDurationSeconds, t]);
   const callChatMatchesActive =
     callSession !== null &&
@@ -1659,82 +3413,92 @@ export function WebMessenger({
     });
   }, [closeCallSession, sendCallSignal]);
 
+  const startAudioCallToTarget = useCallback(
+    async (target: { chatId: string; peerUserId: string; peerName: string }) => {
+      if (callSession) {
+        setCallNotice(t("callBusy"));
+        return;
+      }
+      if (!isAudioCallSupported()) {
+        setCallNotice(t("callBrowserNotSupported"));
+        return;
+      }
+
+      const { chatId, peerUserId, peerName } = target;
+      callTargetRef.current = {
+        chatId,
+        peerUserId,
+      };
+      incomingOfferRef.current = null;
+      pendingRemoteIceCandidatesRef.current = [];
+      setCallSession({
+        phase: "outgoing",
+        chatId,
+        peerUserId,
+        peerName,
+        startedAt: null,
+      });
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+        localCallStreamRef.current = stream;
+
+        const connection = createCallPeerConnection(chatId, peerUserId);
+        callPeerConnectionRef.current = connection;
+        for (const track of stream.getTracks()) {
+          connection.addTrack(track, stream);
+        }
+
+        const offer = await connection.createOffer({
+          offerToReceiveAudio: true,
+        });
+        await connection.setLocalDescription(offer);
+        const delivered = await sendCallSignal(chatId, peerUserId, "offer", {
+          sdp: offer,
+        });
+
+        if (!delivered) {
+          closeCallSession(t("callFailed"));
+          return;
+        }
+
+        setCallSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                phase: "connecting",
+              }
+            : prev
+        );
+      } catch {
+        closeCallSession(t("micAccessDenied"));
+      }
+    },
+    [
+      callSession,
+      closeCallSession,
+      createCallPeerConnection,
+      isAudioCallSupported,
+      sendCallSignal,
+      t,
+    ]
+  );
+
   const startAudioCall = useCallback(async () => {
     if (!activeChat || activeChat.isGroup || !activeChat.memberId) {
       setCallNotice(t("callDirectOnly"));
       return;
     }
-    if (callSession) {
-      setCallNotice(t("callBusy"));
-      return;
-    }
-    if (!isAudioCallSupported()) {
-      setCallNotice(t("callBrowserNotSupported"));
-      return;
-    }
 
-    const chatId = activeChat.id;
-    const peerUserId = activeChat.memberId;
-    callTargetRef.current = {
-      chatId,
-      peerUserId,
-    };
-    incomingOfferRef.current = null;
-    pendingRemoteIceCandidatesRef.current = [];
-    setCallSession({
-      phase: "outgoing",
-      chatId,
-      peerUserId,
+    await startAudioCallToTarget({
+      chatId: activeChat.id,
+      peerUserId: activeChat.memberId,
       peerName: activeChat.name,
-      startedAt: null,
     });
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
-      localCallStreamRef.current = stream;
-
-      const connection = createCallPeerConnection(chatId, peerUserId);
-      callPeerConnectionRef.current = connection;
-      for (const track of stream.getTracks()) {
-        connection.addTrack(track, stream);
-      }
-
-      const offer = await connection.createOffer({
-        offerToReceiveAudio: true,
-      });
-      await connection.setLocalDescription(offer);
-      const delivered = await sendCallSignal(chatId, peerUserId, "offer", {
-        sdp: offer,
-      });
-
-      if (!delivered) {
-        closeCallSession(t("callFailed"));
-        return;
-      }
-
-      setCallSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              phase: "connecting",
-            }
-          : prev
-      );
-    } catch {
-      closeCallSession(t("micAccessDenied"));
-    }
-  }, [
-    activeChat,
-    callSession,
-    closeCallSession,
-    createCallPeerConnection,
-    isAudioCallSupported,
-    sendCallSignal,
-    t,
-  ]);
+  }, [activeChat, startAudioCallToTarget, t]);
 
   const declineIncomingCall = useCallback(async () => {
     if (!callSession || callSession.phase !== "incoming") {
@@ -1977,7 +3741,7 @@ export function WebMessenger({
         }
       );
 
-      if (response.status === 404) {
+      if (response.status === 404 || response.status === 400) {
         isCallSignalingUnavailableRef.current = true;
         return;
       }
@@ -1999,23 +3763,72 @@ export function WebMessenger({
     }
   }, [currentUser.id, handleCallSignal]);
 
+  useRealtimeSync({
+    userId: currentUser.id,
+    onSync: () => {
+      void loadChatData();
+      void pollCallSignals();
+    },
+  });
+
   const activeMessages = useMemo<RenderMessage[]>(() => {
     if (!activeChat) {
       return [];
     }
+    const clearedAt = clearedChatAtById[activeChat.id] ?? 0;
     const activeThread = threads.find((thread) => thread.id === activeChat.id);
     const peerReadAt =
       !activeChat.isGroup && activeChat.memberId
         ? activeThread?.readBy?.[activeChat.memberId] ?? 0
         : 0;
+    const groupMemberIds = activeThread?.memberIds ?? activeChat.memberIds;
+    const usersById = new Map(knownUsers.map((user) => [user.id, user]));
+    const chatMessages = messages
+      .filter(
+        (message) => message.chatId === activeChat.id && message.createdAt > clearedAt
+      )
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const messagesById = new Map(chatMessages.map((message) => [message.id, message]));
 
-    return messages
-      .filter((message) => message.chatId === activeChat.id)
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .map((message) => ({
+    return chatMessages.map<RenderMessage>((message) => {
+      const replyTarget = message.replyToMessageId
+        ? messagesById.get(message.replyToMessageId) ?? null
+        : null;
+      const replyAuthorName = replyTarget
+        ? replyTarget.authorId === currentUser.id
+          ? t("you")
+          : (usersById.get(replyTarget.authorId)?.name ?? t("unknownUser"))
+        : "";
+      const replyPreviewText = replyTarget
+        ? replyTarget.text.trim() ||
+          (replyTarget.attachments.length > 0 ? t("attachment") : t("noMessagesYet"))
+        : t("originalMessageUnavailable");
+      const groupReadByLabels =
+        activeChat.isGroup && message.authorId === currentUser.id
+          ? groupMemberIds
+              .filter((memberId) => memberId !== currentUser.id)
+              .filter(
+                (memberId) =>
+                  (activeThread?.readBy?.[memberId] ?? 0) >= message.createdAt
+              )
+              .map((memberId) => usersById.get(memberId)?.name ?? t("unknownUser"))
+          : [];
+
+      return {
         id: message.id,
+        chatId: message.chatId,
+        authorId: message.authorId,
         author: message.authorId === currentUser.id ? "me" : "them",
+        authorLabel:
+          message.authorId === currentUser.id
+            ? t("you")
+            : (usersById.get(message.authorId)?.name ?? t("unknownUser")),
+        authorUsername:
+          message.authorId === currentUser.id
+            ? currentUser.username
+            : (usersById.get(message.authorId)?.username ?? ""),
         text: message.text,
+        createdAt: message.createdAt,
         attachments: message.attachments.map((attachment) => ({
           id: attachment.id,
           name: attachment.name,
@@ -2023,13 +3836,121 @@ export function WebMessenger({
           url: attachment.url,
           kind: getAttachmentKind(attachment.type),
         })),
-        time: formatChatTime(message.createdAt, language),
+        time: formatMessageTime(message.createdAt, language),
         isReadByPeer:
           !activeChat.isGroup &&
           message.authorId === currentUser.id &&
           message.createdAt <= peerReadAt,
-      }));
-  }, [activeChat, messages, currentUser.id, language, threads]);
+        groupReadByCount: groupReadByLabels.length,
+        groupReadByLabels,
+        isEdited: message.editedAt > 0,
+        reply: message.replyToMessageId
+          ? {
+              targetMessageId: message.replyToMessageId,
+              authorLabel: replyAuthorName,
+              previewText: replyPreviewText,
+              missing: replyTarget === null,
+            }
+          : null,
+      };
+    });
+  }, [
+    activeChat,
+    clearedChatAtById,
+    messages,
+    currentUser.id,
+    knownUsers,
+    language,
+    t,
+    threads,
+  ]);
+
+  const filteredActiveMessages = useMemo(() => {
+    const filters = parseActiveChatSearchQuery(activeChatSearchQuery);
+    if (
+      filters.textTerms.length === 0 &&
+      !filters.authorTerm &&
+      !filters.requireAttachment &&
+      filters.hasKinds.size === 0 &&
+      !filters.onDayRange &&
+      filters.beforeTs === null &&
+      filters.afterTs === null
+    ) {
+      return activeMessages;
+    }
+
+    return activeMessages.filter((message) => {
+      if (filters.authorTerm) {
+        const labelMatches = message.authorLabel.toLowerCase().includes(filters.authorTerm);
+        const usernameMatches = message.authorUsername
+          .toLowerCase()
+          .includes(filters.authorTerm);
+        if (!labelMatches && !usernameMatches) {
+          return false;
+        }
+      }
+
+      if (filters.requireAttachment && message.attachments.length === 0) {
+        return false;
+      }
+
+      if (filters.hasKinds.size > 0) {
+        const hasMatchKind = message.attachments.some((attachment) =>
+          filters.hasKinds.has(attachment.kind)
+        );
+        if (!hasMatchKind) {
+          return false;
+        }
+      }
+
+      if (filters.onDayRange) {
+        if (
+          message.createdAt < filters.onDayRange.start ||
+          message.createdAt >= filters.onDayRange.end
+        ) {
+          return false;
+        }
+      }
+
+      if (filters.beforeTs !== null && message.createdAt >= filters.beforeTs) {
+        return false;
+      }
+
+      if (filters.afterTs !== null && message.createdAt < filters.afterTs) {
+        return false;
+      }
+
+      if (filters.textTerms.length === 0) {
+        return true;
+      }
+
+      const text = message.text.toLowerCase();
+      const authorLabel = message.authorLabel.toLowerCase();
+      const attachmentNames = message.attachments.map((attachment) =>
+        attachment.name.toLowerCase()
+      );
+      return filters.textTerms.every((term) => {
+        if (text.includes(term) || authorLabel.includes(term)) {
+          return true;
+        }
+        return attachmentNames.some((name) => name.includes(term));
+      });
+    });
+  }, [activeChatSearchQuery, activeMessages]);
+
+  const unreadDividerMessageId = useMemo(() => {
+    if (!activeChat || activeMessages.length === 0) {
+      return null;
+    }
+    const baseline = unreadBaselineByChatId[activeChat.id];
+    if (!baseline || baseline <= 0) {
+      return null;
+    }
+    const firstUnread = activeMessages.find(
+      (message) => message.author !== "me" && message.createdAt > baseline
+    );
+    return firstUnread?.id ?? null;
+  }, [activeChat, activeMessages, unreadBaselineByChatId]);
 
   const activeChatImages = useMemo(
     () =>
@@ -2044,6 +3965,43 @@ export function WebMessenger({
       ),
     [activeMessages]
   );
+  const replyTargetMessage = useMemo(
+    () =>
+      replyToMessageId
+        ? activeMessages.find((message) => message.id === replyToMessageId) ?? null
+        : null,
+    [activeMessages, replyToMessageId]
+  );
+  const editingTargetMessage = useMemo(
+    () =>
+      editingMessageId
+        ? activeMessages.find((message) => message.id === editingMessageId) ?? null
+        : null,
+    [activeMessages, editingMessageId]
+  );
+
+  useEffect(() => {
+    setReplyToMessageId(null);
+    setEditingMessageId(null);
+  }, [activeChat?.id]);
+
+  useEffect(() => {
+    if (!replyToMessageId) {
+      return;
+    }
+    if (!replyTargetMessage) {
+      setReplyToMessageId(null);
+    }
+  }, [replyTargetMessage, replyToMessageId]);
+
+  useEffect(() => {
+    if (!editingMessageId) {
+      return;
+    }
+    if (!editingTargetMessage) {
+      setEditingMessageId(null);
+    }
+  }, [editingMessageId, editingTargetMessage]);
 
   const availableUsers = useMemo(() => {
     const normalized = normalizeSearchQuery(query);
@@ -2101,14 +4059,170 @@ export function WebMessenger({
 
   const openChat = useCallback(
     (chatId: string) => {
+      const existingThread = threads.find((thread) => thread.id === chatId);
+      if (existingThread) {
+        setUnreadBaselineByChatId((prev) => ({
+          ...prev,
+          [chatId]: existingThread.readBy?.[currentUser.id] ?? 0,
+        }));
+      }
       setActiveChatId(chatId);
       setMobileView("chat");
+      setIsChatPersonalizationOpen(false);
       setPendingAttachments([]);
       setViewerImageId(null);
+      setManuallyLoadedMediaIds(new Set());
       void markChatAsRead(chatId);
     },
-    [markChatAsRead]
+    [currentUser.id, markChatAsRead, threads]
   );
+
+  const updateActiveChatPersonalization = useCallback(
+    (partial: Partial<ChatPersonalization>) => {
+      if (!activeChat) {
+        return;
+      }
+      setChatPersonalizationById((prev) => {
+        const current = prev[activeChat.id] ?? DEFAULT_CHAT_PERSONALIZATION;
+        const next: ChatPersonalization = {
+          wallpaper: partial.wallpaper ?? current.wallpaper,
+          fontSize: partial.fontSize ?? current.fontSize,
+          autoLoadMedia:
+            typeof partial.autoLoadMedia === "boolean"
+              ? partial.autoLoadMedia
+              : current.autoLoadMedia,
+        };
+        return {
+          ...prev,
+          [activeChat.id]: next,
+        };
+      });
+    },
+    [activeChat]
+  );
+
+  const startReplyToMessage = useCallback((messageId: string) => {
+    setEditingMessageId(null);
+    setReplyToMessageId(messageId);
+    messageInputRef.current?.focus();
+  }, []);
+
+  const startEditingMessage = useCallback(
+    (messageId: string) => {
+      const target = activeMessages.find((message) => message.id === messageId);
+      if (!target) {
+        return;
+      }
+      setReplyToMessageId(null);
+      setEditingMessageId(messageId);
+      setPendingAttachments([]);
+      setDraft(target.text);
+      setIsEmojiMenuOpen(false);
+      messageInputRef.current?.focus();
+    },
+    [activeMessages]
+  );
+
+  const focusReplyTargetMessage = useCallback((messageId: string) => {
+    const node = messageNodeRefs.current.get(messageId);
+    if (!node) {
+      return;
+    }
+
+    node.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    setHighlightedMessageId(messageId);
+
+    if (highlightMessageTimerRef.current) {
+      window.clearTimeout(highlightMessageTimerRef.current);
+    }
+    highlightMessageTimerRef.current = window.setTimeout(() => {
+      setHighlightedMessageId((prev) => (prev === messageId ? null : prev));
+      highlightMessageTimerRef.current = null;
+    }, MESSAGE_TARGET_HIGHLIGHT_MS);
+  }, []);
+
+  const sendTypingState = useCallback(
+    async (chatId: string, isTyping: boolean) => {
+      try {
+        await requestJson<{ ok: boolean }>("/api/messenger/typing", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            chatId,
+            isTyping,
+          }),
+        });
+      } catch {
+        // Ignore transient typing status failures.
+      }
+    },
+    [currentUser.id]
+  );
+
+  useEffect(() => {
+    const chatId = activeChat?.id ?? null;
+    const previousChatId = lastTypingChatIdRef.current;
+
+    if (previousChatId && previousChatId !== chatId && isTypingStateSentRef.current) {
+      void sendTypingState(previousChatId, false);
+      isTypingStateSentRef.current = false;
+    }
+
+    lastTypingChatIdRef.current = chatId;
+
+    if (!chatId) {
+      return;
+    }
+
+    const isTyping = draft.trim().length > 0;
+    if (isTyping && !isTypingStateSentRef.current) {
+      void sendTypingState(chatId, true);
+      isTypingStateSentRef.current = true;
+      return;
+    }
+
+    if (!isTyping && isTypingStateSentRef.current) {
+      void sendTypingState(chatId, false);
+      isTypingStateSentRef.current = false;
+    }
+  }, [activeChat?.id, draft, sendTypingState]);
+
+  useEffect(() => {
+    const chatId = activeChat?.id ?? null;
+    if (!chatId) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (!isTypingStateSentRef.current) {
+        return;
+      }
+      if (lastTypingChatIdRef.current !== chatId) {
+        return;
+      }
+      if (draftRef.current.trim().length === 0) {
+        return;
+      }
+      void sendTypingState(chatId, true);
+    }, TYPING_PING_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeChat?.id, sendTypingState]);
+
+  useEffect(() => {
+    return () => {
+      const chatId = lastTypingChatIdRef.current;
+      if (!chatId || !isTypingStateSentRef.current) {
+        return;
+      }
+      void sendTypingState(chatId, false);
+    };
+  }, [sendTypingState]);
 
   const handlePushNotificationsChange = useCallback((enabled: boolean) => {
     setPushNotificationsEnabled(enabled);
@@ -2161,22 +4275,86 @@ export function WebMessenger({
       }
 
       const chatId = activeChat.id;
+      const messageToDelete =
+        messagesRef.current.find((message) => message.id === messageId) ?? null;
+      if (!messageToDelete) {
+        return;
+      }
+      if (pendingMessageDeletionRef.current.has(messageId)) {
+        return;
+      }
+
+      if (editingMessageId === messageId) {
+        setEditingMessageId(null);
+        setDraft("");
+      }
+      if (replyToMessageId === messageId) {
+        setReplyToMessageId(null);
+      }
       setMessages((prev) => prev.filter((message) => message.id !== messageId));
 
-      try {
-        await requestJson<{ ok: boolean }>("/api/messenger/delete-message", {
-          method: "POST",
-          body: JSON.stringify({
-            userId: currentUser.id,
-            chatId,
-            messageId,
-          }),
-        });
-      } finally {
-        await loadChatData();
-      }
+      const timeoutId = window.setTimeout(() => {
+        pendingMessageDeletionRef.current.delete(messageId);
+        void (async () => {
+          try {
+            await requestJson<{ ok: boolean }>("/api/messenger/delete-message", {
+              method: "POST",
+              body: JSON.stringify({
+                userId: currentUser.id,
+                chatId,
+                messageId,
+              }),
+            });
+            await loadChatData();
+          } catch {
+            setMessages((prev) => {
+              const alreadyRestored = prev.some((message) => message.id === messageId);
+              if (alreadyRestored) {
+                return prev;
+              }
+              return [...prev, messageToDelete].sort((a, b) => a.createdAt - b.createdAt);
+            });
+            showToast(t("actionFailed"));
+          }
+        })();
+      }, UNDO_WINDOW_MS);
+
+      pendingMessageDeletionRef.current.set(messageId, {
+        timeoutId,
+        message: messageToDelete,
+        chatId,
+      });
+
+      showToast(t("messageDeleted"), {
+        label: t("undo"),
+        onClick: () => {
+          const pending = pendingMessageDeletionRef.current.get(messageId);
+          if (!pending) {
+            return;
+          }
+          window.clearTimeout(pending.timeoutId);
+          pendingMessageDeletionRef.current.delete(messageId);
+          setMessages((prev) => {
+            const exists = prev.some((message) => message.id === messageId);
+            if (exists) {
+              return prev;
+            }
+            return [...prev, pending.message].sort((a, b) => a.createdAt - b.createdAt);
+          });
+          dismissToast();
+        },
+      });
     },
-    [activeChat, currentUser.id, loadChatData]
+    [
+      activeChat,
+      currentUser.id,
+      dismissToast,
+      editingMessageId,
+      loadChatData,
+      replyToMessageId,
+      showToast,
+      t,
+    ]
   );
 
   useEffect(() => {
@@ -2240,7 +4418,12 @@ export function WebMessenger({
     const isDesktop = window.matchMedia("(min-width: 768px)").matches;
     const isChatVisible = activeSidebar === "home" && (isDesktop || mobileView === "chat");
     const isDocumentVisible = document.visibilityState === "visible";
+    const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
     const incomingForAlert = incomingUnseen.filter((message) => {
+      const thread = threadsById.get(message.chatId);
+      if (thread?.mutedBy?.[currentUser.id] === true) {
+        return false;
+      }
       if (!isChatVisible || !isDocumentVisible) {
         return true;
       }
@@ -2266,7 +4449,6 @@ export function WebMessenger({
     }
 
     const usersById = new Map(knownUsers.map((user) => [user.id, user]));
-    const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
     const latestMessage = incomingForAlert[incomingForAlert.length - 1];
     const sender = usersById.get(latestMessage.authorId);
     const thread = threadsById.get(latestMessage.chatId);
@@ -2275,7 +4457,7 @@ export function WebMessenger({
     const chatName = isGroup
       ? thread?.title?.trim() || t("groupChat")
       : senderName;
-    const title = isGroup ? `${senderName} • ${chatName}` : senderName;
+    const title = isGroup ? `${senderName} - ${chatName}` : senderName;
     const baseBody =
       latestMessage.text.trim() ||
       (latestMessage.attachments.length > 0 ? t("attachment") : t("noMessagesYet"));
@@ -2294,7 +4476,7 @@ export function WebMessenger({
         notification.close();
       };
     } catch {
-      // Ignore browser notification failures and keep polling.
+      // Ignore browser notification failures and keep syncing.
     }
   }, [
     activeChatId,
@@ -2309,14 +4491,6 @@ export function WebMessenger({
     t,
     threads,
   ]);
-
-  useEffect(() => {
-    void pollCallSignals();
-    const intervalId = window.setInterval(() => {
-      void pollCallSignals();
-    }, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [pollCallSignals]);
 
   useEffect(() => {
     if (!callSession || callSession.phase !== "active" || !callSession.startedAt) {
@@ -2352,44 +4526,85 @@ export function WebMessenger({
     };
   }, [closeCallResources]);
 
-  const createOrOpenChat = async (targetUserId: string) => {
-    if (targetUserId === currentUser.id) {
-      return;
-    }
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      if (toastProgressAnimationRef.current) {
+        window.cancelAnimationFrame(toastProgressAnimationRef.current);
+      }
+      for (const pending of pendingMessageDeletionRef.current.values()) {
+        window.clearTimeout(pending.timeoutId);
+      }
+      for (const pending of pendingChatDeletionRef.current.values()) {
+        window.clearTimeout(pending.timeoutId);
+      }
+      pendingMessageDeletionRef.current.clear();
+      pendingChatDeletionRef.current.clear();
+    };
+  }, []);
 
-    try {
-      const result = await requestJson<OpenOrCreateResponse>(
-        "/api/messenger/open-or-create",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            userId: currentUser.id,
-            targetUserId,
-          }),
-        }
-      );
-      setActiveChatId(result.chatId);
-      setMobileView("chat");
-      setQuery("");
-      setPendingAttachments([]);
-      setViewerImageId(null);
-      await loadChatData();
-    } catch {
-      // Keep current view if API request failed.
-    }
-  };
+  const createOrOpenChat = useCallback(
+    async (targetUserId: string): Promise<string | null> => {
+      if (targetUserId === currentUser.id) {
+        return null;
+      }
+
+      try {
+        const result = await requestJson<OpenOrCreateResponse>(
+          "/api/messenger/open-or-create",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              userId: currentUser.id,
+              targetUserId,
+            }),
+          }
+        );
+        setActiveSidebar("home");
+        setIsActiveChatProfileSidebarOpen(false);
+        setActiveChatId(result.chatId);
+        setMobileView("chat");
+        setQuery("");
+        setPendingAttachments([]);
+        setViewerImageId(null);
+        await loadChatData();
+        return result.chatId;
+      } catch (error) {
+        showToast(getRequestErrorMessage(error));
+        return null;
+      }
+    },
+    [currentUser.id, getRequestErrorMessage, loadChatData, showToast]
+  );
 
   const toggleGroupMember = (userId: string) => {
     setGroupMemberIdsDraft((prev) =>
       prev.includes(userId)
         ? prev.filter((candidate) => candidate !== userId)
-        : [...prev, userId]
+        : prev.length + 1 >= GROUP_MAX_MEMBERS
+          ? prev
+          : [...prev, userId]
     );
   };
 
   const createGroupChat = async () => {
-    const title = groupNameDraft.trim();
-    if (!title || groupMemberIdsDraft.length < 2) {
+    const title = groupNameDraft.trim().replace(/\s+/g, " ");
+    if (title.length < GROUP_TITLE_MIN_LENGTH) {
+      showToast(t("groupNameMinError"));
+      return;
+    }
+    if (title.length > GROUP_TITLE_MAX_LENGTH) {
+      showToast(t("groupNameMaxError"));
+      return;
+    }
+    if (groupMemberIdsDraft.length < 2) {
+      showToast(t("groupMembersMinError"));
+      return;
+    }
+    if (groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS) {
+      showToast(t("groupMembersLimitHint"));
       return;
     }
 
@@ -2413,12 +4628,67 @@ export function WebMessenger({
       setMobileView("chat");
       setQuery("");
       await loadChatData();
-    } catch {
-      // Keep draft data on API failure.
+    } catch (error) {
+      showToast(getRequestErrorMessage(error));
     } finally {
       setIsCreatingGroup(false);
     }
   };
+
+  const openActiveChatSearch = useCallback(() => {
+    setIsActiveChatSearchOpen(true);
+    window.requestAnimationFrame(() => {
+      activeChatSearchInputRef.current?.focus();
+    });
+  }, []);
+
+  const jumpToDate = useCallback(() => {
+    if (!activeChatJumpDate || activeMessages.length === 0) {
+      return;
+    }
+    const range = getLocalDayRangeFromIsoDate(activeChatJumpDate);
+    if (!range) {
+      return;
+    }
+
+    const onDateMessage = activeMessages.find(
+      (message) => message.createdAt >= range.start && message.createdAt < range.end
+    );
+    const afterDateMessage = activeMessages.find((message) => message.createdAt >= range.start);
+    const beforeDateMessage = [...activeMessages]
+      .reverse()
+      .find((message) => message.createdAt < range.start);
+    const target = onDateMessage ?? afterDateMessage ?? beforeDateMessage;
+
+    if (!target) {
+      showToast(t("noMessagesFound"));
+      return;
+    }
+
+    focusReplyTargetMessage(target.id);
+  }, [activeChatJumpDate, activeMessages, focusReplyTargetMessage, showToast, t]);
+
+  const clearHistoryForMe = useCallback(() => {
+    if (!activeChat) {
+      return;
+    }
+    setClearedChatAtById((prev) => ({
+      ...prev,
+      [activeChat.id]: Date.now(),
+    }));
+    setReplyToMessageId(null);
+    setEditingMessageId(null);
+    setDraft("");
+    setDraftsByChatId((prev) => {
+      if (!(activeChat.id in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[activeChat.id];
+      return next;
+    });
+    showToast(t("historyClearedForMe"));
+  }, [activeChat, showToast, t]);
 
   const setChatPinned = async (chatId: string, pinned: boolean) => {
     const targetChat = chatItems.find((chat) => chat.id === chatId);
@@ -2455,42 +4725,174 @@ export function WebMessenger({
     }
   };
 
-  const deleteChat = async (chatId: string) => {
-    setThreads((prev) => prev.filter((thread) => thread.id !== chatId));
-    setMessages((prev) => prev.filter((message) => message.chatId !== chatId));
-    if (activeChatId === chatId) {
-      setActiveChatId(null);
-      setMobileView("list");
-      setPendingAttachments([]);
-      setViewerImageId(null);
-    }
+  const setChatMuted = useCallback(
+    async (chatId: string, muted: boolean, options?: { silentToast?: boolean }) => {
+      setThreads((prev) =>
+        prev.map((thread) => {
+          if (thread.id !== chatId) {
+            return thread;
+          }
+          return {
+            ...thread,
+            mutedBy: {
+              ...thread.mutedBy,
+              [currentUser.id]: muted,
+            },
+          };
+        })
+      );
 
-    try {
-      await requestJson<{ ok: boolean }>("/api/messenger/delete", {
-        method: "POST",
-        body: JSON.stringify({
-          userId: currentUser.id,
-          chatId,
-        }),
+      try {
+        await requestJson<{ ok: boolean }>("/api/messenger/mute", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            chatId,
+            muted,
+          }),
+        });
+        if (!options?.silentToast) {
+          showToast(muted ? t("chatMutedToast") : t("chatUnmutedToast"), {
+            label: t("undo"),
+            onClick: () => {
+              void setChatMuted(chatId, !muted, { silentToast: true });
+              dismissToast();
+            },
+          });
+        }
+      } catch {
+        await loadChatData({ forceFullSync: true });
+        showToast(t("actionFailed"));
+      }
+    },
+    [currentUser.id, dismissToast, loadChatData, showToast, t]
+  );
+
+  const deleteChat = useCallback(
+    async (chatId: string) => {
+      const threadToDelete = threads.find((thread) => thread.id === chatId) ?? null;
+      if (!threadToDelete || pendingChatDeletionRef.current.has(chatId)) {
+        return;
+      }
+
+      const messagesToDelete = messagesRef.current.filter(
+        (message) => message.chatId === chatId
+      );
+      const wasActive = activeChatId === chatId;
+      const clearedAtBeforeDelete = clearedChatAtById[chatId] ?? 0;
+
+      setThreads((prev) => prev.filter((thread) => thread.id !== chatId));
+      setMessages((prev) => prev.filter((message) => message.chatId !== chatId));
+      setClearedChatAtById((prev) => {
+        if (!(chatId in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[chatId];
+        return next;
       });
-      await loadChatData();
-    } catch {
-      await loadChatData();
-    }
-  };
+      if (wasActive) {
+        setActiveChatId(null);
+        setMobileView("list");
+        setPendingAttachments([]);
+        setViewerImageId(null);
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        pendingChatDeletionRef.current.delete(chatId);
+        void (async () => {
+          try {
+            await requestJson<{ ok: boolean }>("/api/messenger/delete", {
+              method: "POST",
+              body: JSON.stringify({
+                userId: currentUser.id,
+                chatId,
+              }),
+            });
+            await loadChatData();
+          } catch {
+            setThreads((prev) => {
+              if (prev.some((thread) => thread.id === chatId)) {
+                return prev;
+              }
+              return [...prev, threadToDelete].sort((a, b) => b.updatedAt - a.updatedAt);
+            });
+            setMessages((prev) => {
+              const existing = new Set(prev.map((message) => message.id));
+              const restored = messagesToDelete.filter(
+                (message) => !existing.has(message.id)
+              );
+              if (restored.length === 0) {
+                return prev;
+              }
+              return [...prev, ...restored].sort((a, b) => a.createdAt - b.createdAt);
+            });
+            showToast(t("actionFailed"));
+          }
+        })();
+      }, UNDO_WINDOW_MS);
+
+      pendingChatDeletionRef.current.set(chatId, {
+        timeoutId,
+        thread: threadToDelete,
+        messages: messagesToDelete,
+        wasActive,
+      });
+
+      showToast(t("chatDeleted"), {
+        label: t("undo"),
+        onClick: () => {
+          const pending = pendingChatDeletionRef.current.get(chatId);
+          if (!pending) {
+            return;
+          }
+          window.clearTimeout(pending.timeoutId);
+          pendingChatDeletionRef.current.delete(chatId);
+          setThreads((prev) => {
+            if (prev.some((thread) => thread.id === chatId)) {
+              return prev;
+            }
+            return [...prev, pending.thread].sort((a, b) => b.updatedAt - a.updatedAt);
+          });
+          setMessages((prev) => {
+            const existing = new Set(prev.map((message) => message.id));
+            const restored = pending.messages.filter(
+              (message) => !existing.has(message.id)
+            );
+            if (restored.length === 0) {
+              return prev;
+            }
+            return [...prev, ...restored].sort((a, b) => a.createdAt - b.createdAt);
+          });
+          if (pending.wasActive) {
+            setActiveChatId(chatId);
+            setMobileView("chat");
+          }
+          if (clearedAtBeforeDelete > 0) {
+            setClearedChatAtById((prev) => ({
+              ...prev,
+              [chatId]: clearedAtBeforeDelete,
+            }));
+          }
+          dismissToast();
+        },
+      });
+    },
+    [
+      activeChatId,
+      clearedChatAtById,
+      currentUser.id,
+      dismissToast,
+      loadChatData,
+      showToast,
+      t,
+      threads,
+    ]
+  );
 
   const leaveGroup = async (chatId: string) => {
-    setThreads((prev) =>
-      prev.map((thread) => {
-        if (thread.id !== chatId) {
-          return thread;
-        }
-        return {
-          ...thread,
-          memberIds: thread.memberIds.filter((memberId) => memberId !== currentUser.id),
-        };
-      })
-    );
+    setThreads((prev) => prev.filter((thread) => thread.id !== chatId));
+    setMessages((prev) => prev.filter((message) => message.chatId !== chatId));
 
     if (activeChatId === chatId) {
       setActiveChatId(null);
@@ -2507,9 +4909,10 @@ export function WebMessenger({
           chatId,
         }),
       });
-      await loadChatData();
-    } catch {
-      await loadChatData();
+      await loadChatData({ forceFullSync: true });
+    } catch (error) {
+      await loadChatData({ forceFullSync: true });
+      showToast(getRequestErrorMessage(error));
     }
   };
 
@@ -2519,24 +4922,10 @@ export function WebMessenger({
       return;
     }
 
-    const readAsDataUrl = (file: File) =>
-      new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === "string") {
-            resolve(reader.result);
-            return;
-          }
-          reject(new Error("Unsupported file result."));
-        };
-        reader.onerror = () => reject(new Error("Unable to read file."));
-        reader.readAsDataURL(file);
-      });
-
     try {
       const loaded = await Promise.all(
         files.map(async (file, index) => {
-          const url = await readAsDataUrl(file);
+          const url = await readBlobAsDataUrl(file);
           return {
             id: `${Date.now()}-${index}-${file.name}`,
             name: file.name,
@@ -2564,6 +4953,190 @@ export function WebMessenger({
     chatAttachmentInputRef.current?.click();
   };
 
+  const clearVoiceRecordingTimer = useCallback(() => {
+    if (voiceRecordingTimerRef.current !== null) {
+      window.clearInterval(voiceRecordingTimerRef.current);
+      voiceRecordingTimerRef.current = null;
+    }
+  }, []);
+
+  const releaseVoiceRecorderStream = useCallback(() => {
+    if (!voiceRecorderStreamRef.current) {
+      return;
+    }
+    for (const track of voiceRecorderStreamRef.current.getTracks()) {
+      track.stop();
+    }
+    voiceRecorderStreamRef.current = null;
+  }, []);
+
+  const stopVoiceRecording = useCallback(
+    (options?: { discard?: boolean }) => {
+      const recorder = voiceRecorderRef.current;
+      if (!recorder) {
+        clearVoiceRecordingTimer();
+        releaseVoiceRecorderStream();
+        setIsVoiceRecording(false);
+        setVoiceRecordingSeconds(0);
+        voiceRecorderDiscardRef.current = false;
+        return;
+      }
+
+      if (options?.discard) {
+        voiceRecorderDiscardRef.current = true;
+      }
+
+      if (recorder.state === "inactive") {
+        clearVoiceRecordingTimer();
+        releaseVoiceRecorderStream();
+        setIsVoiceRecording(false);
+        setVoiceRecordingSeconds(0);
+        voiceRecorderRef.current = null;
+        voiceRecorderChunksRef.current = [];
+        voiceRecorderDiscardRef.current = false;
+        return;
+      }
+
+      recorder.stop();
+    },
+    [clearVoiceRecordingTimer, releaseVoiceRecorderStream]
+  );
+
+  const startVoiceRecording = useCallback(async () => {
+    if (
+      typeof window === "undefined" ||
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      showToast(t("voiceBrowserNotSupported"));
+      return;
+    }
+
+    if (isVoiceRecording) {
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickVoiceMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      voiceRecorderRef.current = recorder;
+      voiceRecorderStreamRef.current = stream;
+      voiceRecorderChunksRef.current = [];
+      voiceRecorderDiscardRef.current = false;
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data.size > 0) {
+          voiceRecorderChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        voiceRecorderDiscardRef.current = true;
+        showToast(t("actionFailed"));
+        stopVoiceRecording({ discard: true });
+      };
+
+      recorder.onstop = async () => {
+        clearVoiceRecordingTimer();
+        setIsVoiceRecording(false);
+        setVoiceRecordingSeconds(0);
+
+        const shouldDiscard = voiceRecorderDiscardRef.current;
+        voiceRecorderDiscardRef.current = false;
+        const chunks = voiceRecorderChunksRef.current;
+        voiceRecorderChunksRef.current = [];
+        voiceRecorderRef.current = null;
+        releaseVoiceRecorderStream();
+
+        if (shouldDiscard || chunks.length === 0) {
+          return;
+        }
+
+        try {
+          const chunkMimeType =
+            chunks.find((chunk) => chunk.type.trim().length > 0)?.type ?? "";
+          const resolvedMimeType =
+            chunkMimeType ||
+            recorder.mimeType ||
+            mimeType ||
+            resolvePlayableAudioMimeTypeFallback();
+          const blob = new Blob(chunks, {
+            type: resolvedMimeType,
+          });
+          const url = await readBlobAsDataUrl(blob);
+          const createdAt = Date.now();
+          setPendingAttachments((prev) =>
+            [
+              ...prev,
+              {
+                id: `${createdAt}-voice`,
+                name: buildVoiceAttachmentName(createdAt, resolvedMimeType),
+                type: blob.type || resolvedMimeType,
+                size: blob.size,
+                url,
+                kind: "audio",
+              } satisfies PendingAttachment,
+            ].slice(0, 10)
+          );
+        } catch {
+          showToast(t("actionFailed"));
+        }
+      };
+
+      recorder.start();
+      setIsVoiceRecording(true);
+      setVoiceRecordingSeconds(0);
+      clearVoiceRecordingTimer();
+      voiceRecordingTimerRef.current = window.setInterval(() => {
+        setVoiceRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch {
+      showToast(t("micAccessDenied"));
+    }
+  }, [
+    clearVoiceRecordingTimer,
+    isVoiceRecording,
+    releaseVoiceRecorderStream,
+    showToast,
+    stopVoiceRecording,
+    t,
+  ]);
+
+  const toggleVoiceRecording = useCallback(() => {
+    if (isVoiceRecording) {
+      stopVoiceRecording();
+      return;
+    }
+    void startVoiceRecording();
+  }, [isVoiceRecording, startVoiceRecording, stopVoiceRecording]);
+
+  useEffect(() => {
+    return () => {
+      stopVoiceRecording({ discard: true });
+    };
+  }, [stopVoiceRecording]);
+
+  useEffect(() => {
+    if (!isVoiceRecording) {
+      return;
+    }
+    return () => {
+      stopVoiceRecording({ discard: true });
+    };
+  }, [activeChatId, isVoiceRecording, stopVoiceRecording]);
+
+  useEffect(() => {
+    if (!isVoiceRecording || activeSidebar === "home") {
+      return;
+    }
+    stopVoiceRecording({ discard: true });
+  }, [activeSidebar, isVoiceRecording, stopVoiceRecording]);
+
   const insertEmojiToDraft = (emoji: string) => {
     const input = messageInputRef.current;
     if (!input) {
@@ -2583,15 +5156,164 @@ export function WebMessenger({
     });
   };
 
+  const applyFormattingToDraft = useCallback(
+    (action: TextFormattingAction) => {
+      const input = messageInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      const selectionStart = input.selectionStart ?? draft.length;
+      const selectionEnd = input.selectionEnd ?? draft.length;
+      const selected = draft.slice(selectionStart, selectionEnd);
+
+      if (action === "quote" || action === "list") {
+        const lineStart = draft.lastIndexOf("\n", Math.max(selectionStart - 1, 0)) + 1;
+        const nextLineBreak = draft.indexOf("\n", selectionEnd);
+        const lineEnd = nextLineBreak === -1 ? draft.length : nextLineBreak;
+        const targetBlock = draft.slice(lineStart, lineEnd);
+        const prefix = action === "quote" ? "> " : "- ";
+        const lines = targetBlock.split("\n");
+        const hasPrefixOnEveryLine = lines.every(
+          (line) => line.length === 0 || line.startsWith(prefix)
+        );
+        const transformed = lines
+          .map((line) => {
+            if (!line) {
+              return line;
+            }
+            return hasPrefixOnEveryLine
+              ? line.startsWith(prefix)
+                ? line.slice(prefix.length)
+                : line
+              : `${prefix}${line}`;
+          })
+          .join("\n");
+
+        const nextValue = `${draft.slice(0, lineStart)}${transformed}${draft.slice(lineEnd)}`;
+        setDraft(nextValue);
+        requestAnimationFrame(() => {
+          input.focus();
+          input.setSelectionRange(lineStart, lineStart + transformed.length);
+        });
+        return;
+      }
+
+      const wrappers: Record<
+        Exclude<TextFormattingAction, "quote" | "list">,
+        { before: string; after: string; placeholder: string }
+      > = {
+        bold: { before: "**", after: "**", placeholder: "text" },
+        italic: { before: "*", after: "*", placeholder: "text" },
+        strike: { before: "~~", after: "~~", placeholder: "text" },
+        code: { before: "`", after: "`", placeholder: "code" },
+      };
+
+      const wrapper = wrappers[action];
+      const content = selected.length > 0 ? selected : wrapper.placeholder;
+      const nextValue = `${draft.slice(0, selectionStart)}${wrapper.before}${content}${wrapper.after}${draft.slice(selectionEnd)}`;
+      const selectionAnchor = selectionStart + wrapper.before.length;
+      const selectionFocus = selectionAnchor + content.length;
+
+      setDraft(nextValue);
+      requestAnimationFrame(() => {
+        input.focus();
+        input.setSelectionRange(selectionAnchor, selectionFocus);
+      });
+    },
+    [draft]
+  );
+
+  const openFormattingMenuFromContext = useCallback(
+    (event: ReactMouseEvent<HTMLTextAreaElement>) => {
+      if (draft.trim().length === 0) {
+        return;
+      }
+
+      const container = composerRef.current;
+      if (!container) {
+        return;
+      }
+
+      event.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const x = Math.min(Math.max(event.clientX - rect.left, 12), rect.width - 12);
+      const y = Math.min(Math.max(event.clientY - rect.top, 12), rect.height - 12);
+      setFormattingMenuPosition({ x, y });
+    },
+    [draft]
+  );
+
+  const formattingControls = useMemo(
+    () =>
+      ({
+        bold: { icon: Bold, label: t("formatBold") },
+        italic: { icon: Italic, label: t("formatItalic") },
+        strike: { icon: Strikethrough, label: t("formatStrike") },
+        code: { icon: Code2, label: t("formatCode") },
+        quote: { icon: Quote, label: t("formatQuote") },
+        list: { icon: List, label: t("formatList") },
+      }) satisfies Record<
+        TextFormattingAction,
+        { icon: React.ComponentType<{ className?: string }>; label: string }
+      >,
+    [t]
+  );
+
   const sendMessage = async () => {
     const text = draft.trim();
     const attachments = pendingAttachments;
-    if ((!text && attachments.length === 0) || !activeChat) {
+    const replyToId = replyToMessageId;
+    const editingId = editingMessageId;
+    const editingTarget = editingId
+      ? activeMessages.find((message) => message.id === editingId) ?? null
+      : null;
+
+    if (!activeChat) {
+      return;
+    }
+
+    if (isVoiceRecording) {
+      return;
+    }
+
+    if (editingTarget) {
+      const hasContentAfterEdit = text.length > 0 || editingTarget.attachments.length > 0;
+      const hasChanges = text !== editingTarget.text.trim();
+      if (!hasContentAfterEdit || !hasChanges) {
+        return;
+      }
+
+      setDraft("");
+      setEditingMessageId(null);
+      setIsEmojiMenuOpen(false);
+
+      try {
+        await requestJson<{ ok: boolean }>("/api/messenger/edit-message", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            chatId: activeChat.id,
+            messageId: editingTarget.id,
+            text,
+          }),
+        });
+        await loadChatData({ forceFullSync: true });
+      } catch (error) {
+        setDraft(editingTarget.text);
+        setEditingMessageId(editingTarget.id);
+        showToast(getRequestErrorMessage(error));
+      }
+      return;
+    }
+
+    if (!text && attachments.length === 0) {
       return;
     }
 
     setDraft("");
     setPendingAttachments([]);
+    setReplyToMessageId(null);
     setIsEmojiMenuOpen(false);
 
     try {
@@ -2611,13 +5333,16 @@ export function WebMessenger({
                 url: attachment.url,
               })
             ),
+            replyToMessageId: replyToId ?? undefined,
           }),
         }
       );
-      await loadChatData();
-    } catch {
+      await loadChatData({ forceFullSync: true });
+    } catch (error) {
       setDraft(text);
       setPendingAttachments(attachments);
+      setReplyToMessageId(replyToId);
+      showToast(getRequestErrorMessage(error));
     }
   };
 
@@ -2629,10 +5354,28 @@ export function WebMessenger({
     [chatItems, profileUserId]
   );
   const isGroupProfile = selectedGroupChat !== null;
+  const selectedGroupMyRole = useMemo<GroupRole | null>(() => {
+    if (!selectedGroupChat) {
+      return null;
+    }
+    return normalizeGroupRole(
+      selectedGroupChat.groupRoles[currentUser.id],
+      selectedGroupChat.createdById === currentUser.id ? "owner" : "member"
+    );
+  }, [selectedGroupChat, currentUser.id]);
+  const canManageSelectedGroup =
+    selectedGroupMyRole === "owner" || selectedGroupMyRole === "admin";
+  const isSelectedGroupOwner = selectedGroupMyRole === "owner";
   const isOwnProfile =
     !profileUserId ||
     profileUserId.trim() === "" ||
     (!isGroupProfile && profileUserId === currentUser.id);
+  const canEditViewedProfileImages =
+    isOwnProfile || (isGroupProfile && canManageSelectedGroup);
+  const currentKnownUser = useMemo(
+    () => knownUsers.find((candidate) => candidate.id === currentUser.id) ?? null,
+    [knownUsers, currentUser.id]
+  );
   const viewedProfile = useMemo<ProfileData>(() => {
     if (isOwnProfile) {
       return profile;
@@ -2658,22 +5401,241 @@ export function WebMessenger({
       bannerUrl: user?.bannerUrl ?? "",
     };
   }, [isOwnProfile, profile, selectedGroupChat, t, knownUsers, profileUserId]);
+  const viewedUserId =
+    !isGroupProfile && !isOwnProfile && profileUserId ? profileUserId : null;
+  const blockedUserIds = currentKnownUser?.blockedUserIds ?? currentUser.blockedUserIds ?? [];
+  const isViewedUserBlocked =
+    viewedUserId !== null && blockedUserIds.includes(viewedUserId);
+  const isProfileCallActiveWithViewedUser =
+    viewedUserId !== null &&
+    callSession !== null &&
+    callSession.peerUserId === viewedUserId;
+  const isProfileCallButtonDisabled =
+    !viewedUserId ||
+    isViewedUserBlocked ||
+    (callSession !== null && !isProfileCallActiveWithViewedUser);
+  const startAudioCallFromProfile = useCallback(async () => {
+    if (!viewedUserId) {
+      setCallNotice(t("callDirectOnly"));
+      return;
+    }
+
+    const chatId = await createOrOpenChat(viewedUserId);
+    if (!chatId) {
+      return;
+    }
+
+    await startAudioCallToTarget({
+      chatId,
+      peerUserId: viewedUserId,
+      peerName: viewedProfile.name.trim() || t("unknownUser"),
+    });
+  }, [
+    createOrOpenChat,
+    setCallNotice,
+    startAudioCallToTarget,
+    t,
+    viewedProfile.name,
+    viewedUserId,
+  ]);
+  const shareableContactText = useMemo(() => {
+    if (isGroupProfile) {
+      return "";
+    }
+
+    const name = viewedProfile.name.trim();
+    const username = viewedProfile.username.trim().replace(/^@+/, "");
+    const contactSummary = username
+      ? `${name || username} (@${username})`
+      : name;
+
+    return contactSummary;
+  }, [isGroupProfile, viewedProfile.name, viewedProfile.username]);
+  const shareContactTargetChats = useMemo(() => {
+    const normalized = normalizeSearchQuery(shareContactQuery);
+    if (normalized.raw.length === 0) {
+      return chatItems;
+    }
+
+    return chatItems.filter(
+      (chat) =>
+        chat.name.toLowerCase().includes(normalized.raw) ||
+        chat.username.toLowerCase().includes(normalized.username)
+    );
+  }, [chatItems, shareContactQuery]);
+  const openShareContactDialog = useCallback(() => {
+    if (!shareableContactText) {
+      showToast(t("actionFailed"));
+      return;
+    }
+    setShareContactQuery("");
+    setIsShareContactDialogOpen(true);
+  }, [shareableContactText, showToast, t]);
+  const toggleViewedUserBlock = useCallback(async () => {
+    if (!viewedUserId) {
+      return;
+    }
+
+    const nextBlocked = !isViewedUserBlocked;
+    try {
+      await requestJson<BlockUserResponse>("/api/auth/block", {
+        method: "PATCH",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          targetUserId: viewedUserId,
+          blocked: nextBlocked,
+        }),
+      });
+      await loadChatData({ forceFullSync: true });
+      showToast(nextBlocked ? t("userBlockedToast") : t("userUnblockedToast"));
+    } catch (error) {
+      showToast(getRequestErrorMessage(error));
+    }
+  }, [
+    viewedUserId,
+    isViewedUserBlocked,
+    currentUser.id,
+    loadChatData,
+    showToast,
+    t,
+    getRequestErrorMessage,
+  ]);
+  const sendSharedContactToChat = useCallback(
+    async (chatId: string) => {
+      if (!chatId || !shareableContactText || isSharingContact) {
+        return;
+      }
+
+      setIsSharingContact(true);
+      try {
+        await requestJson<{ messageId: string; createdAt: number }>(
+          "/api/messenger/send",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              userId: currentUser.id,
+              chatId,
+              text: shareableContactText,
+            }),
+          }
+        );
+        await loadChatData({ forceFullSync: true });
+        setIsShareContactDialogOpen(false);
+        setShareContactQuery("");
+        setActiveSidebar("home");
+        setActiveChatId(chatId);
+        setMobileView("chat");
+        showToast(t("contactSharedToast"));
+      } catch {
+        showToast(t("actionFailed"));
+      } finally {
+        setIsSharingContact(false);
+      }
+    },
+    [
+      currentUser.id,
+      isSharingContact,
+      loadChatData,
+      shareableContactText,
+      showToast,
+      t,
+    ]
+  );
   const groupParticipants = useMemo(() => {
     if (!selectedGroupChat) {
       return [];
     }
 
-    return selectedGroupChat.memberIds.map((memberId) => {
-      const user = knownUsers.find((candidate) => candidate.id === memberId);
-      return {
-        id: memberId,
-        name: user?.name ?? t("unknownUser"),
-        username: user?.username ?? "unknown",
-        avatarUrl: user?.avatarUrl ?? "",
-        isCreator: selectedGroupChat.createdById === memberId,
-      };
-    });
-  }, [selectedGroupChat, knownUsers, t]);
+    const roleOrder: Record<GroupRole, number> = {
+      owner: 0,
+      admin: 1,
+      member: 2,
+    };
+
+    return selectedGroupChat.memberIds
+      .map((memberId) => {
+        const user = knownUsers.find((candidate) => candidate.id === memberId);
+        const role = normalizeGroupRole(
+          selectedGroupChat.groupRoles[memberId],
+          selectedGroupChat.createdById === memberId ? "owner" : "member"
+        );
+        const isCurrentUser = memberId === currentUser.id;
+        const canRemove =
+          !isCurrentUser &&
+          (selectedGroupMyRole === "owner"
+            ? role !== "owner"
+            : selectedGroupMyRole === "admin"
+              ? role === "member"
+              : false);
+        const canPromote = isSelectedGroupOwner && !isCurrentUser && role === "member";
+        const canDemote = isSelectedGroupOwner && !isCurrentUser && role === "admin";
+        const canTransferOwnership =
+          isSelectedGroupOwner && !isCurrentUser && role !== "owner";
+        return {
+          id: memberId,
+          name: user?.name ?? t("unknownUser"),
+          username: user?.username ?? "unknown",
+          avatarUrl: user?.avatarUrl ?? "",
+          role,
+          isCurrentUser,
+          canRemove,
+          canPromote,
+          canDemote,
+          canTransferOwnership,
+        };
+      })
+      .sort((a, b) => {
+        if (roleOrder[a.role] !== roleOrder[b.role]) {
+          return roleOrder[a.role] - roleOrder[b.role];
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }, [
+    selectedGroupChat,
+    knownUsers,
+    t,
+    currentUser.id,
+    isSelectedGroupOwner,
+    selectedGroupMyRole,
+  ]);
+  const groupAddCandidates = useMemo(() => {
+    if (!selectedGroupChat || !canManageSelectedGroup) {
+      return [];
+    }
+    const normalized = normalizeSearchQuery(groupMemberSearchDraft);
+    return knownUsers
+      .filter((user) => user.id !== currentUser.id)
+      .filter((user) => !selectedGroupChat.memberIds.includes(user.id))
+      .filter((user) => {
+        if (!normalized.raw) {
+          return true;
+        }
+        return (
+          user.name.toLowerCase().includes(normalized.raw) ||
+          user.username.toLowerCase().includes(normalized.username) ||
+          user.email.toLowerCase().includes(normalized.raw)
+        );
+      })
+      .slice(0, 6);
+  }, [
+    selectedGroupChat,
+    canManageSelectedGroup,
+    groupMemberSearchDraft,
+    knownUsers,
+    currentUser.id,
+  ]);
+
+  useEffect(() => {
+    if (!selectedGroupChat) {
+      setGroupRenameDraft("");
+      setGroupMemberSearchDraft("");
+      setIsGroupSettingsOpen(false);
+      return;
+    }
+    setGroupRenameDraft(selectedGroupChat.name);
+    setGroupMemberSearchDraft("");
+    setIsGroupSettingsOpen(false);
+  }, [selectedGroupChat?.id, selectedGroupChat?.name]);
 
   const viewedChatId = useMemo(() => {
     if (isOwnProfile || !profileUserId) {
@@ -2700,23 +5662,64 @@ export function WebMessenger({
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [messages, viewedChatId]);
 
-  const profileMediaItems = useMemo(() => {
+  const profileMediaItems = useMemo<ProfileMediaItem[]>(() => {
     return profileHistoryMessages.flatMap((message) => {
-      const textMediaUrls = extractMediaUrls(message.text);
-      const attachmentMediaUrls = message.attachments
-        .filter((attachment) => {
-          const kind = getAttachmentKind(attachment.type);
-          return kind === "image" || kind === "video";
-        })
-        .map((attachment) => attachment.url);
-      const mediaUrls = [...new Set([...textMediaUrls, ...attachmentMediaUrls])];
-      return mediaUrls.map((url, index) => ({
-        id: `${message.id}-${index}`,
+      const textMediaItems = extractMediaUrls(message.text).map((url, index) => ({
+        id: `${message.id}-text-media-${index}`,
         url,
         name: getMediaNameFromUrl(url),
         kind: getMediaKindFromUrl(url),
         time: formatChatTime(message.createdAt, language),
       }));
+      const attachmentMediaItems = message.attachments
+        .map((attachment, index) => {
+          const kind = getAttachmentKind(attachment.type);
+          if (kind !== "image" && kind !== "video") {
+            return null;
+          }
+          return {
+            id: `${message.id}-attachment-media-${attachment.id || index}`,
+            url: attachment.url,
+            name: attachment.name || getMediaNameFromUrl(attachment.url),
+            kind,
+            time: formatChatTime(message.createdAt, language),
+          };
+        })
+        .filter((item): item is ProfileMediaItem => item !== null);
+      const allMediaItems = [...textMediaItems, ...attachmentMediaItems];
+      const seenUrls = new Set<string>();
+      return allMediaItems.filter((item) => {
+        if (seenUrls.has(item.url)) {
+          return false;
+        }
+        seenUrls.add(item.url);
+        return true;
+      });
+    });
+  }, [profileHistoryMessages, language]);
+  const profileAudioItems = useMemo<ProfileAudioItem[]>(() => {
+    return profileHistoryMessages.flatMap((message) => {
+      const audioItems = message.attachments
+        .map((attachment, index) => {
+          const kind = getAttachmentKind(attachment.type);
+          if (kind !== "audio") {
+            return null;
+          }
+          return {
+            id: `${message.id}-attachment-audio-${attachment.id || index}`,
+            url: attachment.url,
+            time: formatChatTime(message.createdAt, language),
+          };
+        })
+        .filter((item): item is ProfileAudioItem => item !== null);
+      const seenUrls = new Set<string>();
+      return audioItems.filter((item) => {
+        if (seenUrls.has(item.url)) {
+          return false;
+        }
+        seenUrls.add(item.url);
+        return true;
+      });
     });
   }, [profileHistoryMessages, language]);
   const profileMediaImages = useMemo(
@@ -2805,7 +5808,10 @@ export function WebMessenger({
         (url) => !IMAGE_EXTENSION_PATTERN.test(url)
       );
       const fileAttachmentUrls = message.attachments
-        .filter((attachment) => getAttachmentKind(attachment.type) === "file")
+        .filter((attachment) => {
+          const kind = getAttachmentKind(attachment.type);
+          return kind === "file";
+        })
         .map((attachment) => attachment.url);
       const urls = [...new Set([...textUrls, ...fileAttachmentUrls])];
       return urls.map((url, index) => ({
@@ -2831,6 +5837,13 @@ export function WebMessenger({
         count: profileMediaItems.length,
       });
     }
+    if (profileAudioItems.length > 0) {
+      tabs.push({
+        id: "audio",
+        label: t("audio"),
+        count: profileAudioItems.length,
+      });
+    }
     if (profileLinkItems.length > 0) {
       tabs.push({
         id: "links",
@@ -2842,6 +5855,7 @@ export function WebMessenger({
   }, [
     isOwnProfile,
     profileMediaItems.length,
+    profileAudioItems.length,
     profileLinkItems.length,
     t,
   ]);
@@ -2856,12 +5870,72 @@ export function WebMessenger({
     }
   }, [isOwnProfile, availableProfileTabs, profileTab]);
 
-  const openOwnProfile = () => {
+  const openOwnProfile = useCallback(() => {
     setProfileUserId(null);
     setProfileTab("media");
     setIsEditingProfile(false);
+    setIsActiveChatProfileSidebarOpen(false);
     setActiveSidebar("profile");
-  };
+  }, []);
+
+  useEffect(() => {
+    if (visibleSidebarItems.length === 0) {
+      return;
+    }
+    if (visibleSidebarItems.some((item) => item.id === activeSidebar)) {
+      return;
+    }
+    const fallbackId = visibleSidebarItems[0]?.id ?? "home";
+    if (fallbackId === "profile") {
+      openOwnProfile();
+      return;
+    }
+    setIsActiveChatProfileSidebarOpen(false);
+    setActiveSidebar(fallbackId);
+  }, [activeSidebar, openOwnProfile, visibleSidebarItems]);
+
+  const prepareActiveChatProfileTarget = useCallback(() => {
+    if (!activeChat) {
+      return false;
+    }
+    if (activeChat.isGroup) {
+      setProfileUserId(activeChat.id);
+    } else if (activeChat.memberId) {
+      setProfileUserId(activeChat.memberId);
+    } else {
+      return false;
+    }
+    setProfileTab("media");
+    setIsEditingProfile(false);
+    return true;
+  }, [activeChat]);
+
+  const openActiveChatProfile = useCallback(() => {
+    if (!prepareActiveChatProfileTarget()) {
+      return;
+    }
+    setIsActiveChatProfileSidebarOpen(false);
+    setActiveSidebar("profile");
+  }, [prepareActiveChatProfileTarget]);
+
+  const toggleActiveChatProfileSidebar = useCallback(() => {
+    if (isActiveChatProfileSidebarOpen) {
+      setIsActiveChatProfileSidebarOpen(false);
+      return;
+    }
+    if (!prepareActiveChatProfileTarget()) {
+      return;
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 1023px)").matches
+    ) {
+      setActiveSidebar("profile");
+      return;
+    }
+    setActiveSidebar("home");
+    setIsActiveChatProfileSidebarOpen(true);
+  }, [isActiveChatProfileSidebarOpen, prepareActiveChatProfileTarget]);
 
   useEffect(() => {
     const handleHotkey = (event: KeyboardEvent) => {
@@ -2897,20 +5971,255 @@ export function WebMessenger({
     return () => window.removeEventListener("keydown", handleHotkey);
   }, [openOwnProfile]);
 
-  const openActiveChatProfile = () => {
+  useEffect(() => {
+    if (activeSidebar !== "home") {
+      setIsActiveChatProfileSidebarOpen(false);
+    }
+  }, [activeSidebar]);
+
+  useEffect(() => {
+    if (!isActiveChatProfileSidebarOpen) {
+      return;
+    }
     if (!activeChat) {
+      setIsActiveChatProfileSidebarOpen(false);
       return;
     }
     if (activeChat.isGroup) {
-      setProfileUserId(activeChat.id);
+      setProfileUserId((prev) => (prev === activeChat.id ? prev : activeChat.id));
     } else if (activeChat.memberId) {
-      setProfileUserId(activeChat.memberId);
+      setProfileUserId((prev) =>
+        prev === activeChat.memberId ? prev : activeChat.memberId
+      );
     } else {
+      setIsActiveChatProfileSidebarOpen(false);
       return;
     }
-    setProfileTab("media");
-    setIsEditingProfile(false);
-    setActiveSidebar("profile");
+  }, [activeChat, isActiveChatProfileSidebarOpen]);
+
+  const renameSelectedGroup = async () => {
+    const selectedGroup = selectedGroupChat;
+    const groupChatId = selectedGroup?.id ?? "";
+    const nextTitle = groupRenameDraft.trim().replace(/\s+/g, " ");
+    if (!groupChatId || !selectedGroup || !canManageSelectedGroup) {
+      return;
+    }
+    if (nextTitle.length < GROUP_TITLE_MIN_LENGTH) {
+      showToast(t("groupNameMinError"));
+      return;
+    }
+    if (nextTitle.length > GROUP_TITLE_MAX_LENGTH) {
+      showToast(t("groupNameMaxError"));
+      return;
+    }
+    if (nextTitle === selectedGroup.name) {
+      return;
+    }
+
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === groupChatId
+          ? {
+              ...thread,
+              title: nextTitle,
+              updatedAt: Date.now(),
+            }
+          : thread
+      )
+    );
+
+    try {
+      await requestJson<{ ok: boolean }>("/api/messenger/rename-group", {
+        method: "PATCH",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          chatId: groupChatId,
+          title: nextTitle,
+        }),
+      });
+      showToast(t("groupRenamedToast"));
+    } catch (error) {
+      await loadChatData({ forceFullSync: true });
+      showToast(getRequestErrorMessage(error));
+    }
+  };
+
+  const addMemberToSelectedGroup = async (memberId: string) => {
+    const groupChatId = selectedGroupChat?.id ?? "";
+    if (!groupChatId || !canManageSelectedGroup) {
+      return;
+    }
+
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === groupChatId && !thread.memberIds.includes(memberId)
+          ? {
+              ...thread,
+              memberIds: [...thread.memberIds, memberId],
+              readBy: {
+                ...thread.readBy,
+                [memberId]: 0,
+              },
+              groupRoles: {
+                ...thread.groupRoles,
+                [memberId]: "member",
+              },
+              updatedAt: Date.now(),
+            }
+          : thread
+      )
+    );
+
+    try {
+      await requestJson<{ ok: boolean }>("/api/messenger/add-member", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          chatId: groupChatId,
+          memberId,
+        }),
+      });
+      showToast(t("memberAddedToast"));
+      await loadChatData({ forceFullSync: true });
+    } catch (error) {
+      await loadChatData({ forceFullSync: true });
+      showToast(getRequestErrorMessage(error));
+    }
+  };
+
+  const removeMemberFromSelectedGroup = async (memberId: string) => {
+    const groupChatId = selectedGroupChat?.id ?? "";
+    if (!groupChatId || !canManageSelectedGroup) {
+      return;
+    }
+
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === groupChatId
+          ? {
+              ...thread,
+              memberIds: thread.memberIds.filter((candidateId) => candidateId !== memberId),
+              readBy: Object.entries(thread.readBy).reduce<Record<string, number>>(
+                (acc, [candidateId, readAt]) => {
+                  if (candidateId !== memberId) {
+                    acc[candidateId] = readAt;
+                  }
+                  return acc;
+                },
+                {}
+              ),
+              groupRoles: Object.entries(thread.groupRoles).reduce<Record<string, GroupRole>>(
+                (acc, [candidateId, role]) => {
+                  if (candidateId !== memberId) {
+                    acc[candidateId] = role;
+                  }
+                  return acc;
+                },
+                {}
+              ),
+              updatedAt: Date.now(),
+            }
+          : thread
+      )
+    );
+
+    try {
+      await requestJson<{ ok: boolean }>("/api/messenger/remove-member", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          chatId: groupChatId,
+          memberId,
+        }),
+      });
+      showToast(t("memberRemovedToast"));
+      await loadChatData({ forceFullSync: true });
+    } catch (error) {
+      await loadChatData({ forceFullSync: true });
+      showToast(getRequestErrorMessage(error));
+    }
+  };
+
+  const updateSelectedGroupMemberRole = async (
+    memberId: string,
+    role: "admin" | "member"
+  ) => {
+    const groupChatId = selectedGroupChat?.id ?? "";
+    if (!groupChatId || !isSelectedGroupOwner) {
+      return;
+    }
+
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === groupChatId
+          ? {
+              ...thread,
+              groupRoles: {
+                ...thread.groupRoles,
+                [memberId]: role,
+              },
+              updatedAt: Date.now(),
+            }
+          : thread
+      )
+    );
+
+    try {
+      await requestJson<{ ok: boolean }>("/api/messenger/set-member-role", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          chatId: groupChatId,
+          memberId,
+          role,
+        }),
+      });
+      showToast(t("roleUpdatedToast"));
+      await loadChatData({ forceFullSync: true });
+    } catch (error) {
+      await loadChatData({ forceFullSync: true });
+      showToast(getRequestErrorMessage(error));
+    }
+  };
+
+  const transferSelectedGroupOwnership = async (nextOwnerId: string) => {
+    const groupChatId = selectedGroupChat?.id ?? "";
+    if (!groupChatId || !isSelectedGroupOwner) {
+      return;
+    }
+
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === groupChatId
+          ? {
+              ...thread,
+              createdById: nextOwnerId,
+              groupRoles: {
+                ...thread.groupRoles,
+                [currentUser.id]: "admin",
+                [nextOwnerId]: "owner",
+              },
+              updatedAt: Date.now(),
+            }
+          : thread
+      )
+    );
+
+    try {
+      await requestJson<{ ok: boolean }>("/api/messenger/transfer-owner", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          chatId: groupChatId,
+          nextOwnerId,
+        }),
+      });
+      showToast(t("ownershipTransferredToast"));
+      await loadChatData({ forceFullSync: true });
+    } catch (error) {
+      await loadChatData({ forceFullSync: true });
+      showToast(getRequestErrorMessage(error));
+    }
   };
 
   const profileInitials = useMemo(() => {
@@ -2999,8 +6308,9 @@ export function WebMessenger({
           bannerUrl: payload.bannerUrl,
         }),
       });
-    } catch {
-      await loadChatData();
+    } catch (error) {
+      await loadChatData({ forceFullSync: true });
+      showToast(getRequestErrorMessage(error));
     }
   };
 
@@ -3021,6 +6331,9 @@ export function WebMessenger({
       }
 
       if (isGroupProfile && selectedGroupChat) {
+        if (!canManageSelectedGroup) {
+          return;
+        }
         const payload = {
           avatarUrl: target === "avatarUrl" ? result : selectedGroupChat.avatarUrl,
           bannerUrl: target === "bannerUrl" ? result : selectedGroupChat.bannerUrl,
@@ -3054,7 +6367,7 @@ export function WebMessenger({
   };
 
   const openImagePickerDialog = (target: "avatar" | "banner") => {
-    if (!isOwnProfile && !isGroupProfile) {
+    if (!canEditViewedProfileImages) {
       return;
     }
     setImagePickerTarget(target);
@@ -3080,6 +6393,10 @@ export function WebMessenger({
     }
 
     if (isGroupProfile && selectedGroupChat) {
+      if (!canManageSelectedGroup) {
+        setImagePickerTarget(null);
+        return;
+      }
       void updateGroupProfileImages({
         avatarUrl: target === "avatar" ? "" : selectedGroupChat.avatarUrl,
         bannerUrl: target === "banner" ? "" : selectedGroupChat.bannerUrl,
@@ -3128,6 +6445,127 @@ export function WebMessenger({
         : imagePickerTarget === "banner"
           ? Boolean(profileDraft.bannerUrl)
           : false;
+  const isCompactActiveChatProfileSidebar =
+    activeSidebar === "home" && isActiveChatProfileSidebarOpen;
+  const shouldShowProfileSidebar =
+    activeSidebar === "profile" || isCompactActiveChatProfileSidebar;
+  const shouldShowMobileNavigation =
+    activeSidebar !== "home" || mobileView === "list";
+  const renderableSidebarItems =
+    visibleSidebarItems.length > 0 ? visibleSidebarItems : orderedSidebarItems;
+  const chatActionMenuContentClassName = `${CHAT_ACTION_MENU_CONTENT_CLASS_NAME} ${
+    uiDensity === "compact" ? "!w-48" : "!w-56"
+  }`;
+  const chatActionMenuItemClassName = `${CHAT_ACTION_MENU_ITEM_CLASS_NAME} ${
+    uiDensity === "compact" ? "!px-2.5 !py-1.5 !text-xs" : "!px-3 !py-2 !text-sm"
+  }`;
+  const chatActionMenuDestructiveItemClassName = `${CHAT_ACTION_MENU_DESTRUCTIVE_ITEM_CLASS_NAME} ${
+    uiDensity === "compact" ? "!px-2.5 !py-1.5 !text-xs" : "!px-3 !py-2 !text-sm"
+  }`;
+  const chatActionMenuSeparatorClassName = CHAT_ACTION_MENU_SEPARATOR_CLASS_NAME;
+  const profileActionMenuContentClassName = `${PROFILE_ACTION_MENU_CONTENT_CLASS_NAME} ${
+    uiDensity === "compact" ? "!w-44" : "!w-52"
+  }`;
+  const profileActionMenuItemClassName = `${PROFILE_ACTION_MENU_ITEM_CLASS_NAME} ${
+    uiDensity === "compact" ? "!px-2.5 !py-1.5 !text-xs" : "!px-3 !py-2 !text-sm"
+  }`;
+  const profileActionMenuSeparatorClassName = PROFILE_ACTION_MENU_SEPARATOR_CLASS_NAME;
+  const uiControlTextClass =
+    uiFontSize === "small" ? "text-xs" : uiFontSize === "large" ? "text-sm" : "text-xs";
+  const uiRadiusCardClass =
+    uiRadius === "sharp" ? "rounded-md" : uiRadius === "rounded" ? "rounded-2xl" : "rounded-lg";
+  const uiRadiusBubbleClass =
+    uiRadius === "sharp" ? "rounded-md" : uiRadius === "rounded" ? "rounded-3xl" : "rounded-2xl";
+  const unifiedSelectTriggerClassName =
+    "rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-100 transition-colors hover:border-violet-500 hover:bg-zinc-700 focus-visible:border-violet-500 focus-visible:ring-1 focus-visible:ring-violet-500 data-[state=open]:border-violet-500 data-[state=open]:bg-zinc-700";
+  const unifiedSelectContentClassName =
+    "overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 p-1 text-zinc-100 shadow-xl";
+  const unifiedSelectItemClassName =
+    "rounded-md px-7 py-1.5 text-xs text-zinc-100 outline-none data-[highlighted]:bg-violet-500 data-[highlighted]:text-zinc-50 data-[state=checked]:bg-violet-500 data-[state=checked]:text-zinc-50";
+  const getLanguageLabel = (value: string) => {
+    if (value === "ru") {
+      return t("russian");
+    }
+    if (value === "en") {
+      return t("english");
+    }
+    return value;
+  };
+  const getDensityLabel = (value: string) => {
+    if (value === "comfortable") {
+      return t("densityComfortable");
+    }
+    if (value === "compact") {
+      return t("densityCompact");
+    }
+    return value;
+  };
+  const getFontSizeLabel = (value: string) => {
+    if (value === "small") {
+      return t("fontSizeSmall");
+    }
+    if (value === "default") {
+      return t("fontSizeDefault");
+    }
+    if (value === "large") {
+      return t("fontSizeLarge");
+    }
+    return value;
+  };
+  const getRadiusLabel = (value: string) => {
+    if (value === "sharp") {
+      return t("radiusSharp");
+    }
+    if (value === "normal") {
+      return t("radiusNormal");
+    }
+    if (value === "rounded") {
+      return t("radiusRounded");
+    }
+    return value;
+  };
+  const getFontFamilyLabel = (value: string) => {
+    if (value === "default") {
+      return t("fontFamilyDefault");
+    }
+    if (value === "modern") {
+      return t("fontFamilyModern");
+    }
+    if (value === "readable") {
+      return t("fontFamilyReadable");
+    }
+    if (value === "comfortaa") {
+      return t("fontFamilyComfortaa");
+    }
+    return value;
+  };
+  const getChatWallpaperLabel = (value: string) => {
+    if (value === "inherit") {
+      return t("inheritGlobal");
+    }
+    if (value === "none") {
+      return t("wallpaperNone");
+    }
+    if (value === "aurora") {
+      return t("wallpaperAurora");
+    }
+    if (value === "sunset") {
+      return t("wallpaperSunset");
+    }
+    if (value === "ocean") {
+      return t("wallpaperOcean");
+    }
+    if (value === "graphite") {
+      return t("wallpaperGraphite");
+    }
+    return value;
+  };
+  const getChatFontSizeSettingLabel = (value: string) => {
+    if (value === "inherit") {
+      return t("inheritGlobal");
+    }
+    return getFontSizeLabel(value);
+  };
 
   return (
     <>
@@ -3155,48 +6593,52 @@ export function WebMessenger({
         }}
         className="hidden"
       />
-      <main className="h-screen w-screen overflow-hidden bg-[radial-gradient(circle_at_10%_8%,rgba(132,204,22,0.14),transparent_32%),radial-gradient(circle_at_88%_0%,rgba(132,204,22,0.09),transparent_28%),linear-gradient(160deg,#151515_0%,#1f1f1f_55%,#2a2a2a_100%)] text-zinc-100">
-      <section className="flex h-full w-full">
-        <div className="flex h-full w-full overflow-hidden border border-zinc-700 bg-zinc-900/85">
-          <aside className="flex w-[82px] flex-col border-r border-zinc-700 bg-zinc-800 p-3 text-zinc-100">
-            <nav className="mt-1 flex flex-1 flex-col gap-2">
-              {sidebarItems.map((item) => {
-                const Icon = item.icon;
-                const active = item.id === activeSidebar;
+      <main
+        className="flex h-[100dvh] min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_10%_8%,rgba(139,92,246,0.1),transparent_34%),radial-gradient(circle_at_88%_0%,rgba(139,92,246,0.06),transparent_30%),linear-gradient(160deg,#0b0b0d_0%,#101014_55%,#141419_100%)] pt-[env(safe-area-inset-top)] text-zinc-100"
+      >
+      <section className="flex min-h-0 w-full flex-1">
+        <div className="relative flex h-full min-h-0 w-full overflow-hidden border border-zinc-800/90 bg-zinc-950/80 shadow-[0_28px_70px_-42px_rgba(0,0,0,0.95)] ring-1 ring-black/40 backdrop-blur-2xl">
+          {isMainSidebarCollapsed ? null : (
+            <aside className="hidden w-[82px] flex-col border-r border-zinc-800/90 bg-zinc-950/75 p-3 text-zinc-100 backdrop-blur-xl md:flex">
+              <nav className="flex flex-1 flex-col gap-2">
+                {renderableSidebarItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = item.id === activeSidebar;
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      if (item.id === "profile") {
-                        openOwnProfile();
-                        return;
-                      }
-                      setActiveSidebar(item.id);
-                    }}
-                    className={`relative flex items-center justify-center rounded-lg border px-2 py-3 text-sm font-medium ${
-                      active
-                        ? "border-lime-500 bg-lime-500 text-zinc-900"
-                        : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100"
-                    }`}
-                    aria-label={t(item.id)}
-                    title={t(item.id)}
-                  >
-                    <Icon className="size-4 shrink-0" />
-                  </button>
-                );
-              })}
-            </nav>
-          </aside>
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        if (item.id === "profile") {
+                          openOwnProfile();
+                          return;
+                        }
+                        setActiveSidebar(item.id);
+                      }}
+                      className={`relative flex items-center justify-center rounded-lg border px-2 py-3 text-sm font-medium ${
+                        active
+                          ? "border-violet-500 bg-violet-500 text-zinc-100"
+                          : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100"
+                      }`}
+                      aria-label={t(item.id)}
+                      title={t(item.id)}
+                    >
+                      <Icon className="size-4 shrink-0" />
+                    </button>
+                  );
+                })}
+              </nav>
+            </aside>
+          )}
 
-          <div className="flex min-w-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1">
             {activeSidebar === "home" ? (
               <>
                 <aside
               className={`${
                 mobileView === "chat" ? "hidden" : "flex"
-              } w-full flex-col border-r border-zinc-700 bg-zinc-800/95 md:flex md:w-[380px]`}
+              } min-h-0 w-full flex-col border-r border-zinc-800/90 bg-zinc-950/75 backdrop-blur-xl md:flex md:w-[380px]`}
             >
               <div className="border-b border-zinc-700 px-5 py-5">
                 <div className="mt-2 flex items-center justify-between gap-2">
@@ -3208,7 +6650,7 @@ export function WebMessenger({
                     onClick={() => setIsGroupMenuOpen(true)}
                     aria-label={t("newGroup")}
                     title={t("newGroup")}
-                    className="h-9 w-9 rounded-lg bg-lime-500 p-0 text-zinc-900 hover:bg-lime-400"
+                    className="h-9 w-9 rounded-lg bg-violet-500 p-0 text-zinc-100 hover:bg-violet-400 hover:text-zinc-100"
                   >
                     <Plus className="size-4" />
                   </Button>
@@ -3224,18 +6666,19 @@ export function WebMessenger({
                 </div>
               </div>
               <AlertDialog open={isGroupMenuOpen} onOpenChange={setIsGroupMenuOpen}>
-                <AlertDialogContent className="border border-zinc-700 bg-zinc-900 text-zinc-100 sm:max-w-lg">
+                <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-lg">
                   <AlertDialogHeader>
                     <AlertDialogTitle className="text-zinc-100">
                       {t("newGroup")}
                     </AlertDialogTitle>
                     <AlertDialogDescription className="text-zinc-400">
-                      {t("groupMembers")}: {groupMemberIdsDraft.length}
+                      {`${t("groupMembers")}: ${groupMemberIdsDraft.length} - ${t("groupMembersLimitHint")}`}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <div className="space-y-3">
                     <Input
                       value={groupNameDraft}
+                      maxLength={GROUP_TITLE_MAX_LENGTH}
                       onChange={(event) => setGroupNameDraft(event.target.value)}
                       placeholder={t("groupName")}
                       className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400"
@@ -3250,12 +6693,12 @@ export function WebMessenger({
                             onClick={() => toggleGroupMember(user.id)}
                             className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm ${
                               selected
-                                ? "border-lime-500/50 bg-zinc-700 text-zinc-100"
+                                ? "border-violet-500/50 bg-zinc-700 text-zinc-100"
                                 : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                             }`}
                           >
                             <span className="truncate">{user.name}</span>
-                            {selected ? <Check className="size-4 text-lime-400" /> : null}
+                            {selected ? <Check className="size-4 text-violet-400" /> : null}
                           </button>
                         );
                       })}
@@ -3270,205 +6713,150 @@ export function WebMessenger({
                       onClick={() => void createGroupChat()}
                       disabled={
                         isCreatingGroup ||
-                        groupNameDraft.trim().length === 0 ||
-                        groupMemberIdsDraft.length < 2
+                        groupNameDraft.trim().replace(/\s+/g, " ").length <
+                          GROUP_TITLE_MIN_LENGTH ||
+                        groupNameDraft.trim().replace(/\s+/g, " ").length >
+                          GROUP_TITLE_MAX_LENGTH ||
+                        groupMemberIdsDraft.length < 2 ||
+                        groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS
                       }
-                      className="h-10 rounded-lg bg-lime-500 text-zinc-900 hover:bg-lime-400"
+                      className="h-10 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
                     >
                       {t("createGroup")}
                     </Button>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              <div className="flex-1 space-y-2 overflow-y-auto p-3">
-                {visiblePinnedChats.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="px-1 pb-1 text-xs uppercase tracking-[0.12em] text-lime-400/90">
-                      {t("pinnedChats")}
-                    </p>
-                    {visiblePinnedChats.map((chat) => {
-                      const selected = chat.id === activeChat?.id;
-                      const pinLimitReached =
-                        !chat.isPinned && pinnedChatsCount >= MAX_PINNED_CHATS;
-                      return (
-                        <ContextMenu key={chat.id}>
-                          <ContextMenuTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => openChat(chat.id)}
-                              className={`w-full rounded-lg border px-3 py-3 text-left ${
-                                selected
-                                  ? "border-lime-400/35 bg-zinc-700 text-zinc-100"
-                                  : "border-zinc-700 bg-zinc-800 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-700/90"
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                {chat.avatarUrl ? (
-                                  <span
-                                    className="inline-flex size-10 shrink-0 rounded-xl bg-zinc-700 bg-cover bg-center"
-                                    style={{ backgroundImage: `url(${chat.avatarUrl})` }}
-                                    aria-label={`${chat.name} avatar`}
-                                  />
-                                ) : (
-                                  <span
-                                    className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-sm font-semibold text-white ${chat.accent}`}
-                                  >
-                                    {chat.isGroup ? <Users className="size-4" /> : chat.name.slice(0, 2).toUpperCase()}
-                                  </span>
-                                )}
-                                <span className="min-w-0 flex-1">
-                                  <span className="flex items-center justify-between gap-2">
-                                    <span className="truncate font-medium">
-                                      {chat.name}
-                                    </span>
-                                    <span
-                                      className={`text-xs ${
-                                        selected ? "text-lime-300" : "text-zinc-500"
-                                      }`}
-                                    >
-                                      {chat.lastTime}
-                                    </span>
-                                  </span>
-                                  <span
-                                    className={`mt-1 block truncate text-sm ${
-                                      selected ? "text-zinc-300" : "text-zinc-400"
-                                    }`}
-                                  >
-                                    {chat.lastMessage}
-                                  </span>
-                                </span>
-                                <Pin className="size-4 shrink-0 text-lime-400" />
-                                {chat.unread > 0 ? (
-                                  <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-lime-400 px-2 py-0.5 text-xs font-semibold text-zinc-900">
-                                    {chat.unread}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </button>
-                          </ContextMenuTrigger>
-                          <ContextMenuContent className="w-52 border border-zinc-700 bg-zinc-900/95 p-1 text-zinc-100 shadow-xl backdrop-blur">
-                            <ContextMenuItem
-                              className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-lime-500/20 focus:text-lime-300"
-                              onSelect={() => void setChatPinned(chat.id, !chat.isPinned)}
-                              disabled={pinLimitReached}
-                            >
-                              {chat.isPinned ? (
-                                <PinOff className="size-4" />
-                              ) : (
-                                <Pin className="size-4" />
-                              )}
-                              {chat.isPinned ? t("unpinChat") : t("pinChat")}
-                            </ContextMenuItem>
-                            <ContextMenuSeparator className="mx-1 bg-zinc-700/80" />
-                            {chat.isGroup && !chat.isGroupCreator ? (
-                              <ContextMenuItem
-                                variant="destructive"
-                                className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-red-500/15"
-                                onSelect={() => void leaveGroup(chat.id)}
-                              >
-                                <ArrowLeft className="size-4" />
-                                {t("leaveGroup")}
-                              </ContextMenuItem>
-                            ) : (
-                              <ContextMenuItem
-                                variant="destructive"
-                                className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-red-500/15"
-                                onSelect={() => void deleteChat(chat.id)}
-                              >
-                                <Trash2 className="size-4" />
-                                {chat.isGroup ? t("deleteGroup") : t("deleteForBoth")}
-                              </ContextMenuItem>
-                            )}
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {visibleRegularChats.length > 0 ? (
-                  <div className="space-y-2">
-                    {visiblePinnedChats.length > 0 ? (
-                      <p className="px-1 pb-1 pt-1 text-xs uppercase tracking-[0.12em] text-zinc-500">
-                        {t("allChats")}
-                      </p>
-                    ) : null}
-                    {visibleRegularChats.map((chat) => {
+              <div
+                className={`flex-1 overflow-y-auto ${
+                  uiDensity === "compact" ? "space-y-1 p-2" : "space-y-2 p-3"
+                }`}
+              >
+                {filteredChats.map((chat) => {
                   const selected = chat.id === activeChat?.id;
                   const pinLimitReached =
                     !chat.isPinned && pinnedChatsCount >= MAX_PINNED_CHATS;
+                  const chatDraftPreview = (draftsByChatId[chat.id] ?? "").trim();
                   return (
                     <ContextMenu key={chat.id}>
                       <ContextMenuTrigger asChild>
                         <button
                           type="button"
                           onClick={() => openChat(chat.id)}
-                          className={`w-full rounded-lg border px-3 py-3 text-left ${
+                          className={`w-full ${uiRadiusCardClass} border px-3 text-left ${
                             selected
-                              ? "border-lime-400/35 bg-zinc-700 text-zinc-100"
+                              ? "border-violet-400/35 bg-zinc-700 text-zinc-100"
                               : "border-zinc-700 bg-zinc-800 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-700/90"
-                          }`}
+                          } ${uiDensity === "compact" ? "py-1.5" : "py-3"}`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className={`flex items-center ${uiDensity === "compact" ? "gap-2" : "gap-3"}`}>
                             {chat.avatarUrl ? (
                               <span
-                                className="inline-flex size-10 shrink-0 rounded-xl bg-zinc-700 bg-cover bg-center"
+                                className={`inline-flex shrink-0 rounded-xl bg-zinc-700 bg-cover bg-center ${
+                                  uiDensity === "compact" ? "size-8" : "size-10"
+                                }`}
                                 style={{ backgroundImage: `url(${chat.avatarUrl})` }}
                                 aria-label={`${chat.name} avatar`}
                               />
                             ) : (
                               <span
-                                className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-sm font-semibold text-white ${chat.accent}`}
+                                className={`inline-flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br font-semibold text-white ${
+                                  uiDensity === "compact" ? "size-8 text-xs" : "size-10 text-sm"
+                                } ${chat.accent}`}
                               >
                                 {chat.isGroup ? <Users className="size-4" /> : chat.name.slice(0, 2).toUpperCase()}
                               </span>
                             )}
                             <span className="min-w-0 flex-1">
                               <span className="flex items-center justify-between gap-2">
-                                <span className="truncate font-medium">
+                                <span
+                                  className={`truncate font-medium ${
+                                    uiFontSize === "small"
+                                      ? "text-xs"
+                                      : uiFontSize === "large"
+                                        ? "text-base"
+                                        : "text-sm"
+                                  }`}
+                                >
                                   {chat.name}
                                 </span>
                                 <span
                                   className={`text-xs ${
-                                    selected ? "text-lime-300" : "text-zinc-500"
+                                    selected ? "text-violet-300" : "text-zinc-500"
                                   }`}
                                 >
                                   {chat.lastTime}
                                 </span>
                               </span>
                               <span
-                                className={`mt-1 block truncate text-sm ${
+                                className={`block truncate ${
+                                  uiDensity === "compact" ? "mt-0.5" : "mt-1"
+                                } ${
+                                  uiFontSize === "small"
+                                    ? "text-[11px]"
+                                    : uiFontSize === "large"
+                                      ? "text-sm"
+                                      : "text-xs"
+                                } ${
                                   selected ? "text-zinc-300" : "text-zinc-400"
                                 }`}
                               >
-                                {chat.lastMessage}
+                                {chatDraftPreview ? (
+                                  <span className="text-amber-300">
+                                    {`${t("draftLabel")}: ${chatDraftPreview}`}
+                                  </span>
+                                ) : (
+                                  chat.lastMessage
+                                )}
                               </span>
                             </span>
+                            {chat.isPinned ? (
+                              <PinFilledIcon className="size-4 shrink-0 text-violet-400" />
+                            ) : null}
+                            {chat.isMuted ? (
+                              <BellOff className="size-4 shrink-0 text-zinc-400" />
+                            ) : null}
                             {chat.unread > 0 ? (
-                              <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-lime-400 px-2 py-0.5 text-xs font-semibold text-zinc-900">
+                              <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-violet-400 px-2 py-0.5 text-xs font-semibold text-zinc-50">
                                 {chat.unread}
                               </span>
                             ) : null}
                           </div>
                         </button>
                       </ContextMenuTrigger>
-                      <ContextMenuContent className="w-52 border border-zinc-700 bg-zinc-900/95 p-1 text-zinc-100 shadow-xl backdrop-blur">
+                      <ContextMenuContent
+                        className={chatActionMenuContentClassName}
+                      >
                         <ContextMenuItem
-                          className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-lime-500/20 focus:text-lime-300"
+                          className={chatActionMenuItemClassName}
                           onSelect={() => void setChatPinned(chat.id, !chat.isPinned)}
                           disabled={pinLimitReached}
                         >
                           {chat.isPinned ? (
-                            <PinOff className="size-4" />
+                            <PinOffIcon className="size-4" />
                           ) : (
-                            <Pin className="size-4" />
+                            <PinFilledIcon className="size-4" />
                           )}
                           {chat.isPinned ? t("unpinChat") : t("pinChat")}
                         </ContextMenuItem>
-                        <ContextMenuSeparator className="mx-1 bg-zinc-700/80" />
+                        <ContextMenuItem
+                          className={chatActionMenuItemClassName}
+                          onSelect={() => void setChatMuted(chat.id, !chat.isMuted)}
+                        >
+                          {chat.isMuted ? (
+                            <Bell className="size-4" />
+                          ) : (
+                            <BellOff className="size-4" />
+                          )}
+                          {chat.isMuted ? t("unmuteChat") : t("muteChat")}
+                        </ContextMenuItem>
+                        <ContextMenuSeparator
+                          className={chatActionMenuSeparatorClassName}
+                        />
                         {chat.isGroup && !chat.isGroupCreator ? (
                           <ContextMenuItem
                             variant="destructive"
-                            className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-red-500/15"
+                            className={chatActionMenuDestructiveItemClassName}
                             onSelect={() => void leaveGroup(chat.id)}
                           >
                             <ArrowLeft className="size-4" />
@@ -3476,9 +6864,11 @@ export function WebMessenger({
                           </ContextMenuItem>
                         ) : (
                           <ContextMenuItem
-                            variant="destructive"
-                            className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-red-500/15"
-                            onSelect={() => void deleteChat(chat.id)}
+                            className={chatActionMenuItemClassName}
+                            onSelect={() => {
+                              setChatIdToConfirmDelete(chat.id);
+                              setIsDeleteChatDialogOpen(true);
+                            }}
                           >
                             <Trash2 className="size-4" />
                             {chat.isGroup ? t("deleteGroup") : t("deleteForBoth")}
@@ -3487,9 +6877,7 @@ export function WebMessenger({
                       </ContextMenuContent>
                     </ContextMenu>
                   );
-                    })}
-                  </div>
-                ) : null}
+                })}
                 {query.trim().length > 0 && availableUsers.length > 0 ? (
                   <div className="pt-1">
                     <p className="px-1 pb-2 text-xs uppercase tracking-[0.12em] text-zinc-500">
@@ -3501,7 +6889,9 @@ export function WebMessenger({
                           key={user.id}
                           type="button"
                           onClick={() => createOrOpenChat(user.id)}
-                          className="w-full rounded-lg border border-zinc-700 bg-zinc-700 px-3 py-3 text-left hover:bg-zinc-600"
+                          className={`w-full ${uiRadiusCardClass} border border-zinc-700 bg-zinc-700 px-3 text-left hover:bg-zinc-600 ${
+                            uiDensity === "compact" ? "py-2" : "py-3"
+                          }`}
                         >
                           <p className="truncate text-sm font-medium text-zinc-100">
                             {user.name}
@@ -3527,60 +6917,102 @@ export function WebMessenger({
                 <div
               className={`${
                 mobileView === "list" ? "hidden" : "flex"
-              } min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#202020_0%,#2a2a2a_100%)] md:flex`}
+              } min-h-0 min-w-0 flex-1 flex-col bg-transparent md:flex ${activeChatFontClassName}`}
             >
               {activeChat ? (
                 <>
                   <header
-                    className="flex cursor-pointer items-center gap-3 border-b border-zinc-700 bg-zinc-800 px-4 py-4 sm:px-6"
+                    className={`flex cursor-pointer items-center border-b border-zinc-800/90 bg-zinc-950/70 backdrop-blur-xl ${
+                      uiDensity === "compact"
+                        ? "gap-2 px-3 py-2.5 sm:px-4"
+                        : "gap-3 px-4 py-4 sm:px-6"
+                    }`}
                     onClick={openActiveChatProfile}
                   >
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="border border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 md:hidden"
+                      className={`border border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 md:hidden ${
+                        uiDensity === "compact" ? "h-8 w-8" : ""
+                      }`}
                       onClick={(event) => {
                         event.stopPropagation();
                         setMobileView("list");
                       }}
                     >
-                      <ArrowLeft />
+                      <ArrowLeft className="size-4" />
                     </Button>
-                    <div className="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-md p-1 pl-3 text-left">
+                    <div
+                      className={`-ml-2 flex min-w-0 flex-1 items-center rounded-md text-left ${
+                        uiDensity === "compact" ? "gap-2 p-0.5 pl-2" : "gap-3 p-1 pl-3"
+                      }`}
+                    >
                       {activeChat.avatarUrl ? (
                         <span
-                          className="inline-flex size-10 shrink-0 rounded-xl bg-zinc-700 bg-cover bg-center"
+                          className={`inline-flex shrink-0 rounded-xl bg-zinc-700 bg-cover bg-center ${
+                            uiDensity === "compact" ? "size-8" : "size-10"
+                          }`}
                           style={{ backgroundImage: `url(${activeChat.avatarUrl})` }}
                           aria-label={`${activeChat.name} avatar`}
                         />
                       ) : (
                         <span
-                          className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-sm font-semibold text-white ${activeChat.accent}`}
+                          className={`inline-flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br font-semibold text-white ${
+                            uiDensity === "compact" ? "size-8 text-xs" : "size-10 text-sm"
+                          } ${activeChat.accent}`}
                         >
                           {activeChat.isGroup ? <Users className="size-4" /> : activeChat.name.slice(0, 2).toUpperCase()}
                         </span>
                       )}
                       <span className="min-w-0">
-                      <p className="truncate font-semibold text-zinc-100">
+                      <p
+                        className={`truncate font-semibold text-zinc-100 ${
+                          uiFontSize === "small"
+                            ? "text-sm"
+                            : uiFontSize === "large"
+                              ? "text-lg"
+                              : "text-base"
+                        }`}
+                      >
                         {activeChat.name}
                       </p>
                       <p
-                        className={`text-sm ${
+                        className={`${
+                          uiFontSize === "small"
+                            ? "text-[11px]"
+                            : uiFontSize === "large"
+                              ? "text-sm"
+                              : "text-xs"
+                        } ${
                           activeChat.isGroup
                             ? "text-zinc-500"
                             : "text-zinc-500"
                         }`}
                       >
-                        {activeChat.isGroup
-                          ? `${Math.max(2, activeChat.memberIds.length)} ${t("members")}`
-                          : activeChatLastSeenText}
+                        {activeChatTypingText ||
+                          (activeChat.isGroup
+                            ? `${Math.max(2, activeChat.memberIds.length)} ${t("members")}`
+                            : activeChatLastSeenText)}
                       </p>
                       </span>
                     </div>
                     <div
-                      className="flex items-center gap-2"
+                      className={`flex items-center ${uiDensity === "compact" ? "gap-1.5" : "gap-2"}`}
                       onClick={(event) => event.stopPropagation()}
                     >
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("searchInChat")}
+                        onClick={() => openActiveChatSearch()}
+                        className={`border hover:text-zinc-100 ${uiDensity === "compact" ? "h-8 w-8" : ""} ${
+                          isActiveChatSearchOpen
+                            ? "border-violet-500/70 bg-violet-500/20 text-violet-200 hover:bg-violet-500/25"
+                            : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
+                        }`}
+                      >
+                        <Search className="size-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -3593,72 +7025,300 @@ export function WebMessenger({
                           void startAudioCall();
                         }}
                         disabled={shouldDisableCallButton && !callChatMatchesActive}
-                        className="border border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        className={`border border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+                          uiDensity === "compact" ? "h-8 w-8" : ""
+                        }`}
                         title={t("audioCallOnly")}
                       >
-                        {callChatMatchesActive ? <PhoneOff /> : <Phone />}
+                        {callChatMatchesActive ? (
+                          <PhoneOff className="size-4" />
+                        ) : (
+                          <Phone className="size-4 fill-current" />
+                        )}
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label={t("menu")}
-                        className="border border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100"
+                        aria-label={t("chatProfile")}
+                        onClick={() => toggleActiveChatProfileSidebar()}
+                        className={`border hover:text-zinc-100 ${uiDensity === "compact" ? "h-8 w-8" : ""} ${
+                          isCompactActiveChatProfileSidebar
+                            ? "border-violet-500/70 bg-violet-500/20 text-violet-200 hover:bg-violet-500/25"
+                            : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
+                        }`}
                       >
-                        <MoreVertical />
+                        <ChatProfileSidebarIcon className="size-4" />
                       </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t("menu")}
+                            className={`border border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 aria-expanded:border-zinc-600 aria-expanded:bg-zinc-600 aria-expanded:text-zinc-100 ${
+                              uiDensity === "compact" ? "h-8 w-8" : ""
+                            }`}
+                          >
+                            <MoreVertical className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className={chatActionMenuContentClassName}
+                        >
+                          <DropdownMenuItem
+                            className={chatActionMenuItemClassName}
+                            onSelect={() => setIsChatPersonalizationOpen(true)}
+                          >
+                            <SettingsSidebarIcon className="size-4" />
+                            {t("openChatPersonalization")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator
+                            className={chatActionMenuSeparatorClassName}
+                          />
+                          <DropdownMenuItem
+                            className={chatActionMenuItemClassName}
+                            onSelect={() => clearHistoryForMe()}
+                          >
+                            <Eraser className="size-4" />
+                            {t("clearHistoryForMe")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className={chatActionMenuItemClassName}
+                            onSelect={() => {
+                              if (!activeChat) {
+                                return;
+                              }
+                              setChatIdToConfirmDelete(activeChat.id);
+                              setIsDeleteChatDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="size-4" />
+                            {t("deleteChatAction")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </header>
 
-                  <div className="flex-1 space-y-2 overflow-y-auto px-4 py-5 sm:px-6">
-                    {activeMessages.map((message) => {
+                  {isActiveChatSearchOpen ? (
+                    <div
+                      className={`border-b border-zinc-800/90 bg-zinc-950/70 backdrop-blur-lg ${
+                        uiDensity === "compact" ? "px-3 py-2 sm:px-4" : "px-4 py-3 sm:px-6"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+                          <Input
+                            ref={activeChatSearchInputRef}
+                            placeholder={t("searchInChat")}
+                            className={`rounded-lg border-zinc-600 bg-zinc-700 pl-9 text-zinc-100 placeholder:text-zinc-400 ${
+                              uiDensity === "compact" ? "h-9 text-sm" : "h-10"
+                            }`}
+                            value={activeChatSearchQuery}
+                            onChange={(event) => setActiveChatSearchQuery(event.target.value)}
+                          />
+                        </div>
+                        <Input
+                          type="date"
+                          aria-label={t("date")}
+                          className={`rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 ${
+                            uiDensity === "compact" ? "h-9 w-[150px] text-sm" : "h-10 w-[170px]"
+                          }`}
+                          value={activeChatJumpDate}
+                          onChange={(event) => setActiveChatJumpDate(event.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          aria-label={t("jumpToDate")}
+                          className={`rounded-lg border border-zinc-600 bg-zinc-700 px-3 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 ${
+                            uiDensity === "compact" ? "h-9" : "h-10"
+                          }`}
+                          onClick={() => jumpToDate()}
+                        >
+                          {t("jumpToDate")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("cancel")}
+                          className={`rounded-lg border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100 ${
+                            uiDensity === "compact" ? "h-9 w-9" : "h-10 w-10"
+                          }`}
+                          onClick={() => {
+                            setIsActiveChatSearchOpen(false);
+                            setActiveChatSearchQuery("");
+                          }}
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-[11px] text-zinc-500">{t("searchAdvancedHint")}</p>
+                    </div>
+                  ) : null}
+
+                  <div
+                    className="flex min-h-0 flex-1 flex-col"
+                    style={activeChatBackgroundStyle}
+                  >
+                    <div
+                      className={`flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
+                        uiDensity === "compact" ? "space-y-1.5 px-4 py-3" : "space-y-2 px-4 py-5"
+                      }`}
+                    >
+                    {filteredActiveMessages.length === 0 ? (
+                      <div className={`text-center text-sm text-zinc-500 ${uiDensity === "compact" ? "py-7" : "py-10"}`}>
+                        {activeChatSearchQuery.trim().length > 0
+                          ? t("noMessagesFound")
+                          : t("noMessagesYet")}
+                      </div>
+                    ) : null}
+                    {filteredActiveMessages.map((message) => {
                       const hasMessageText = message.text.trim().length > 0;
                       const firstAttachmentUrl = message.attachments[0]?.url ?? "";
                       const canDeleteMessage = message.author === "me";
                       const hasCopyActions = hasMessageText || firstAttachmentUrl.length > 0;
+                      const reply = message.reply;
+                      const shouldShowUnreadDivider =
+                        unreadDividerMessageId === message.id &&
+                        (activeChatSearchQuery.trim().length === 0 ||
+                          filteredActiveMessages === activeMessages);
 
                       return (
-                        <ContextMenu key={message.id}>
-                          <ContextMenuTrigger asChild>
-                            <div
-                              className={`flex ${
-                                message.author === "me" ? "justify-end" : "justify-start"
-                              }`}
-                            >
+                        <div key={message.id}>
+                          {shouldShowUnreadDivider ? (
+                            <div className="my-1 flex items-center gap-3 px-1">
+                              <span className="h-px flex-1 bg-zinc-600/60" />
+                              <span className="rounded-full border border-zinc-600 bg-zinc-900/85 px-2.5 py-0.5 text-[11px] font-medium text-zinc-300">
+                                {t("unreadMessages")}
+                              </span>
+                              <span className="h-px flex-1 bg-zinc-600/60" />
+                            </div>
+                          ) : null}
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
                               <div
-                                className={`max-w-[85%] rounded-2xl px-4 py-2 sm:max-w-[70%] ${
-                                  message.author === "me"
-                                    ? "bg-lime-500 text-zinc-900"
-                                    : "border border-zinc-600 bg-zinc-700 text-zinc-100"
+                                className={`flex ${
+                                  message.author === "me" ? "justify-end" : "justify-start"
                                 }`}
                               >
-                                {message.text ? (
-                                  <p className="text-sm leading-6">{message.text}</p>
+                                <div
+                                  ref={(node) => {
+                                    messageNodeRefs.current.set(message.id, node);
+                                  }}
+                                  className={`max-w-[85%] ${uiRadiusBubbleClass} ring-1 ring-white/5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7)] sm:max-w-[70%] ${
+                                    uiDensity === "compact" ? "px-3 py-1.5" : "px-4 py-2"
+                                  } ${
+                                    animatingMessageIds.has(message.id)
+                                      ? "clore-message-appear-once"
+                                      : ""
+                                  } ${
+                                    highlightedMessageId === message.id
+                                      ? "clore-message-target-highlight"
+                                      : ""
+                                  } ${
+                                    message.author === "me"
+                                      ? "bg-violet-500 text-zinc-100"
+                                      : "border border-zinc-600 bg-zinc-700 text-zinc-100"
+                                  }`}
+                                >
+                                {reply ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (reply.missing) {
+                                        return;
+                                      }
+                                      focusReplyTargetMessage(reply.targetMessageId);
+                                    }}
+                                    className={`mb-2 rounded-lg border-l-2 px-2 py-1 ${
+                                      message.author === "me"
+                                        ? "border-zinc-100/60 bg-zinc-100/10"
+                                        : "border-violet-500/70 bg-zinc-800/70"
+                                    } ${
+                                      reply.missing
+                                        ? "cursor-default opacity-80"
+                                        : "cursor-pointer hover:bg-zinc-800/85"
+                                    }`}
+                                  >
+                                    <p className="truncate text-[11px] font-medium">
+                                      {reply.missing
+                                        ? t("originalMessageUnavailable")
+                                        : reply.authorLabel}
+                                    </p>
+                                    {!reply.missing ? (
+                                      <p className="truncate text-xs opacity-85">
+                                        {reply.previewText}
+                                      </p>
+                                    ) : null}
+                                  </button>
                                 ) : null}
+                                {message.text ? <div>{renderFormattedMessageText(message.text)}</div> : null}
                                 {message.attachments.length > 0 ? (
                                   <div className={`${message.text ? "mt-2" : ""} space-y-2`}>
                                     {message.attachments.map((attachment) => {
-                                      if (attachment.kind === "image") {
-                                        return (
-                                          <button
-                                            key={attachment.id}
-                                            type="button"
-                                            onClick={() => openImageViewer(attachment.id)}
-                                            className="block overflow-hidden rounded-lg border border-zinc-400/30 bg-black/10"
-                                          >
-                                            <img
-                                              src={attachment.url}
-                                              alt={attachment.name}
-                                              className="max-h-64 w-full cursor-zoom-in object-cover"
-                                            />
-                                          </button>
-                                        );
-                                      }
-                                      if (attachment.kind === "video") {
+                                      if (attachment.kind === "image" || attachment.kind === "video") {
+                                        const shouldLoadMedia =
+                                          activeChatAutoLoadMediaEnabled ||
+                                          message.author === "me" ||
+                                          manuallyLoadedMediaIds.has(attachment.id);
+                                        if (!shouldLoadMedia) {
+                                          return (
+                                            <button
+                                              key={attachment.id}
+                                              type="button"
+                                              onClick={() =>
+                                                setManuallyLoadedMediaIds((prev) => {
+                                                  const next = new Set(prev);
+                                                  next.add(attachment.id);
+                                                  return next;
+                                                })
+                                              }
+                                              className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                                                message.author === "me"
+                                                  ? "border-zinc-100/30 bg-zinc-100/10"
+                                                  : "border-zinc-500/40 bg-zinc-800/70"
+                                              }`}
+                                            >
+                                              <span className="truncate">{attachment.name}</span>
+                                              <span className="ml-3 shrink-0 text-xs text-zinc-300">
+                                                {t("loadMedia")}
+                                              </span>
+                                            </button>
+                                          );
+                                        }
+                                        if (attachment.kind === "image") {
+                                          return (
+                                            <button
+                                              key={attachment.id}
+                                              type="button"
+                                              onClick={() => openImageViewer(attachment.id)}
+                                              className="block overflow-hidden rounded-lg border border-zinc-400/30 bg-black/10"
+                                            >
+                                              <img
+                                                src={attachment.url}
+                                                alt={attachment.name}
+                                                className="max-h-64 w-full cursor-zoom-in object-cover"
+                                              />
+                                            </button>
+                                          );
+                                        }
                                         return (
                                           <video
                                             key={attachment.id}
                                             controls
                                             className="max-h-64 w-full rounded-lg border border-zinc-400/30 bg-black/30"
+                                            src={attachment.url}
+                                          />
+                                        );
+                                      }
+                                      if (attachment.kind === "audio") {
+                                        return (
+                                          <AudioAttachmentPlayer
+                                            key={attachment.id}
                                             src={attachment.url}
                                           />
                                         );
@@ -3672,7 +7332,7 @@ export function WebMessenger({
                                           rel="noreferrer"
                                           className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
                                             message.author === "me"
-                                              ? "border-zinc-900/30 bg-zinc-900/10"
+                                              ? "border-zinc-100/30 bg-zinc-100/10"
                                               : "border-zinc-500/40 bg-zinc-800/70"
                                           }`}
                                         >
@@ -3680,7 +7340,7 @@ export function WebMessenger({
                                           <span
                                             className={`ml-3 shrink-0 text-xs ${
                                               message.author === "me"
-                                                ? "text-zinc-900/70"
+                                                ? "text-zinc-100/70"
                                                 : "text-zinc-400"
                                             }`}
                                           >
@@ -3694,26 +7354,58 @@ export function WebMessenger({
                                 <div
                                   className={`mt-1 flex items-center gap-1 text-right text-xs ${
                                     message.author === "me"
-                                      ? "justify-end text-zinc-900/70"
+                                      ? "justify-end text-zinc-100/70"
                                       : "justify-end text-zinc-500"
                                   }`}
                                 >
+                                  {message.isEdited ? (
+                                    <span className="opacity-80">{t("editedLabel")}</span>
+                                  ) : null}
                                   <span>{message.time}</span>
                                   {message.author === "me" ? (
-                                    message.isReadByPeer ? (
-                                      <CheckCheck className="size-3 text-emerald-800" />
+                                    activeChat.isGroup ? (
+                                      message.groupReadByCount > 0 ? (
+                                        <span className="rounded-full border border-zinc-100/25 px-1.5 py-px text-[10px] font-medium text-zinc-100/90">
+                                          {`${t("readBy")} ${message.groupReadByCount}`}
+                                        </span>
+                                      ) : (
+                                        <Check className="size-3" />
+                                      )
+                                    ) : message.isReadByPeer ? (
+                                      <CheckCheck className="size-3 text-zinc-100/90" />
                                     ) : (
                                       <Check className="size-3" />
                                     )
                                   ) : null}
                                 </div>
+                                {message.author === "me" &&
+                                activeChat.isGroup &&
+                                message.groupReadByCount > 0 ? (
+                                  <p className="mt-1 truncate text-right text-[11px] text-zinc-100/70">
+                                    {`${t("readBy")}: ${message.groupReadByLabels.join(", ")}`}
+                                  </p>
+                                ) : null}
+                                </div>
                               </div>
-                            </div>
-                          </ContextMenuTrigger>
-                          <ContextMenuContent className="w-56 border border-zinc-700 bg-zinc-900/95 p-1 text-zinc-100 shadow-xl backdrop-blur">
+                            </ContextMenuTrigger>
+                            <ContextMenuContent
+                              className={chatActionMenuContentClassName}
+                            >
+                            <ContextMenuItem
+                              className={chatActionMenuItemClassName}
+                              onSelect={() => startReplyToMessage(message.id)}
+                            >
+                              <CornerUpLeft className="size-4" />
+                              {t("replyToMessage")}
+                            </ContextMenuItem>
+                            {(hasMessageText || firstAttachmentUrl) ? (
+                              <ContextMenuSeparator
+                                className={chatActionMenuSeparatorClassName}
+                              />
+                            ) : null}
                             {hasMessageText ? (
                               <ContextMenuItem
-                                className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-lime-500/20 focus:text-lime-300"
+                                className={chatActionMenuItemClassName}
                                 onSelect={() => void copyToClipboard(message.text)}
                               >
                                 <Copy className="size-4" />
@@ -3722,7 +7414,7 @@ export function WebMessenger({
                             ) : null}
                             {firstAttachmentUrl ? (
                               <ContextMenuItem
-                                className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-lime-500/20 focus:text-lime-300"
+                                className={chatActionMenuItemClassName}
                                 onSelect={() => void copyToClipboard(firstAttachmentUrl)}
                               >
                                 <Copy className="size-4" />
@@ -3732,11 +7424,25 @@ export function WebMessenger({
                             {canDeleteMessage ? (
                               <>
                                 {hasCopyActions ? (
-                                  <ContextMenuSeparator className="mx-1 bg-zinc-700/80" />
+                                  <ContextMenuSeparator
+                                    className={chatActionMenuSeparatorClassName}
+                                  />
                                 ) : null}
                                 <ContextMenuItem
+                                  className={chatActionMenuItemClassName}
+                                  onSelect={() => startEditingMessage(message.id)}
+                                >
+                                  <Pencil className="size-4" />
+                                  {t("editMessage")}
+                                </ContextMenuItem>
+                                <ContextMenuSeparator
+                                  className={chatActionMenuSeparatorClassName}
+                                />
+                                <ContextMenuItem
                                   variant="destructive"
-                                  className="rounded-md px-2.5 py-2 text-sm font-medium focus:bg-red-500/15"
+                                  className={
+                                    chatActionMenuDestructiveItemClassName
+                                  }
                                   onSelect={() => void deleteMessage(message.id)}
                                 >
                                   <Trash2 className="size-4" />
@@ -3744,20 +7450,85 @@ export function WebMessenger({
                                 </ContextMenuItem>
                               </>
                             ) : null}
-                          </ContextMenuContent>
-                        </ContextMenu>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        </div>
                       );
                     })}
                   </div>
 
                   <form
-                    className="border-t border-zinc-700 bg-zinc-800 p-3 sm:p-4"
+                    className={`bg-transparent ${
+                      uiDensity === "compact" ? "p-2 sm:p-3" : "p-3 sm:p-4"
+                    }`}
                     onSubmit={(event) => {
                       event.preventDefault();
                       sendMessage();
                     }}
                   >
-                    {pendingAttachments.length > 0 ? (
+                    {editingTargetMessage ? (
+                      <div
+                        className={`mb-2 flex items-start justify-between gap-3 rounded-lg border border-zinc-600 bg-zinc-700/70 ${
+                          uiDensity === "compact" ? "px-2.5 py-1.5" : "px-3 py-2"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-violet-300">
+                            {t("editingMessage")}
+                          </p>
+                          <p className="truncate text-xs text-zinc-200">
+                            {editingTargetMessage.text.trim() ||
+                              (editingTargetMessage.attachments.length > 0
+                                ? t("attachment")
+                                : t("noMessagesYet"))}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("cancelEdit")}
+                          className="h-6 w-6 shrink-0 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                          onClick={() => {
+                            setEditingMessageId(null);
+                            setDraft("");
+                          }}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                    ) : null}
+                    {replyTargetMessage && !editingTargetMessage ? (
+                      <div
+                        className={`mb-2 flex items-start justify-between gap-3 rounded-lg border border-zinc-600 bg-zinc-700/70 ${
+                          uiDensity === "compact" ? "px-2.5 py-1.5" : "px-3 py-2"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-violet-300">
+                            {t("replyingTo")}{" "}
+                            {replyTargetMessage.authorLabel}
+                          </p>
+                          <p className="truncate text-xs text-zinc-200">
+                            {replyTargetMessage.text.trim() ||
+                              (replyTargetMessage.attachments.length > 0
+                                ? t("attachment")
+                                : t("noMessagesYet"))}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("cancelReply")}
+                          className="h-6 w-6 shrink-0 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                          onClick={() => setReplyToMessageId(null)}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                    ) : null}
+                    {pendingAttachments.length > 0 && !editingTargetMessage ? (
                       <div className="mb-2 flex flex-wrap gap-2">
                         {pendingAttachments.map((attachment) => (
                           <div
@@ -3765,7 +7536,11 @@ export function WebMessenger({
                             className="inline-flex max-w-full items-center gap-2 rounded-full border border-zinc-600 bg-zinc-700 px-3 py-1 text-xs text-zinc-100"
                           >
                             <span className="truncate">
-                              {attachment.name} • {formatFileSize(attachment.size)}
+                              {attachment.kind === "audio"
+                                ? t("voiceMessage")
+                                : attachment.size > 0
+                                  ? `${attachment.name} - ${formatFileSize(attachment.size)}`
+                                  : attachment.name}
                             </span>
                             <button
                               type="button"
@@ -3779,74 +7554,187 @@ export function WebMessenger({
                         ))}
                       </div>
                     ) : null}
-                    <div ref={emojiMenuRef} className="relative flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t("attachFiles")}
-                        title={t("attachFiles")}
-                        className="h-11 w-11 shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-lime-500 hover:bg-zinc-600 hover:text-lime-300"
-                        onClick={openAttachmentPicker}
-                      >
-                        <Paperclip className="size-4" />
-                      </Button>
-                      <div className="relative flex-1">
+                    <div
+                      ref={emojiMenuRef}
+                      className={`relative ${uiRadiusCardClass} bg-zinc-900/50 shadow-[0_20px_40px_-24px_rgba(0,0,0,0.95)] ring-1 ring-zinc-700/60 backdrop-blur-md ${
+                        uiDensity === "compact" ? "p-1.5" : "p-2"
+                      }`}
+                    >
+                      {formattingMenuPosition ? (
                         <div
-                          className={`absolute bottom-12 right-0 z-50 w-[min(360px,calc(100vw-3rem))] rounded-xl border border-zinc-700 bg-zinc-900 p-2 shadow-2xl transition-all duration-150 ${
-                            isEmojiMenuOpen
-                              ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-                              : "pointer-events-none translate-y-2 scale-95 opacity-0"
-                          }`}
-                          onMouseEnter={openEmojiMenu}
-                          onMouseLeave={scheduleCloseEmojiMenu}
+                          className="absolute z-50 w-fit -translate-x-1/2 -translate-y-full rounded-xl border border-zinc-800/90 bg-zinc-950/85 p-1.5 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl"
+                          style={{
+                            left: formattingMenuPosition.x,
+                            top: formattingMenuPosition.y,
+                          }}
                         >
-                          <div className="max-h-64 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500">
-                            <div className="grid grid-cols-8 gap-1">
-                              {CHAT_SMILEY_EMOJIS.map((emoji) => (
-                                <button
-                                  key={emoji}
+                          <div className="mb-1 px-1 text-[10px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+                            {t("formattingHint")}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {ORDERED_FORMATTING_ACTIONS.map((action) => {
+                              const control = formattingControls[action];
+                              const Icon = control.icon;
+                              return (
+                                <Button
+                                  key={action}
                                   type="button"
-                                  onClick={() => insertEmojiToDraft(emoji)}
-                                  className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-zinc-700"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={control.label}
+                                  title={control.label}
+                                  className="h-8 w-8 rounded-lg border border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:border-violet-500 hover:bg-zinc-700 hover:text-violet-300"
+                                  onClick={() => {
+                                    applyFormattingToDraft(action);
+                                    setFormattingMenuPosition(null);
+                                  }}
                                 >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
+                                  <Icon className="size-3.5" />
+                                </Button>
+                              );
+                            })}
                           </div>
                         </div>
-                        <Input
-                          ref={messageInputRef}
-                          placeholder={t("typeMessage")}
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          className="h-11 rounded-lg border-zinc-600 bg-zinc-700 pr-12 text-zinc-100 placeholder:text-zinc-400"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Emoji"
-                          title="Emoji"
-                          className="absolute right-2 top-1/2 h-7 w-7 -translate-y-1/2 rounded-md border-0 bg-transparent p-0 text-zinc-300 shadow-none hover:bg-transparent hover:text-lime-300 focus-visible:ring-0"
-                          onClick={() => setIsEmojiMenuOpen((prev) => !prev)}
-                          onMouseEnter={openEmojiMenu}
-                          onMouseLeave={scheduleCloseEmojiMenu}
-                        >
-                          <Smile className="size-4" />
-                        </Button>
-                      </div>
-                      <Button
-                        type="submit"
-                        className="h-11 shrink-0 rounded-lg bg-lime-500 px-4 text-zinc-900 hover:bg-lime-400"
-                        disabled={draft.trim().length === 0 && pendingAttachments.length === 0}
-                      >
-                        <SendHorizontal />
-                        {t("send")}
-                      </Button>
+                      ) : null}
+                      {isVoiceRecording ? (
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Mic className="size-4 shrink-0 text-red-300" />
+                            <p className="truncate text-xs font-medium text-red-100">
+                              {`${t("recordingVoice")} ${formatCallDuration(voiceRecordingSeconds)}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("stopVoiceRecording")}
+                              title={t("stopVoiceRecording")}
+                              className="h-8 w-8 rounded-md border border-zinc-600 bg-zinc-800 text-white hover:bg-zinc-700"
+                              onClick={() => stopVoiceRecording()}
+                            >
+                              <Square className="size-3.5 text-white" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div ref={composerRef} className="relative flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t("attachFiles")}
+                            title={t("attachFiles")}
+                            disabled={Boolean(editingTargetMessage)}
+                            className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-violet-500 hover:bg-zinc-600 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-50 ${
+                              uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
+                            }`}
+                            onClick={openAttachmentPicker}
+                          >
+                            <Plus className="size-4" />
+                          </Button>
+                          <div className="relative flex-1">
+                            <div
+                              className={`absolute bottom-12 right-0 z-50 w-[min(360px,calc(100vw-3rem))] rounded-xl border border-zinc-800/90 bg-zinc-950/85 p-2 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl transition-all duration-150 ${
+                                isEmojiMenuOpen
+                                  ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
+                                  : "pointer-events-none translate-y-2 scale-95 opacity-0"
+                              }`}
+                              onMouseEnter={openEmojiMenu}
+                              onMouseLeave={scheduleCloseEmojiMenu}
+                            >
+                              <div className="max-h-64 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500">
+                                <div className="grid grid-cols-8 gap-1">
+                                  {CHAT_SMILEY_EMOJIS.map((emoji, index) => (
+                                    <button
+                                      key={`${emoji}-${index}`}
+                                      type="button"
+                                      onClick={() => insertEmojiToDraft(emoji)}
+                                      className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-zinc-700"
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <Textarea
+                              ref={messageInputRef}
+                              placeholder={t("typeMessage")}
+                              value={draft}
+                              onChange={(event) => setDraft(event.target.value)}
+                              onContextMenu={openFormattingMenuFromContext}
+                              onKeyDown={(event) => {
+                                setFormattingMenuPosition(null);
+                                if (event.key === "Enter" && !event.shiftKey) {
+                                  event.preventDefault();
+                                  sendMessage();
+                                }
+                              }}
+                              className={`max-h-36 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400 ${
+                                uiDensity === "compact"
+                                  ? "min-h-[38px] py-1.5 pr-10 text-sm"
+                                  : "min-h-[44px] py-2 pr-12"
+                              }`}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Emoji"
+                              title="Emoji"
+                              className={`absolute top-1/2 -translate-y-1/2 rounded-md border-0 bg-transparent p-0 text-zinc-300 shadow-none hover:bg-transparent hover:text-violet-300 focus-visible:ring-0 ${
+                                uiDensity === "compact" ? "right-1.5 h-6 w-6" : "right-2 h-7 w-7"
+                              }`}
+                              onClick={() => setIsEmojiMenuOpen((prev) => !prev)}
+                              onMouseEnter={openEmojiMenu}
+                              onMouseLeave={scheduleCloseEmojiMenu}
+                            >
+                              <Smile className="size-4" />
+                            </Button>
+                          </div>
+                          {!editingTargetMessage &&
+                          draft.trim().length === 0 &&
+                          pendingAttachments.length === 0 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("startVoiceRecording")}
+                              title={t("startVoiceRecording")}
+                              className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-violet-500 hover:bg-zinc-600 hover:text-violet-300 ${
+                                uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
+                              }`}
+                              onClick={toggleVoiceRecording}
+                            >
+                              <Mic className="size-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              type="submit"
+                              aria-label={editingTargetMessage ? t("saveEdit") : t("send")}
+                              title={editingTargetMessage ? t("saveEdit") : t("send")}
+                              className={`shrink-0 rounded-lg bg-violet-500 p-0 text-zinc-50 hover:bg-violet-400 ${
+                                uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
+                              }`}
+                              disabled={
+                                editingTargetMessage
+                                  ? (draft.trim().length === 0 &&
+                                      editingTargetMessage.attachments.length === 0) ||
+                                    draft.trim() === editingTargetMessage.text.trim()
+                                  : draft.trim().length === 0 &&
+                                    pendingAttachments.length === 0
+                              }
+                            >
+                              <ArrowUp className="size-4" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </form>
+                </div>
                 </>
               ) : (
                 <div className="flex flex-1 items-center justify-center">
@@ -3856,8 +7744,14 @@ export function WebMessenger({
                 </div>
               </>
             ) : null}
-                        {activeSidebar === "profile" ? (
-              <div className="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#202020_0%,#2a2a2a_100%)]">
+            {shouldShowProfileSidebar ? (
+              <div
+                className={`min-h-0 min-w-0 flex-col bg-[linear-gradient(180deg,rgba(39,39,42,0.62)_0%,rgba(24,24,27,0.5)_100%)] backdrop-blur-xl ${
+                  isCompactActiveChatProfileSidebar
+                    ? "hidden w-[360px] max-w-[42vw] shrink-0 border-l border-zinc-800/90 lg:flex"
+                    : "flex flex-1"
+                }`}
+              >
                 <AlertDialog
                   open={imagePickerTarget !== null}
                   onOpenChange={(open) => {
@@ -3866,7 +7760,7 @@ export function WebMessenger({
                     }
                   }}
                 >
-                  <AlertDialogContent className="border border-zinc-700 bg-zinc-900 text-zinc-100">
+                  <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
                     <AlertDialogHeader>
                       <AlertDialogTitle>
                         {imagePickerTarget === "avatar"
@@ -3900,7 +7794,7 @@ export function WebMessenger({
                         </AlertDialogAction>
                       ) : null}
                       <AlertDialogAction
-                        className="bg-lime-500 text-zinc-900 hover:bg-lime-400"
+                        className="bg-violet-500 text-zinc-50 hover:bg-violet-400"
                         onClick={triggerImagePick}
                       >
                         {t("changeFile")}
@@ -3908,12 +7802,29 @@ export function WebMessenger({
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+                {isCompactActiveChatProfileSidebar ? (
+                  <div className="flex items-center justify-between border-b border-zinc-800/90 px-4 py-3 sm:px-5">
+                    <p className="text-sm font-semibold text-zinc-100">
+                      {t("chatProfile")}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t("closeViewer")}
+                      onClick={() => setIsActiveChatProfileSidebarOpen(false)}
+                      className="h-8 w-8 rounded-md border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ) : null}
                 <div
                   className={`h-36 w-full sm:h-44 ${
                     viewedProfile.bannerUrl
                       ? "bg-zinc-800 bg-cover bg-center"
-                      : "bg-[linear-gradient(130deg,#65a30d_0%,#3f6212_45%,#27272a_100%)]"
-                  } ${isOwnProfile || isGroupProfile ? "cursor-pointer" : ""}`}
+                      : "bg-[linear-gradient(130deg,#8b5cf6_0%,#6d28d9_45%,#27272a_100%)]"
+                  } ${canEditViewedProfileImages ? "cursor-pointer" : ""}`}
                   style={
                     viewedProfile.bannerUrl
                       ? {
@@ -3924,11 +7835,11 @@ export function WebMessenger({
                   onClick={() => openImagePickerDialog("banner")}
                 />
                 <div className="border-b border-zinc-700 px-4 pb-4 sm:px-6">
-                  <div className="-mt-12 flex items-end justify-between sm:-mt-14">
+                  <div className="-mt-12 flex items-end sm:-mt-14">
                     {viewedProfile.avatarUrl ? (
                       <span
                         className={`inline-flex size-24 shrink-0 rounded-full border-4 border-zinc-900 bg-zinc-800 bg-cover bg-center sm:size-28 ${
-                          isOwnProfile || isGroupProfile ? "cursor-pointer" : ""
+                          canEditViewedProfileImages ? "cursor-pointer" : ""
                         }`}
                         style={{ backgroundImage: `url(${viewedProfile.avatarUrl})` }}
                         aria-label={`${viewedProfile.name} avatar`}
@@ -3936,48 +7847,36 @@ export function WebMessenger({
                       />
                     ) : (
                       <span
-                        className={`inline-flex size-24 items-center justify-center rounded-full border-4 border-zinc-900 bg-lime-500 text-2xl font-semibold text-zinc-900 sm:size-28 ${
-                          isOwnProfile || isGroupProfile ? "cursor-pointer" : ""
+                        className={`inline-flex size-24 items-center justify-center rounded-full border-4 border-zinc-900 bg-violet-500 text-2xl font-semibold text-zinc-50 sm:size-28 ${
+                          canEditViewedProfileImages ? "cursor-pointer" : ""
                         }`}
                         onClick={() => openImagePickerDialog("avatar")}
                       >
                         {profileInitials || "LW"}
                       </span>
                     )}
-                    {isOwnProfile && isEditingProfile ? (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          onClick={cancelProfileEdit}
-                          className="rounded-full border border-zinc-600 bg-zinc-800 px-4 text-zinc-200 hover:bg-zinc-700"
-                        >
-                          {t("cancel")}
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={saveProfileEdit}
-                          className="rounded-full bg-lime-500 px-4 text-zinc-900 hover:bg-lime-400"
-                        >
-                          {t("save")}
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        {isOwnProfile ? (
-                          <Button
-                            type="button"
-                            onClick={startProfileEdit}
-                            className="rounded-full bg-lime-500 px-4 text-zinc-900 hover:bg-lime-400"
-                          >
-                            {t("editProfile")}
-                          </Button>
-                        ) : null}
-                      </>
-                    )}
                   </div>
                   <div className="mt-3">
                     {isOwnProfile && isEditingProfile ? (
                       <div className="space-y-3">
+                        <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => void saveProfileEdit()}
+                              className="h-9 flex-1 rounded-lg bg-violet-500 px-3 text-zinc-50 hover:bg-violet-400"
+                            >
+                              {t("save")}
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={cancelProfileEdit}
+                              className="h-9 rounded-lg border border-zinc-600 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700"
+                            >
+                              {t("cancel")}
+                            </Button>
+                          </div>
+                        </div>
                         <Input
                           value={profileDraft.name}
                           onChange={(event) =>
@@ -4018,15 +7917,15 @@ export function WebMessenger({
                               handleBirthdayPartChange("day", value)
                             }
                           >
-                            <SelectTrigger className="h-10 flex-1 border-zinc-600 bg-zinc-700 text-zinc-100 hover:bg-zinc-600">
+                            <SelectTrigger className={`h-10 flex-1 ${unifiedSelectTriggerClassName}`}>
                               <SelectValue placeholder="Day" />
                             </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-800 text-zinc-100 shadow-xl">
+                            <SelectContent className={unifiedSelectContentClassName}>
                               {birthdayDayOptions.map((day) => (
                                 <SelectItem
                                   key={day}
                                   value={day}
-                                  className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900"
+                                  className={unifiedSelectItemClassName}
                                 >
                                   {day}
                                 </SelectItem>
@@ -4039,15 +7938,15 @@ export function WebMessenger({
                               handleBirthdayPartChange("month", value)
                             }
                           >
-                            <SelectTrigger className="h-10 flex-1 border-zinc-600 bg-zinc-700 text-zinc-100 hover:bg-zinc-600">
+                            <SelectTrigger className={`h-10 flex-1 ${unifiedSelectTriggerClassName}`}>
                               <SelectValue placeholder="Month" />
                             </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-800 text-zinc-100 shadow-xl">
+                            <SelectContent className={unifiedSelectContentClassName}>
                               {birthdayMonthOptions.map((month) => (
                                 <SelectItem
                                   key={month.value}
                                   value={month.value}
-                                  className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900"
+                                  className={unifiedSelectItemClassName}
                                 >
                                   {month.label}
                                 </SelectItem>
@@ -4060,15 +7959,15 @@ export function WebMessenger({
                               handleBirthdayPartChange("year", value)
                             }
                           >
-                            <SelectTrigger className="h-10 flex-1 border-zinc-600 bg-zinc-700 text-zinc-100 hover:bg-zinc-600">
+                            <SelectTrigger className={`h-10 flex-1 ${unifiedSelectTriggerClassName}`}>
                               <SelectValue placeholder="Year" />
                             </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-800 text-zinc-100 shadow-xl">
+                            <SelectContent className={unifiedSelectContentClassName}>
                               {birthdayYearOptions.map((year) => (
                                 <SelectItem
                                   key={year}
                                   value={year}
-                                  className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900"
+                                  className={unifiedSelectItemClassName}
                                 >
                                   {year}
                                 </SelectItem>
@@ -4098,6 +7997,122 @@ export function WebMessenger({
                         {!isGroupProfile ? (
                           <p className="text-sm text-zinc-500">@{viewedProfile.username}</p>
                         ) : null}
+                        {!isGroupProfile && isOwnProfile ? (
+                          <div className="mt-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                onClick={startProfileEdit}
+                                className="h-9 flex-1 rounded-lg bg-violet-500 px-3 text-zinc-50 hover:bg-violet-400"
+                              >
+                                <Pencil className="size-4" />
+                                {t("editProfile")}
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={t("menu")}
+                                    className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 aria-expanded:bg-zinc-700 aria-expanded:text-zinc-100"
+                                  >
+                                    <MoreVertical className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className={profileActionMenuContentClassName}
+                                >
+                                  <DropdownMenuItem
+                                    className={profileActionMenuItemClassName}
+                                    onSelect={openShareContactDialog}
+                                  >
+                                    <ShareContactIcon className="size-4" />
+                                    {t("shareContact")}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        ) : !isGroupProfile && !isOwnProfile && viewedUserId ? (
+                          <div className="mt-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => void createOrOpenChat(viewedUserId)}
+                                className="h-9 flex-1 rounded-lg bg-violet-500 px-3 text-zinc-50 hover:bg-violet-400"
+                              >
+                                <MessageCircle className="size-4" />
+                                {t("openChat")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={
+                                  isProfileCallActiveWithViewedUser ? t("endCall") : t("call")
+                                }
+                                onClick={() => {
+                                  if (isProfileCallActiveWithViewedUser) {
+                                    void hangupCurrentCall();
+                                    return;
+                                  }
+                                  void startAudioCallFromProfile();
+                                }}
+                                disabled={
+                                  isProfileCallButtonDisabled &&
+                                  !isProfileCallActiveWithViewedUser
+                                }
+                                className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                title={t("audioCallOnly")}
+                              >
+                                {isProfileCallActiveWithViewedUser ? (
+                                  <PhoneOff className="size-4" />
+                                ) : (
+                                  <Phone className="size-4 fill-current" />
+                                )}
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={t("menu")}
+                                    className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 aria-expanded:bg-zinc-700 aria-expanded:text-zinc-100"
+                                  >
+                                    <MoreVertical className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className={profileActionMenuContentClassName}
+                                >
+                                  <DropdownMenuItem
+                                    className={profileActionMenuItemClassName}
+                                    onSelect={openShareContactDialog}
+                                  >
+                                    <ShareContactIcon className="size-4" />
+                                    {t("shareContact")}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator className={profileActionMenuSeparatorClassName} />
+                                  <DropdownMenuItem
+                                    className={profileActionMenuItemClassName}
+                                    onSelect={() => void toggleViewedUserBlock()}
+                                  >
+                                    {isViewedUserBlocked ? (
+                                      <Check className="size-4" />
+                                    ) : (
+                                      <X className="size-4" />
+                                    )}
+                                    {isViewedUserBlocked ? t("unblockUser") : t("blockUser")}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        ) : null}
                         {!isGroupProfile && viewedProfile.birthday ? (
                           <p className="mt-2 text-sm text-zinc-400">
                             Birthday: {formatBirthday(viewedProfile.birthday, language)}
@@ -4107,29 +8122,183 @@ export function WebMessenger({
                           <p className="mt-3 text-sm text-zinc-300">{viewedProfile.bio}</p>
                         ) : null}
                         {isGroupProfile ? (
-                          <div className="mt-4">
-                            <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
-                              {t("participants")} ({groupParticipants.length})
-                            </p>
-                            <div className="mt-2 space-y-1">
-                              {groupParticipants.map((member) => (
-                                <div
-                                  key={member.id}
-                                  className="flex items-center justify-between rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5"
+                          <div className="mt-4 space-y-2">
+                            {canManageSelectedGroup ? (
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={t("settings")}
+                                  onClick={() => setIsGroupSettingsOpen((prev) => !prev)}
+                                  className="h-8 w-8 rounded-md border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100"
                                 >
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm text-zinc-100">{member.name}</p>
-                                    <p className="truncate text-xs text-zinc-500">
-                                      @{member.username}
-                                    </p>
-                                  </div>
-                                  {member.isCreator ? (
-                                    <span className="rounded-full border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-medium text-lime-300">
-                                      {t("creator")}
-                                    </span>
-                                  ) : null}
+                                  <Pencil className="size-4" />
+                                </Button>
+                              </div>
+                            ) : null}
+                            {canManageSelectedGroup && isGroupSettingsOpen ? (
+                              <div className="space-y-1.5 rounded-md border border-zinc-800/90 bg-zinc-950/70 p-2 backdrop-blur-lg">
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    value={groupRenameDraft}
+                                    maxLength={GROUP_TITLE_MAX_LENGTH}
+                                    onChange={(event) => setGroupRenameDraft(event.target.value)}
+                                    className="h-8 border-zinc-600 bg-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-400"
+                                    placeholder={t("groupName")}
+                                  />
+                                  <Button
+                                    type="button"
+                                    onClick={() => void renameSelectedGroup()}
+                                    disabled={
+                                      groupRenameDraft.trim().replace(/\s+/g, " ").length <
+                                        GROUP_TITLE_MIN_LENGTH ||
+                                      groupRenameDraft.trim().replace(/\s+/g, " ").length >
+                                        GROUP_TITLE_MAX_LENGTH ||
+                                      groupRenameDraft.trim().replace(/\s+/g, " ") ===
+                                        (selectedGroupChat?.name ?? "")
+                                    }
+                                    className="h-8 rounded-md bg-violet-500 px-3 text-xs text-zinc-50 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {t("save")}
+                                  </Button>
                                 </div>
-                              ))}
+                                <Input
+                                  value={groupMemberSearchDraft}
+                                  onChange={(event) => setGroupMemberSearchDraft(event.target.value)}
+                                  className="h-8 border-zinc-600 bg-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-400"
+                                  placeholder={t("addMembers")}
+                                />
+                                {groupAddCandidates.length > 0 ? (
+                                  <div className="max-h-28 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                                    {groupAddCandidates.map((candidate) => (
+                                      <button
+                                        key={`group-add-${candidate.id}`}
+                                        type="button"
+                                        onClick={() => void addMemberToSelectedGroup(candidate.id)}
+                                        className="flex w-full items-center justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-left text-xs text-zinc-200 hover:border-zinc-600 hover:bg-zinc-700"
+                                      >
+                                        <span className="truncate">{`${candidate.name} (@${candidate.username})`}</span>
+                                        <Plus className="size-3.5 shrink-0 text-violet-300" />
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : groupMemberSearchDraft.trim().length > 0 ? (
+                                  <p className="text-xs text-zinc-500">{t("noChatsOrUsersFound")}</p>
+                                ) : null}
+                              </div>
+                            ) : null}
+
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
+                                {t("participants")} ({groupParticipants.length})
+                              </p>
+                              <div className="mt-1 space-y-1">
+                                {groupParticipants.map((member) => (
+                                  <div
+                                    key={member.id}
+                                    className="flex items-center justify-between gap-2 rounded-md border border-zinc-800/90 bg-zinc-950/70 px-2.5 py-1.5 backdrop-blur-lg"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm text-zinc-100">
+                                        {member.name}
+                                        {member.isCurrentUser ? ` ${t("youLabel")}` : ""}
+                                      </p>
+                                      <p className="truncate text-xs text-zinc-500">
+                                        @{member.username}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      {member.role === "admin" ? (
+                                        <span className="rounded-full border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">
+                                          {t("admin")}
+                                        </span>
+                                      ) : null}
+                                      {member.canPromote ||
+                                      member.canDemote ||
+                                      member.canTransferOwnership ||
+                                      member.canRemove ? (
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 rounded-md border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100"
+                                            >
+                                              <MoreVertical className="size-3.5" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent
+                                            align="end"
+                                            className={chatActionMenuContentClassName}
+                                          >
+                                            {member.canPromote ? (
+                                              <DropdownMenuItem
+                                                className={chatActionMenuItemClassName}
+                                                onSelect={() =>
+                                                  void updateSelectedGroupMemberRole(member.id, "admin")
+                                                }
+                                              >
+                                                {t("promoteToAdmin")}
+                                              </DropdownMenuItem>
+                                            ) : null}
+                                            {member.canDemote ? (
+                                              <DropdownMenuItem
+                                                className={chatActionMenuItemClassName}
+                                                onSelect={() =>
+                                                  void updateSelectedGroupMemberRole(member.id, "member")
+                                                }
+                                              >
+                                                {t("demoteToMember")}
+                                              </DropdownMenuItem>
+                                            ) : null}
+                                            {member.canTransferOwnership ? (
+                                              <>
+                                                {member.canPromote || member.canDemote ? (
+                                                  <DropdownMenuSeparator
+                                                    className={chatActionMenuSeparatorClassName}
+                                                  />
+                                                ) : null}
+                                                <DropdownMenuItem
+                                                  className={chatActionMenuItemClassName}
+                                                  onSelect={() =>
+                                                    void transferSelectedGroupOwnership(member.id)
+                                                  }
+                                                >
+                                                  {t("transferOwnership")}
+                                                </DropdownMenuItem>
+                                              </>
+                                            ) : null}
+                                            {member.canRemove ? (
+                                              <>
+                                                {member.canPromote ||
+                                                member.canDemote ||
+                                                member.canTransferOwnership ? (
+                                                  <DropdownMenuSeparator
+                                                    className={chatActionMenuSeparatorClassName}
+                                                  />
+                                                ) : null}
+                                                <DropdownMenuItem
+                                                  variant="destructive"
+                                                  className={
+                                                    chatActionMenuDestructiveItemClassName
+                                                  }
+                                                  onSelect={() =>
+                                                    void removeMemberFromSelectedGroup(member.id)
+                                                  }
+                                                >
+                                                  {t("removeMember")}
+                                                </DropdownMenuItem>
+                                              </>
+                                            ) : null}
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         ) : null}
@@ -4148,7 +8317,7 @@ export function WebMessenger({
                           onClick={() => setProfileTab(tab.id)}
                           className={`border-b-2 px-4 py-3 text-sm font-medium ${
                             profileTab === tab.id
-                              ? "border-lime-400 text-zinc-100"
+                              ? "border-violet-400 text-zinc-100"
                               : "border-transparent text-zinc-500"
                           }`}
                         >
@@ -4174,7 +8343,7 @@ export function WebMessenger({
                       {profileMediaItems.map((item) => (
                         <div
                           key={item.id}
-                          className="relative aspect-square overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 hover:border-lime-500/50"
+                          className="relative aspect-square overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 hover:border-violet-500/50"
                         >
                           {item.kind === "video" ? (
                             <video
@@ -4197,8 +8366,31 @@ export function WebMessenger({
                               />
                             </button>
                           )}
-                          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/35 to-transparent px-2 py-1">
+                          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1">
                             <p className="truncate text-[11px] text-zinc-200">{item.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {!isOwnProfile &&
+                  availableProfileTabs.length > 0 &&
+                  profileTab === "audio" ? (
+                    <div className="space-y-3 p-4 sm:p-6">
+                      {profileAudioItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-lg border border-zinc-700 bg-zinc-800/70 p-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="truncate text-sm text-zinc-200">
+                              {t("voiceMessage")}
+                            </p>
+                            <p className="shrink-0 text-xs text-zinc-500">{item.time}</p>
+                          </div>
+                          <div className="mt-2">
+                            <AudioAttachmentPlayer src={item.url} />
                           </div>
                         </div>
                       ))}
@@ -4215,7 +8407,7 @@ export function WebMessenger({
                           href={item.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="block rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 hover:border-lime-500/50"
+                          className="block rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 hover:border-violet-500/50"
                         >
                           <p className="truncate text-sm text-zinc-200">{item.url}</p>
                           <p className="mt-1 text-xs text-zinc-500">{item.time}</p>
@@ -4233,41 +8425,51 @@ export function WebMessenger({
               </div>
             ) : null}
             {activeSidebar === "settings" ? (
-              <div className="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#202020_0%,#2a2a2a_100%)]">
-                <div className="border-b border-zinc-700 px-4 py-4 sm:px-6">
-                  <h2 className="text-xl font-semibold text-zinc-100">{t("settings")}</h2>
-                  <div className="mt-4 rounded-xl border border-zinc-700/80 bg-zinc-900/40 p-1.5">
-                    <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
-                    {(["privacy", "security", "appearance"] as const).map((section) => (
-                      <button
-                        key={section}
-                        type="button"
-                        onClick={() => setActiveSettingsSection(section)}
-                        className={`h-10 rounded-lg border px-3 text-sm font-medium transition-all ${
-                          activeSettingsSection === section
-                            ? "border-lime-400 bg-lime-500 text-zinc-900"
-                            : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:border-zinc-600 hover:bg-zinc-700"
-                        }`}
-                      >
-                        {section === "privacy"
-                          ? t("privacy")
-                          : section === "security"
-                            ? t("security")
-                            : t("appearance")}
-                      </button>
-                    ))}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-900">
+                <div className="sticky top-0 z-10 border-b border-zinc-700 bg-zinc-900 px-4 py-4 sm:px-6">
+                  <div className="mx-auto w-full max-w-5xl">
+                    <div>
+                      <h2 className="text-xl font-semibold text-zinc-100">{t("settings")}</h2>
+                      <p className="mt-1 text-sm text-zinc-400">{t("onboardingDescription")}</p>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-950 p-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        {(["privacy", "security", "appearance"] as const).map((section) => (
+                          <button
+                            key={section}
+                            type="button"
+                            onClick={() => setActiveSettingsSection(section)}
+                            className={`h-10 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                              activeSettingsSection === section
+                                ? "border-violet-500 bg-violet-500 text-zinc-50"
+                                : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
+                            }`}
+                          >
+                            {section === "privacy"
+                              ? t("privacy")
+                              : section === "security"
+                                ? t("security")
+                                : t("appearance")}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+                  <div className="mx-auto w-full max-w-5xl space-y-4 pb-8">
                   {activeSettingsSection === "privacy" ? (
-                  <section className="border-b border-zinc-700 px-4 py-4 sm:px-6">
-                    <div className="mt-3 space-y-3">
-                      <div className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5">
+                  <section className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-4 sm:px-5">
+                    <div className="mb-4 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5">
+                      <p className="text-sm font-semibold text-zinc-100">{t("privacy")}</p>
+                      <p className="mt-1 text-xs text-zinc-400">{t("privacyScopeHint")}</p>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4">
                         <p className="text-sm font-medium text-zinc-100">{t("lastSeenVisibility")}</p>
-                        <p className="mt-0.5 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
-                        <div className="mt-2">
+                        <p className="mt-1 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
+                        <div className="mt-3">
                           <Select
                             value={currentLastSeenVisibility}
                             onValueChange={(value) => {
@@ -4280,17 +8482,17 @@ export function WebMessenger({
                               }
                             }}
                           >
-                            <SelectTrigger className="h-10 w-full border-zinc-700 bg-zinc-800 text-zinc-100 hover:border-lime-500 hover:bg-zinc-700 focus-visible:border-lime-500 focus-visible:ring-lime-500">
+                            <SelectTrigger className={`h-10 w-full ${unifiedSelectTriggerClassName}`}>
                               <SelectValue className="text-zinc-100">
                                 {(value) => getPrivacyVisibilityLabel(value)}
                               </SelectValue>
                             </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-800 text-zinc-100 shadow-xl">
+                            <SelectContent className={unifiedSelectContentClassName}>
                               {privacyVisibilityOptions.map((scope) => (
                                 <SelectItem
                                   key={`last-seen-${scope}`}
                                   value={scope}
-                                  className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 focus:**:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900 data-highlighted:**:text-zinc-900"
+                                  className={unifiedSelectItemClassName}
                                 >
                                   {t(scope)}
                                 </SelectItem>
@@ -4299,7 +8501,7 @@ export function WebMessenger({
                           </Select>
                         </div>
                         {currentLastSeenVisibility === "selected" ? (
-                          <div className="mt-2 rounded-md border border-zinc-700 bg-zinc-900/60 p-2">
+                          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 p-2.5">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-xs text-zinc-300">
                                 {`${t("selectedPeople")}: ${currentLastSeenAllowedUserIds.length}`}
@@ -4310,7 +8512,7 @@ export function WebMessenger({
                                   setPrivacyPickerField("lastSeen");
                                   setPrivacyPickerQuery("");
                                 }}
-                                className="h-8 rounded-md border border-zinc-600 bg-zinc-700 px-3 text-xs text-zinc-100 hover:bg-zinc-600"
+                                className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
                               >
                                 {t("choosePeople")}
                               </Button>
@@ -4318,10 +8520,10 @@ export function WebMessenger({
                           </div>
                         ) : null}
                       </div>
-                      <div className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5">
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4">
                         <p className="text-sm font-medium text-zinc-100">{t("avatarVisibility")}</p>
-                        <p className="mt-0.5 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
-                        <div className="mt-2">
+                        <p className="mt-1 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
+                        <div className="mt-3">
                           <Select
                             value={currentAvatarVisibility}
                             onValueChange={(value) => {
@@ -4334,17 +8536,17 @@ export function WebMessenger({
                               }
                             }}
                           >
-                            <SelectTrigger className="h-10 w-full border-zinc-700 bg-zinc-800 text-zinc-100 hover:border-lime-500 hover:bg-zinc-700 focus-visible:border-lime-500 focus-visible:ring-lime-500">
+                            <SelectTrigger className={`h-10 w-full ${unifiedSelectTriggerClassName}`}>
                               <SelectValue className="text-zinc-100">
                                 {(value) => getPrivacyVisibilityLabel(value)}
                               </SelectValue>
                             </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-800 text-zinc-100 shadow-xl">
+                            <SelectContent className={unifiedSelectContentClassName}>
                               {privacyVisibilityOptions.map((scope) => (
                                 <SelectItem
                                   key={`avatar-${scope}`}
                                   value={scope}
-                                  className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 focus:**:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900 data-highlighted:**:text-zinc-900"
+                                  className={unifiedSelectItemClassName}
                                 >
                                   {t(scope)}
                                 </SelectItem>
@@ -4353,7 +8555,7 @@ export function WebMessenger({
                           </Select>
                         </div>
                         {currentAvatarVisibility === "selected" ? (
-                          <div className="mt-2 rounded-md border border-zinc-700 bg-zinc-900/60 p-2">
+                          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 p-2.5">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-xs text-zinc-300">
                                 {`${t("selectedPeople")}: ${currentAvatarAllowedUserIds.length}`}
@@ -4364,7 +8566,7 @@ export function WebMessenger({
                                   setPrivacyPickerField("avatar");
                                   setPrivacyPickerQuery("");
                                 }}
-                                className="h-8 rounded-md border border-zinc-600 bg-zinc-700 px-3 text-xs text-zinc-100 hover:bg-zinc-600"
+                                className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
                               >
                                 {t("choosePeople")}
                               </Button>
@@ -4372,10 +8574,10 @@ export function WebMessenger({
                           </div>
                         ) : null}
                       </div>
-                      <div className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5">
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4">
                         <p className="text-sm font-medium text-zinc-100">{t("bioVisibility")}</p>
-                        <p className="mt-0.5 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
-                        <div className="mt-2">
+                        <p className="mt-1 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
+                        <div className="mt-3">
                           <Select
                             value={currentBioVisibility}
                             onValueChange={(value) => {
@@ -4388,17 +8590,17 @@ export function WebMessenger({
                               }
                             }}
                           >
-                            <SelectTrigger className="h-10 w-full border-zinc-700 bg-zinc-800 text-zinc-100 hover:border-lime-500 hover:bg-zinc-700 focus-visible:border-lime-500 focus-visible:ring-lime-500">
+                            <SelectTrigger className={`h-10 w-full ${unifiedSelectTriggerClassName}`}>
                               <SelectValue className="text-zinc-100">
                                 {(value) => getPrivacyVisibilityLabel(value)}
                               </SelectValue>
                             </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-800 text-zinc-100 shadow-xl">
+                            <SelectContent className={unifiedSelectContentClassName}>
                               {privacyVisibilityOptions.map((scope) => (
                                 <SelectItem
                                   key={`bio-${scope}`}
                                   value={scope}
-                                  className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 focus:**:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900 data-highlighted:**:text-zinc-900"
+                                  className={unifiedSelectItemClassName}
                                 >
                                   {t(scope)}
                                 </SelectItem>
@@ -4407,7 +8609,7 @@ export function WebMessenger({
                           </Select>
                         </div>
                         {currentBioVisibility === "selected" ? (
-                          <div className="mt-2 rounded-md border border-zinc-700 bg-zinc-900/60 p-2">
+                          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 p-2.5">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-xs text-zinc-300">
                                 {`${t("selectedPeople")}: ${currentBioAllowedUserIds.length}`}
@@ -4418,7 +8620,67 @@ export function WebMessenger({
                                   setPrivacyPickerField("bio");
                                   setPrivacyPickerQuery("");
                                 }}
-                                className="h-8 rounded-md border border-zinc-600 bg-zinc-700 px-3 text-xs text-zinc-100 hover:bg-zinc-600"
+                                className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
+                              >
+                                {t("choosePeople")}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4">
+                        <p className="text-sm font-medium text-zinc-100">
+                          {t("birthdayVisibility")}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
+                        <div className="mt-3">
+                          <Select
+                            value={currentBirthdayVisibility}
+                            onValueChange={(value) => {
+                              if (
+                                value === "everyone" ||
+                                value === "selected" ||
+                                value === "nobody"
+                              ) {
+                                updatePrivacyVisibility("birthdayVisibility", value);
+                                if (value === "selected") {
+                                  setPrivacyPickerField("birthday");
+                                  setPrivacyPickerQuery("");
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger className={`h-10 w-full ${unifiedSelectTriggerClassName}`}>
+                              <SelectValue className="text-zinc-100">
+                                {(value) => getPrivacyVisibilityLabel(value)}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className={unifiedSelectContentClassName}>
+                              {privacyVisibilityOptions.map((scope) => (
+                                <SelectItem
+                                  key={`birthday-${scope}`}
+                                  value={scope}
+                                  className={unifiedSelectItemClassName}
+                                >
+                                  {t(scope)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {currentBirthdayVisibility === "selected" ? (
+                          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 p-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-zinc-300">
+                                {`${t("selectedPeople")}: ${currentBirthdayAllowedUserIds.length}`}
+                              </p>
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  setPrivacyPickerField("birthday");
+                                  setPrivacyPickerQuery("");
+                                }}
+                                className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
                               >
                                 {t("choosePeople")}
                               </Button>
@@ -4431,9 +8693,12 @@ export function WebMessenger({
                   ) : null}
 
                   {activeSettingsSection === "security" ? (
-                  <section className="border-b border-zinc-700 px-4 py-4 sm:px-6">
-                    <div className="mt-3 space-y-3">
-                      <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5">
+                  <section className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-4 sm:px-5">
+                    <div className="mb-4 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5">
+                      <p className="text-sm font-semibold text-zinc-100">{t("security")}</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
                         <div>
                           <p className="text-sm font-medium text-zinc-100">{t("pushNotifications")}</p>
                           <p className="mt-0.5 text-xs text-zinc-500">{t("pushNotificationsHint")}</p>
@@ -4444,8 +8709,8 @@ export function WebMessenger({
                           aria-label={t("pushNotifications")}
                         />
                       </div>
-                      <div className="pt-1">
-                        <div className="mt-3 space-y-3">
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <div className="space-y-3">
                           <div>
                             <p className="text-sm font-medium text-zinc-100">
                               {currentUser.name}
@@ -4457,7 +8722,7 @@ export function WebMessenger({
                           <Button
                             type="button"
                             onClick={onLogout}
-                            className="h-10 rounded-lg border border-zinc-600 bg-zinc-700 px-4 text-zinc-100 hover:bg-zinc-600"
+                            className="h-10 rounded-md border border-zinc-600 bg-zinc-800 px-4 text-zinc-100 hover:bg-zinc-700"
                           >
                             {t("logOut")}
                           </Button>
@@ -4468,61 +8733,662 @@ export function WebMessenger({
                   ) : null}
 
                   {activeSettingsSection === "appearance" ? (
-                  <section className="border-b border-zinc-700 px-4 py-4 sm:px-6">
-                    <div className="mt-3 space-y-3">
-                      <div>
-                        <p className="text-sm font-medium text-zinc-100">{t("language")}</p>
-                        <p className="mt-0.5 text-xs text-zinc-500">{t("languageHint")}</p>
-                        <div className="mt-2">
-                          <Select
-                            value={language}
-                            onValueChange={(value) => {
-                              if (value === "en" || value === "ru") {
-                                setLanguage(value);
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-10 w-full border-zinc-700 bg-zinc-800 text-zinc-100 hover:border-lime-500 hover:bg-zinc-700 focus-visible:border-lime-500 focus-visible:ring-lime-500">
-                              <SelectValue className="text-zinc-100" />
-                            </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-800 text-zinc-100 shadow-xl">
-                              <SelectItem
-                                value="en"
-                                className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 focus:**:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900 data-highlighted:**:text-zinc-900"
+                  <section className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-4 sm:px-5">
+                    <div className="mb-4 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5">
+                      <p className="text-sm font-semibold text-zinc-100">{t("appearance")}</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <p className="text-sm font-semibold text-zinc-100">{t("interface")}</p>
+                        <div className="mt-3 divide-y divide-zinc-800">
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("language")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("languageHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={language}
+                                onValueChange={(value) => {
+                                  if (value === "en" || value === "ru") {
+                                    setLanguage(value);
+                                  }
+                                }}
                               >
-                                {t("english")}
-                              </SelectItem>
-                              <SelectItem
-                                value="ru"
-                                className="text-zinc-100 focus:bg-lime-500 focus:text-zinc-900 focus:**:text-zinc-900 data-highlighted:bg-lime-500 data-highlighted:text-zinc-900 data-highlighted:**:text-zinc-900"
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className="text-zinc-100">
+                                    {(value) => getLanguageLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="en" className={unifiedSelectItemClassName}>
+                                    {t("english")}
+                                  </SelectItem>
+                                  <SelectItem value="ru" className={unifiedSelectItemClassName}>
+                                    {t("russian")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("density")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("densityHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={uiDensity}
+                                onValueChange={(value) => {
+                                  if (value === "comfortable" || value === "compact") {
+                                    setUiDensity(value);
+                                  }
+                                }}
                               >
-                                {t("russian")}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className="text-zinc-100">
+                                    {(value) => getDensityLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="comfortable" className={unifiedSelectItemClassName}>
+                                    {t("densityComfortable")}
+                                  </SelectItem>
+                                  <SelectItem value="compact" className={unifiedSelectItemClassName}>
+                                    {t("densityCompact")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("radius")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("radiusHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={uiRadius}
+                                onValueChange={(value) => {
+                                  if (value === "sharp" || value === "normal" || value === "rounded") {
+                                    setUiRadius(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className={`text-zinc-100 ${uiControlTextClass}`}>
+                                    {(value) => getRadiusLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="sharp" className={unifiedSelectItemClassName}>
+                                    {t("radiusSharp")}
+                                  </SelectItem>
+                                  <SelectItem value="normal" className={unifiedSelectItemClassName}>
+                                    {t("radiusNormal")}
+                                  </SelectItem>
+                                  <SelectItem value="rounded" className={unifiedSelectItemClassName}>
+                                    {t("radiusRounded")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5">
-                        <div>
-                          <p className="text-sm font-medium text-zinc-100">{t("messageSound")}</p>
-                          <p className="mt-0.5 text-xs text-zinc-500">{t("messageSoundHint")}</p>
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <p className="text-sm font-semibold text-zinc-100">{t("fontFamily")}</p>
+                        <div className="mt-3 divide-y divide-zinc-800">
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("fontSize")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("fontSizeHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={uiFontSize}
+                                onValueChange={(value) => {
+                                  if (value === "small" || value === "default" || value === "large") {
+                                    setUiFontSize(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className={`text-zinc-100 ${uiControlTextClass}`}>
+                                    {(value) => getFontSizeLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="small" className={unifiedSelectItemClassName}>
+                                    {t("fontSizeSmall")}
+                                  </SelectItem>
+                                  <SelectItem value="default" className={unifiedSelectItemClassName}>
+                                    {t("fontSizeDefault")}
+                                  </SelectItem>
+                                  <SelectItem value="large" className={unifiedSelectItemClassName}>
+                                    {t("fontSizeLarge")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("fontFamily")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("fontFamilyHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={uiFontFamily}
+                                onValueChange={(value) => {
+                                  if (
+                                    value === "default" ||
+                                    value === "modern" ||
+                                    value === "readable" ||
+                                    value === "comfortaa"
+                                  ) {
+                                    setUiFontFamily(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className="text-zinc-100">
+                                    {(value) => getFontFamilyLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="default" className={unifiedSelectItemClassName}>
+                                    {t("fontFamilyDefault")}
+                                  </SelectItem>
+                                  <SelectItem value="modern" className={unifiedSelectItemClassName}>
+                                    {t("fontFamilyModern")}
+                                  </SelectItem>
+                                  <SelectItem value="readable" className={unifiedSelectItemClassName}>
+                                    {t("fontFamilyReadable")}
+                                  </SelectItem>
+                                  <SelectItem value="comfortaa" className={unifiedSelectItemClassName}>
+                                    {t("fontFamilyComfortaa")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
                         </div>
-                        <Switch
-                          checked={messageSoundEnabled}
-                          onCheckedChange={setMessageSoundEnabled}
-                          aria-label={t("messageSound")}
-                        />
+                      </div>
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <p className="text-sm font-semibold text-zinc-100">{t("chatWallpaper")}</p>
+                        <div className="mt-3 divide-y divide-zinc-800">
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("chatWallpaper")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("chatWallpaperHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={globalChatWallpaper}
+                                onValueChange={(value) => {
+                                  if (
+                                    value === "none" ||
+                                    value === "aurora" ||
+                                    value === "sunset" ||
+                                    value === "ocean" ||
+                                    value === "graphite"
+                                  ) {
+                                    setGlobalChatWallpaper(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className="text-zinc-100">
+                                    {(value) => getChatWallpaperLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="none" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperNone")}
+                                  </SelectItem>
+                                  <SelectItem value="aurora" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperAurora")}
+                                  </SelectItem>
+                                  <SelectItem value="sunset" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperSunset")}
+                                  </SelectItem>
+                                  <SelectItem value="ocean" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperOcean")}
+                                  </SelectItem>
+                                  <SelectItem value="graphite" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperGraphite")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("messageSound")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("messageSoundHint")}</p>
+                            </div>
+                            <Switch
+                              checked={messageSoundEnabled}
+                              onCheckedChange={setMessageSoundEnabled}
+                              aria-label={t("messageSound")}
+                            />
+                          </div>
+                          <div className="hidden items-center justify-between gap-4 py-3 md:flex">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("sidebarVisibility")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("sidebarVisibilityHint")}</p>
+                            </div>
+                            <Switch
+                              checked={!isMainSidebarCollapsed}
+                              onCheckedChange={(checked) =>
+                                setIsMainSidebarCollapsed(!checked)
+                              }
+                              aria-label={t("sidebarVisibility")}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </section>
                   ) : null}
 
+                  </div>
                 </div>
               </div>
             ) : null}
           </div>
         </div>
       </section>
+      {shouldShowMobileNavigation ? (
+        <nav
+          aria-label={t("menu")}
+          className="border-t border-zinc-800/90 bg-zinc-950/90 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur-xl md:hidden"
+        >
+          <div
+            className="grid gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${Math.max(1, renderableSidebarItems.length)}, minmax(0, 1fr))`,
+            }}
+          >
+            {renderableSidebarItems.map((item) => {
+              const Icon = item.icon;
+              const active = item.id === activeSidebar;
+
+              return (
+                <button
+                  key={`mobile-nav-${item.id}`}
+                  type="button"
+                  onClick={() => {
+                    if (item.id === "profile") {
+                      openOwnProfile();
+                      return;
+                    }
+                    setIsActiveChatProfileSidebarOpen(false);
+                    setActiveSidebar(item.id);
+                  }}
+                  className={`flex h-12 flex-col items-center justify-center gap-1 rounded-lg border text-[11px] font-medium ${
+                    active
+                      ? "border-violet-500 bg-violet-500 text-zinc-50"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-300"
+                  }`}
+                  aria-label={t(item.id)}
+                >
+                  <Icon className="size-4" />
+                  <span className="leading-none">{t(item.id)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      ) : null}
+      <AlertDialog
+        open={isChatPersonalizationOpen}
+        onOpenChange={(open) => setIsChatPersonalizationOpen(open)}
+      >
+        <AlertDialogContent
+          ref={chatPersonalizationDialogContentRef}
+          className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md"
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {t("chatPersonalization")}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {activeChat ? `${t("chatPersonalizationHint")} - ${activeChat.name}` : t("chatPersonalizationHint")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-3 py-2.5 backdrop-blur-lg">
+              <div>
+                <p className="text-sm font-medium text-zinc-100">{t("muteThisChat")}</p>
+              </div>
+              <Switch
+                checked={Boolean(activeChat?.isMuted)}
+                onCheckedChange={(checked) => {
+                  if (!activeChat) {
+                    return;
+                  }
+                  void setChatMuted(activeChat.id, checked);
+                }}
+                aria-label={t("muteThisChat")}
+              />
+            </div>
+            <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-3 py-2.5 backdrop-blur-lg">
+              <p className="text-sm font-medium text-zinc-100">{t("chatWallpaperPerChat")}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{t("chatWallpaperPerChatHint")}</p>
+              <div className="mt-2 max-w-[220px]">
+                <Select
+                  value={activeChatPersonalization.wallpaper}
+                  onValueChange={(value) => {
+                    if (
+                      value === "inherit" ||
+                      value === "none" ||
+                      value === "aurora" ||
+                      value === "sunset" ||
+                      value === "ocean" ||
+                      value === "graphite"
+                    ) {
+                      updateActiveChatPersonalization({ wallpaper: value });
+                    }
+                  }}
+                >
+                  <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                    <SelectValue className="text-zinc-100">
+                      {(value) => getChatWallpaperLabel(value)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent
+                    className={unifiedSelectContentClassName}
+                    container={chatPersonalizationDialogContentRef}
+                    alignItemWithTrigger={false}
+                  >
+                    <SelectItem value="inherit" className={unifiedSelectItemClassName}>
+                      {t("inheritGlobal")}
+                    </SelectItem>
+                    <SelectItem value="none" className={unifiedSelectItemClassName}>
+                      {t("wallpaperNone")}
+                    </SelectItem>
+                    <SelectItem value="aurora" className={unifiedSelectItemClassName}>
+                      {t("wallpaperAurora")}
+                    </SelectItem>
+                    <SelectItem value="sunset" className={unifiedSelectItemClassName}>
+                      {t("wallpaperSunset")}
+                    </SelectItem>
+                    <SelectItem value="ocean" className={unifiedSelectItemClassName}>
+                      {t("wallpaperOcean")}
+                    </SelectItem>
+                    <SelectItem value="graphite" className={unifiedSelectItemClassName}>
+                      {t("wallpaperGraphite")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-3 py-2.5 backdrop-blur-lg">
+              <p className="text-sm font-medium text-zinc-100">{t("chatFontSize")}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{t("chatFontSizeHint")}</p>
+              <div className="mt-2 max-w-[220px]">
+                <Select
+                  value={activeChatPersonalization.fontSize}
+                  onValueChange={(value) => {
+                    if (
+                      value === "inherit" ||
+                      value === "small" ||
+                      value === "default" ||
+                      value === "large"
+                    ) {
+                      updateActiveChatPersonalization({ fontSize: value });
+                    }
+                  }}
+                >
+                  <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                    <SelectValue className={`text-zinc-100 ${uiControlTextClass}`}>
+                      {(value) => getChatFontSizeSettingLabel(value)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent
+                    className={unifiedSelectContentClassName}
+                    container={chatPersonalizationDialogContentRef}
+                    alignItemWithTrigger={false}
+                  >
+                    <SelectItem value="inherit" className={unifiedSelectItemClassName}>
+                      {t("inheritGlobal")}
+                    </SelectItem>
+                    <SelectItem value="small" className={unifiedSelectItemClassName}>
+                      {t("fontSizeSmall")}
+                    </SelectItem>
+                    <SelectItem value="default" className={unifiedSelectItemClassName}>
+                      {t("fontSizeDefault")}
+                    </SelectItem>
+                    <SelectItem value="large" className={unifiedSelectItemClassName}>
+                      {t("fontSizeLarge")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-3 py-2.5 backdrop-blur-lg">
+              <div>
+                <p className="text-sm font-medium text-zinc-100">{t("autoLoadMedia")}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">{t("autoLoadMediaHint")}</p>
+              </div>
+              <Switch
+                checked={activeChatAutoLoadMediaEnabled}
+                onCheckedChange={(checked) =>
+                  updateActiveChatPersonalization({ autoLoadMedia: checked })
+                }
+                aria-label={t("autoLoadMedia")}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:!text-zinc-100">
+              {t("cancel")}
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={isDeleteChatDialogOpen}
+        onOpenChange={(open) => {
+          setIsDeleteChatDialogOpen(open);
+          if (!open) {
+            setChatIdToConfirmDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {t("deleteChatConfirmTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {t("deleteChatConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:!text-zinc-100">
+              {t("cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="h-10 rounded-lg border border-red-500/70 bg-red-500/20 text-red-100 hover:bg-red-500/30 hover:!text-zinc-100"
+              onClick={() => {
+                if (!chatIdToConfirmDelete) {
+                  return;
+                }
+                setIsDeleteChatDialogOpen(false);
+                void deleteChat(chatIdToConfirmDelete);
+                setChatIdToConfirmDelete(null);
+              }}
+            >
+              {t("deleteChatAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={isPersonalizationOnboardingOpen}>
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {t("onboardingTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {t("onboardingDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-100">{t("language")}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{t("languageHint")}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={() => setLanguage("en")}
+                  className={`h-10 rounded-lg border ${
+                    language === "en"
+                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("english")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setLanguage("ru")}
+                  className={`h-10 rounded-lg border ${
+                    language === "ru"
+                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("russian")}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-zinc-100">{t("density")}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{t("densityHint")}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={() => setUiDensity("comfortable")}
+                  className={`h-10 rounded-lg border ${
+                    uiDensity === "comfortable"
+                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("densityComfortable")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setUiDensity("compact")}
+                  className={`h-10 rounded-lg border ${
+                    uiDensity === "compact"
+                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("densityCompact")}
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-3 py-2.5 backdrop-blur-lg">
+              <div>
+                <p className="text-sm font-medium text-zinc-100">{t("messageSound")}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">{t("messageSoundHint")}</p>
+              </div>
+              <Switch
+                checked={messageSoundEnabled}
+                onCheckedChange={setMessageSoundEnabled}
+                aria-label={t("messageSound")}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogAction
+              className="h-10 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
+              onClick={() => {
+                window.localStorage.setItem(
+                  PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY,
+                  "1"
+                );
+                setIsPersonalizationOnboardingOpen(false);
+              }}
+            >
+              {t("onboardingApply")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={isShareContactDialogOpen}
+        onOpenChange={(open) => {
+          setIsShareContactDialogOpen(open);
+          if (!open) {
+            setShareContactQuery("");
+          }
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {t("shareContact")}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {t("selectChatToShareContact")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                placeholder={t("searchChat")}
+                className="h-10 rounded-lg border-zinc-700 bg-zinc-800 pl-9 text-zinc-100 placeholder:text-zinc-400"
+                value={shareContactQuery}
+                onChange={(event) => setShareContactQuery(event.target.value)}
+              />
+            </div>
+            <div className="max-h-72 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+              {shareContactTargetChats.length > 0 ? (
+                shareContactTargetChats.map((chat) => (
+                  <button
+                    key={`share-contact-chat-${chat.id}`}
+                    type="button"
+                    onClick={() => void sendSharedContactToChat(chat.id)}
+                    disabled={isSharingContact}
+                    className="flex w-full items-center justify-between rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-left text-sm text-zinc-100 hover:border-zinc-600 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{chat.name}</span>
+                      <span className="block truncate text-xs text-zinc-400">
+                        {chat.username}
+                      </span>
+                    </span>
+                    <ShareContactIcon className="size-4 shrink-0 text-zinc-300" />
+                  </button>
+                ))
+              ) : (
+                <p className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-400">
+                  {t("noChatsOrUsersFound")}
+                </p>
+              )}
+            </div>
+          </div>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel
+              disabled={isSharingContact}
+              className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+            >
+              {t("cancel")}
+            </AlertDialogCancel>
+            <div className="flex h-10 items-center px-2 text-xs text-zinc-400">
+              {isSharingContact ? t("sharingContact") : ""}
+            </div>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={privacyPickerField !== null}
         onOpenChange={(open) => {
@@ -4532,7 +9398,7 @@ export function WebMessenger({
           }
         }}
       >
-        <AlertDialogContent className="!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 relative grid h-[min(70vh,560px)] w-[min(92vw,520px)] max-w-none grid-rows-[auto_auto_1fr] border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-2xl">
+        <AlertDialogContent className="!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 relative grid h-[min(70vh,560px)] w-[min(92vw,520px)] max-w-none grid-rows-[auto_auto_1fr] border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
           <button
             type="button"
             onClick={() => {
@@ -4540,7 +9406,7 @@ export function WebMessenger({
               setPrivacyPickerQuery("");
             }}
             aria-label={t("closeViewer")}
-            className="absolute right-4 top-4 rounded-md border border-zinc-600 bg-zinc-800 p-1.5 text-zinc-300 hover:border-lime-500 hover:text-lime-300"
+            className="absolute right-4 top-4 rounded-md border border-zinc-600 bg-zinc-800 p-1.5 text-zinc-300 hover:border-violet-500 hover:text-violet-300"
           >
             <X className="size-4" />
           </button>
@@ -4550,6 +9416,8 @@ export function WebMessenger({
                 ? t("lastSeenVisibility")
                 : privacyPickerField === "avatar"
                   ? t("avatarVisibility")
+                : privacyPickerField === "birthday"
+                  ? t("birthdayVisibility")
                   : t("bioVisibility")}
             </AlertDialogTitle>
             <AlertDialogDescription className="hidden" />
@@ -4584,14 +9452,14 @@ export function WebMessenger({
                       }}
                       className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm ${
                         selected
-                          ? "border-lime-500/70 bg-zinc-700 text-zinc-100"
+                          ? "border-violet-500/70 bg-zinc-700 text-zinc-100"
                           : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-700"
                       }`}
                     >
                       <span className="truncate">
                         {user.name} (@{user.username})
                       </span>
-                      {selected ? <Check className="size-4 text-lime-400" /> : null}
+                      {selected ? <Check className="size-4 text-violet-400" /> : null}
                     </button>
                   );
                 })
@@ -4603,12 +9471,47 @@ export function WebMessenger({
       </main>
       <audio ref={remoteCallAudioRef} autoPlay playsInline className="hidden" />
       {callNotice ? (
-        <div className="pointer-events-none fixed left-1/2 top-4 z-[120] -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900/95 px-4 py-2 text-sm text-zinc-100 shadow-xl">
+        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[120] -translate-x-1/2 rounded-lg border border-zinc-800/90 bg-zinc-950/85 px-4 py-2 text-sm text-zinc-100 shadow-xl ring-1 ring-white/5 backdrop-blur-xl">
           {callNotice}
         </div>
       ) : null}
+      {toast ? (
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-1/2 z-[125] flex w-[min(92vw,560px)] -translate-x-1/2 items-center justify-between gap-3 overflow-hidden rounded-xl border border-zinc-600 bg-zinc-900/95 px-4 py-3 text-sm text-zinc-100 shadow-2xl backdrop-blur">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-violet-400/80"
+            style={{
+              width: `${toastProgress}%`,
+              transition: `width ${UNDO_WINDOW_MS}ms linear`,
+            }}
+          />
+          <p className="min-w-0 flex-1 truncate">{toast.message}</p>
+          <div className="flex items-center gap-2">
+            {toast.action ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 rounded-md border border-zinc-500 !bg-zinc-800 px-3 text-xs font-medium text-zinc-100 hover:!border-violet-500 hover:!bg-zinc-700 hover:!text-violet-300"
+                onClick={toast.action.onClick}
+              >
+                {toast.action.label}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={t("cancel")}
+              className="h-8 w-8 rounded-md border border-zinc-600 !bg-zinc-800 text-zinc-300 hover:!border-white/70 hover:!bg-zinc-700 hover:!text-white"
+              onClick={dismissToast}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {callSession ? (
-        <div className="fixed bottom-4 right-4 z-[120] w-[min(92vw,360px)] rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4 text-zinc-100 shadow-2xl backdrop-blur">
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-[120] w-[min(92vw,360px)] rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4 text-zinc-100 shadow-2xl backdrop-blur">
           <p className="text-sm font-semibold">{callSession.peerName}</p>
           <p className="mt-1 text-xs text-zinc-400">{callStatusText}</p>
           <div className="mt-3 flex items-center gap-2">
@@ -4624,7 +9527,7 @@ export function WebMessenger({
                 <Button
                   type="button"
                   onClick={() => void acceptIncomingCall()}
-                  className="h-10 flex-1 rounded-lg bg-lime-500 text-zinc-900 hover:bg-lime-400"
+                  className="h-10 flex-1 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
                 >
                   {t("acceptCall")}
                 </Button>
@@ -4647,7 +9550,7 @@ export function WebMessenger({
           <button
             type="button"
             aria-label={t("closeViewer")}
-            className="absolute right-4 top-4 rounded-full border border-zinc-600 bg-zinc-900/80 p-2 text-zinc-200 hover:border-lime-500 hover:text-lime-300"
+            className="absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300"
             onClick={closeImageViewer}
           >
             <X className="size-5" />
@@ -4656,7 +9559,7 @@ export function WebMessenger({
             href={viewerImage.url}
             download={viewerImage.name}
             aria-label={t("download")}
-            className="absolute right-16 top-4 rounded-full border border-zinc-600 bg-zinc-900/80 p-2 text-zinc-200 hover:border-lime-500 hover:text-lime-300"
+            className="absolute right-16 top-[calc(env(safe-area-inset-top)+1rem)] rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300"
           >
             <Download className="size-5" />
           </a>
@@ -4665,7 +9568,7 @@ export function WebMessenger({
               <button
                 type="button"
                 aria-label={t("previousImage")}
-                className="absolute left-3 rounded-full border border-zinc-600 bg-zinc-900/80 p-2 text-zinc-200 hover:border-lime-500 hover:text-lime-300 sm:left-6"
+                className="absolute left-3 rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300 sm:left-6"
                 onClick={showPreviousImage}
               >
                 <ArrowLeft className="size-5" />
@@ -4673,7 +9576,7 @@ export function WebMessenger({
               <button
                 type="button"
                 aria-label={t("nextImage")}
-                className="absolute right-3 rounded-full border border-zinc-600 bg-zinc-900/80 p-2 text-zinc-200 hover:border-lime-500 hover:text-lime-300 sm:right-6"
+                className="absolute right-3 rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300 sm:right-6"
                 onClick={showNextImage}
               >
                 <ArrowRight className="size-5" />
@@ -4695,6 +9598,100 @@ export function WebMessenger({
           </div>
         </div>
       ) : null}
+      <style jsx global>{`
+        html[data-clore-font-family="default"] body {
+          font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        }
+        html[data-clore-font-family="modern"] body {
+          font-family: "Avenir Next", "Futura", "Trebuchet MS", "Segoe UI", sans-serif;
+        }
+        html[data-clore-font-family="readable"] body {
+          font-family: "Verdana", "Tahoma", "Segoe UI", sans-serif;
+        }
+        html[data-clore-font-family="comfortaa"] body {
+          font-family: var(--font-comfortaa), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        html[data-clore-font-size="small"] body {
+          font-size: 12px;
+        }
+        html[data-clore-font-size="default"] body {
+          font-size: 14px;
+        }
+        html[data-clore-font-size="large"] body {
+          font-size: 16px;
+        }
+        html[data-clore-font-size="small"] .text-xs { font-size: 0.65rem !important; line-height: 1rem !important; }
+        html[data-clore-font-size="small"] .text-sm { font-size: 0.75rem !important; line-height: 1.1rem !important; }
+        html[data-clore-font-size="small"] .text-base { font-size: 0.85rem !important; line-height: 1.2rem !important; }
+        html[data-clore-font-size="small"] .text-lg { font-size: 0.95rem !important; line-height: 1.3rem !important; }
+        html[data-clore-font-size="small"] .text-\[11px\] { font-size: 0.65rem !important; }
+        html[data-clore-font-size="small"] .text-\[12px\] { font-size: 0.7rem !important; }
+        html[data-clore-font-size="small"] .text-\[13px\] { font-size: 0.75rem !important; }
+        html[data-clore-font-size="small"] .text-\[15px\] { font-size: 0.85rem !important; }
+        html[data-clore-font-size="small"] .text-\[16px\] { font-size: 0.9rem !important; }
+        html[data-clore-font-size="small"] .text-\[17px\] { font-size: 0.95rem !important; }
+
+        html[data-clore-font-size="large"] .text-xs { font-size: 0.9rem !important; line-height: 1.35rem !important; }
+        html[data-clore-font-size="large"] .text-sm { font-size: 1rem !important; line-height: 1.5rem !important; }
+        html[data-clore-font-size="large"] .text-base { font-size: 1.1rem !important; line-height: 1.6rem !important; }
+        html[data-clore-font-size="large"] .text-lg { font-size: 1.2rem !important; line-height: 1.7rem !important; }
+        html[data-clore-font-size="large"] .text-\[11px\] { font-size: 0.9rem !important; }
+        html[data-clore-font-size="large"] .text-\[12px\] { font-size: 0.95rem !important; }
+        html[data-clore-font-size="large"] .text-\[13px\] { font-size: 1rem !important; }
+        html[data-clore-font-size="large"] .text-\[15px\] { font-size: 1.1rem !important; }
+        html[data-clore-font-size="large"] .text-\[16px\] { font-size: 1.15rem !important; }
+        html[data-clore-font-size="large"] .text-\[17px\] { font-size: 1.2rem !important; }
+
+        .clore-chat-font-small .text-xs { font-size: 0.65rem !important; line-height: 1rem !important; }
+        .clore-chat-font-small .text-sm { font-size: 0.75rem !important; line-height: 1.1rem !important; }
+        .clore-chat-font-small .text-base { font-size: 0.85rem !important; line-height: 1.2rem !important; }
+        .clore-chat-font-small .text-lg { font-size: 0.95rem !important; line-height: 1.3rem !important; }
+        .clore-chat-font-small .text-\[11px\] { font-size: 0.65rem !important; }
+        .clore-chat-font-small .text-\[12px\] { font-size: 0.7rem !important; }
+        .clore-chat-font-small .text-\[13px\] { font-size: 0.75rem !important; }
+        .clore-chat-font-small .text-\[15px\] { font-size: 0.85rem !important; }
+        .clore-chat-font-small .text-\[16px\] { font-size: 0.9rem !important; }
+        .clore-chat-font-small .text-\[17px\] { font-size: 0.95rem !important; }
+
+        .clore-chat-font-large .text-xs { font-size: 0.9rem !important; line-height: 1.35rem !important; }
+        .clore-chat-font-large .text-sm { font-size: 1rem !important; line-height: 1.5rem !important; }
+        .clore-chat-font-large .text-base { font-size: 1.1rem !important; line-height: 1.6rem !important; }
+        .clore-chat-font-large .text-lg { font-size: 1.2rem !important; line-height: 1.7rem !important; }
+        .clore-chat-font-large .text-\[11px\] { font-size: 0.9rem !important; }
+        .clore-chat-font-large .text-\[12px\] { font-size: 0.95rem !important; }
+        .clore-chat-font-large .text-\[13px\] { font-size: 1rem !important; }
+        .clore-chat-font-large .text-\[15px\] { font-size: 1.1rem !important; }
+        .clore-chat-font-large .text-\[16px\] { font-size: 1.15rem !important; }
+        .clore-chat-font-large .text-\[17px\] { font-size: 1.2rem !important; }
+
+        html[data-clore-radius="sharp"] .rounded-sm { border-radius: 0.2rem !important; }
+        html[data-clore-radius="sharp"] .rounded-md { border-radius: 0.25rem !important; }
+        html[data-clore-radius="sharp"] .rounded-lg { border-radius: 0.35rem !important; }
+        html[data-clore-radius="sharp"] .rounded-xl { border-radius: 0.45rem !important; }
+        html[data-clore-radius="sharp"] .rounded-2xl { border-radius: 0.55rem !important; }
+        html[data-clore-radius="sharp"] .rounded-3xl { border-radius: 0.7rem !important; }
+
+        html[data-clore-radius="normal"] .rounded-sm { border-radius: 0.25rem !important; }
+        html[data-clore-radius="normal"] .rounded-md { border-radius: 0.375rem !important; }
+        html[data-clore-radius="normal"] .rounded-lg { border-radius: 0.5rem !important; }
+        html[data-clore-radius="normal"] .rounded-xl { border-radius: 0.75rem !important; }
+        html[data-clore-radius="normal"] .rounded-2xl { border-radius: 1rem !important; }
+        html[data-clore-radius="normal"] .rounded-3xl { border-radius: 1.5rem !important; }
+
+        html[data-clore-radius="rounded"] .rounded-sm { border-radius: 0.45rem !important; }
+        html[data-clore-radius="rounded"] .rounded-md { border-radius: 0.65rem !important; }
+        html[data-clore-radius="rounded"] .rounded-lg { border-radius: 0.85rem !important; }
+        html[data-clore-radius="rounded"] .rounded-xl { border-radius: 1.1rem !important; }
+        html[data-clore-radius="rounded"] .rounded-2xl { border-radius: 1.4rem !important; }
+        html[data-clore-radius="rounded"] .rounded-3xl { border-radius: 2rem !important; }
+      `}</style>
     </>
   );
 }
+
+
+
+
+
+
