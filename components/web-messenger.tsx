@@ -823,6 +823,17 @@ const translations = {
     aiAssistantSearchMode: "Search mode",
     aiAssistantSearchHint: "Allow web search for up-to-date answers",
     aiAssistantThinking: "Thinking...",
+    callMusicTitle: "Music party",
+    callMusicHint: "Paste a direct audio URL and sync playback for everyone in the call.",
+    callMusicUrlPlaceholder: "https://example.com/track.mp3",
+    callMusicLoad: "Load",
+    callMusicJoin: "Join",
+    callMusicPlay: "Play for all",
+    callMusicPause: "Pause for all",
+    callMusicStop: "Stop for all",
+    callMusicNoTrack: "No track loaded yet",
+    callMusicInvalidUrl: "Enter a valid http(s) audio URL.",
+    callMusicLoadError: "Unable to play this track. Check the URL and CORS policy.",
     onboardingApply: "Apply",
   },
   ru: {
@@ -1116,6 +1127,17 @@ const translations = {
     aiAssistantSearchMode: "Режим поиска",
     aiAssistantSearchHint: "Разрешить веб-поиск для актуальных ответов",
     aiAssistantThinking: "Думаю...",
+    callMusicTitle: "Музыка в звонке",
+    callMusicHint: "Вставьте прямую ссылку на аудио и синхронизируйте воспроизведение для всех.",
+    callMusicUrlPlaceholder: "https://example.com/track.mp3",
+    callMusicLoad: "Загрузить",
+    callMusicJoin: "Подключиться",
+    callMusicPlay: "Играть всем",
+    callMusicPause: "Пауза всем",
+    callMusicStop: "Остановить всем",
+    callMusicNoTrack: "Трек еще не загружен",
+    callMusicInvalidUrl: "Введите корректный http(s) URL аудио.",
+    callMusicLoadError: "Не удалось воспроизвести трек. Проверьте ссылку и CORS.",
     onboardingApply: "Применить",
   },
 } as const;
@@ -1189,12 +1211,28 @@ type SendAttachmentPayload = {
   url: string;
 };
 
-type CallSignalType = "offer" | "answer" | "ice" | "hangup" | "reject";
+type CallSignalType =
+  | "offer"
+  | "answer"
+  | "ice"
+  | "hangup"
+  | "reject"
+  | "music-sync";
+
+type CallMusicSyncAction = "load" | "play" | "pause" | "stop";
+
+type CallMusicSyncPayload = {
+  action: CallMusicSyncAction;
+  url?: string;
+  title?: string;
+  positionMs?: number;
+};
 
 type CallSignalData = {
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   reason?: string;
+  music?: CallMusicSyncPayload;
 };
 
 type CallSignal = {
@@ -1219,6 +1257,11 @@ type CallSessionState = {
   initiatorName: string;
   participantUserIds: string[];
   startedAt: number | null;
+};
+
+type CallMusicTrack = {
+  url: string;
+  title: string;
 };
 
 function formatChatTime(timestamp: number, language: AppLanguage): string {
@@ -1781,6 +1824,70 @@ function parseSignalReason(value: unknown): string {
   return typeof value.reason === "string" ? value.reason : "";
 }
 
+function normalizeCallMusicUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function getCallMusicTitle(url: string): string {
+  const mediaName = getMediaNameFromUrl(url);
+  if (mediaName && mediaName !== "media") {
+    return mediaName;
+  }
+  try {
+    return new URL(url).hostname || "Track";
+  } catch {
+    return "Track";
+  }
+}
+
+function parseSignalMusicSync(value: unknown): CallMusicSyncPayload | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const musicValue = value.music;
+  if (!isRecord(musicValue)) {
+    return null;
+  }
+
+  const action = musicValue.action;
+  if (action !== "load" && action !== "play" && action !== "pause" && action !== "stop") {
+    return null;
+  }
+
+  const url = typeof musicValue.url === "string" ? normalizeCallMusicUrl(musicValue.url) : "";
+  const title =
+    typeof musicValue.title === "string" && musicValue.title.trim().length > 0
+      ? musicValue.title.trim()
+      : "";
+  const positionMsValue = musicValue.positionMs;
+  const positionMs =
+    typeof positionMsValue === "number" &&
+    Number.isFinite(positionMsValue) &&
+    positionMsValue >= 0
+      ? Math.round(positionMsValue)
+      : undefined;
+
+  return {
+    action,
+    url: url || undefined,
+    title: title || undefined,
+    positionMs,
+  };
+}
+
 function formatCallDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -2012,6 +2119,7 @@ export function WebMessenger({
   const emojiCloseTimerRef = useRef<number | null>(null);
   const messageSoundRef = useRef<HTMLAudioElement | null>(null);
   const callOverlayRef = useRef<HTMLDivElement | null>(null);
+  const callMusicAudioRef = useRef<HTMLAudioElement | null>(null);
   const localCallStreamRef = useRef<MediaStream | null>(null);
   const screenShareStreamRef = useRef<MediaStream | null>(null);
   const callPeerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -2134,7 +2242,7 @@ export function WebMessenger({
       return [];
     }
   });
-  const [aiSearchEnabled] = useState<boolean>(() => {
+  const [aiSearchEnabled, setAiSearchEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") {
       return false;
     }
@@ -2449,6 +2557,10 @@ export function WebMessenger({
   const [isCallSoundMuted, setIsCallSoundMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isCallFullscreen, setIsCallFullscreen] = useState(false);
+  const [callMusicUrlDraft, setCallMusicUrlDraft] = useState("");
+  const [callMusicTrack, setCallMusicTrack] = useState<CallMusicTrack | null>(null);
+  const [isCallMusicPlaying, setIsCallMusicPlaying] = useState(false);
+  const [callMusicError, setCallMusicError] = useState("");
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("privacy");
@@ -3879,6 +3991,19 @@ export function WebMessenger({
     [isCallSoundMuted]
   );
 
+  const resetCallMusicResources = useCallback(() => {
+    const audio = callMusicAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    setCallMusicTrack(null);
+    setCallMusicUrlDraft("");
+    setIsCallMusicPlaying(false);
+    setCallMusicError("");
+  }, []);
+
   const closeCallResources = useCallback(() => {
     for (const connection of callPeerConnectionsRef.current.values()) {
       connection.onicecandidate = null;
@@ -3918,12 +4043,13 @@ export function WebMessenger({
     setIsScreenSharing(false);
     setIsCallMicMuted(false);
     setIsCallSoundMuted(false);
+    resetCallMusicResources();
 
     if (typeof document !== "undefined" && document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
     }
     setIsCallFullscreen(false);
-  }, []);
+  }, [resetCallMusicResources]);
 
   const closeCallSession = useCallback(
     (notice?: string) => {
@@ -3961,6 +4087,223 @@ export function WebMessenger({
       }
     },
     [currentUser.id]
+  );
+
+  const sendCallMusicSync = useCallback(
+    async (payload: CallMusicSyncPayload) => {
+      const currentSession = callSessionRef.current;
+      if (!currentSession) {
+        return;
+      }
+
+      const peerUserIds = [...new Set(currentSession.participantUserIds)]
+        .filter((peerUserId) => peerUserId !== currentUser.id);
+      if (peerUserIds.length === 0) {
+        return;
+      }
+
+      await Promise.all(
+        peerUserIds.map((peerUserId) =>
+          sendCallSignal(currentSession.chatId, peerUserId, "music-sync", {
+            music: payload,
+          })
+        )
+      );
+    },
+    [currentUser.id, sendCallSignal]
+  );
+
+  const loadCallMusicTrack = useCallback(
+    async (rawUrl: string, shouldSyncToPeers: boolean) => {
+      const normalizedUrl = normalizeCallMusicUrl(rawUrl);
+      if (!normalizedUrl) {
+        setCallMusicError(t("callMusicInvalidUrl"));
+        return false;
+      }
+
+      const audio = callMusicAudioRef.current;
+      if (!audio) {
+        return false;
+      }
+
+      const title = getCallMusicTitle(normalizedUrl);
+      setCallMusicTrack({ url: normalizedUrl, title });
+      setCallMusicUrlDraft(normalizedUrl);
+      setCallMusicError("");
+      setIsCallMusicPlaying(false);
+
+      if (audio.src !== normalizedUrl) {
+        audio.src = normalizedUrl;
+      }
+      audio.currentTime = 0;
+      audio.pause();
+
+      if (shouldSyncToPeers) {
+        void sendCallMusicSync({
+          action: "load",
+          url: normalizedUrl,
+          title,
+          positionMs: 0,
+        });
+      }
+
+      return true;
+    },
+    [sendCallMusicSync, t]
+  );
+
+  const joinCallMusicLocally = useCallback(async () => {
+    const audio = callMusicAudioRef.current;
+    if (!audio || !audio.src) {
+      return;
+    }
+    setCallMusicError("");
+    try {
+      await audio.play();
+    } catch {
+      setCallMusicError(t("callMusicLoadError"));
+    }
+  }, [t]);
+
+  const playCallMusicForAll = useCallback(async () => {
+    const audio = callMusicAudioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    const existingTrack = callMusicTrack;
+    const track =
+      existingTrack ??
+      (() => {
+        const normalizedUrl = normalizeCallMusicUrl(callMusicUrlDraft);
+        if (!normalizedUrl) {
+          return null;
+        }
+        return {
+          url: normalizedUrl,
+          title: getCallMusicTitle(normalizedUrl),
+        } satisfies CallMusicTrack;
+      })();
+
+    if (!track) {
+      setCallMusicError(t("callMusicInvalidUrl"));
+      return;
+    }
+
+    if (!existingTrack || existingTrack.url !== track.url) {
+      setCallMusicTrack(track);
+    }
+    setCallMusicUrlDraft(track.url);
+    setCallMusicError("");
+
+    if (audio.src !== track.url) {
+      audio.src = track.url;
+    }
+
+    try {
+      await audio.play();
+    } catch {
+      setCallMusicError(t("callMusicLoadError"));
+      return;
+    }
+
+    void sendCallMusicSync({
+      action: "play",
+      url: track.url,
+      title: track.title,
+      positionMs: Math.max(0, Math.round(audio.currentTime * 1000)),
+    });
+  }, [callMusicTrack, callMusicUrlDraft, sendCallMusicSync, t]);
+
+  const pauseCallMusicForAll = useCallback(() => {
+    const audio = callMusicAudioRef.current;
+    if (!audio || !audio.src) {
+      return;
+    }
+    audio.pause();
+
+    void sendCallMusicSync({
+      action: "pause",
+      url: callMusicTrack?.url,
+      title: callMusicTrack?.title,
+      positionMs: Math.max(0, Math.round(audio.currentTime * 1000)),
+    });
+  }, [callMusicTrack, sendCallMusicSync]);
+
+  const stopCallMusicForAll = useCallback(() => {
+    const audio = callMusicAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    setIsCallMusicPlaying(false);
+    setCallMusicTrack(null);
+    setCallMusicUrlDraft("");
+    setCallMusicError("");
+
+    void sendCallMusicSync({
+      action: "stop",
+    });
+  }, [sendCallMusicSync]);
+
+  const applyRemoteCallMusicSync = useCallback(
+    async (payload: CallMusicSyncPayload) => {
+      const audio = callMusicAudioRef.current;
+      if (!audio) {
+        return;
+      }
+
+      if (payload.action === "stop") {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+        setIsCallMusicPlaying(false);
+        setCallMusicTrack(null);
+        setCallMusicUrlDraft("");
+        setCallMusicError("");
+        return;
+      }
+
+      const normalizedUrl = payload.url ? normalizeCallMusicUrl(payload.url) : "";
+      if (normalizedUrl) {
+        const title =
+          payload.title && payload.title.trim().length > 0
+            ? payload.title.trim()
+            : getCallMusicTitle(normalizedUrl);
+        setCallMusicTrack({ url: normalizedUrl, title });
+        setCallMusicUrlDraft(normalizedUrl);
+        if (audio.src !== normalizedUrl) {
+          audio.src = normalizedUrl;
+        }
+      }
+
+      if (typeof payload.positionMs === "number" && Number.isFinite(payload.positionMs)) {
+        audio.currentTime = Math.max(0, payload.positionMs / 1000);
+      }
+
+      if (payload.action === "load") {
+        audio.pause();
+        setIsCallMusicPlaying(false);
+        return;
+      }
+
+      if (payload.action === "pause") {
+        audio.pause();
+        setIsCallMusicPlaying(false);
+        return;
+      }
+
+      if (payload.action === "play") {
+        setCallMusicError("");
+        try {
+          await audio.play();
+        } catch {
+          setCallMusicError(t("callMusicLoadError"));
+        }
+      }
+    },
+    [t]
   );
 
   const isCallSupported = useCallback(() => {
@@ -4571,6 +4914,21 @@ export function WebMessenger({
       const isGroupChat = thread?.threadType === "group" || threadMemberIds.length > 1;
       const fromUserName = resolveCallPeerName(fromUserId);
 
+      if (signal.type === "music-sync") {
+        if (!currentSession || currentSession.chatId !== signal.chatId) {
+          return;
+        }
+        if (currentSession.phase === "incoming") {
+          return;
+        }
+        const payload = parseSignalMusicSync(signal.data);
+        if (!payload) {
+          return;
+        }
+        await applyRemoteCallMusicSync(payload);
+        return;
+      }
+
       if (signal.type === "offer") {
         const sdp = parseSignalSdp(signal.data);
         if (!sdp) {
@@ -4755,6 +5113,7 @@ export function WebMessenger({
       }
     },
     [
+      applyRemoteCallMusicSync,
       attachLocalStreamToConnection,
       closeCallSession,
       currentUser.id,
@@ -4813,7 +5172,45 @@ export function WebMessenger({
         void mediaElement.play().catch(() => undefined);
       }
     }
+    const callMusicAudio = callMusicAudioRef.current;
+    if (callMusicAudio) {
+      callMusicAudio.muted = isCallSoundMuted;
+    }
   }, [isCallSoundMuted]);
+
+  useEffect(() => {
+    const audio = callMusicAudioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    const handlePlay = () => {
+      setIsCallMusicPlaying(true);
+      setCallMusicError("");
+    };
+    const handlePause = () => {
+      setIsCallMusicPlaying(false);
+    };
+    const handleEnded = () => {
+      setIsCallMusicPlaying(false);
+    };
+    const handleError = () => {
+      setIsCallMusicPlaying(false);
+      setCallMusicError(t("callMusicLoadError"));
+    };
+
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("error", handleError);
+
+    return () => {
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
+    };
+  }, [t]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -9292,9 +9689,6 @@ export function WebMessenger({
                                   : "border-zinc-700/90 bg-zinc-900/90 text-zinc-100"
                             }`}
                           >
-                            <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] opacity-70">
-                              {message.role === "user" ? t("you") : t("aiAssistantTitle")}
-                            </p>
                             <p className="whitespace-pre-wrap break-words leading-relaxed">
                               {message.content}
                             </p>
@@ -9312,7 +9706,19 @@ export function WebMessenger({
                   }}
                 >
                   <div className="w-full">
-                    <div className="mb-2 flex justify-end">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <label className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-300">
+                        <Search className="size-3.5 text-zinc-400" />
+                        <span className="font-medium text-zinc-200">
+                          {t("aiAssistantSearchMode")}
+                        </span>
+                        <Switch
+                          checked={aiSearchEnabled}
+                          onCheckedChange={setAiSearchEnabled}
+                          aria-label={t("aiAssistantSearchHint")}
+                          size="sm"
+                        />
+                      </label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -11243,6 +11649,87 @@ export function WebMessenger({
                     </div>
                   );
                 })}
+              </div>
+            ) : null}
+
+            {callSession.phase !== "incoming" ? (
+              <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-950/70 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.11em] text-zinc-400">
+                    {t("callMusicTitle")}
+                  </p>
+                  <p className="max-w-[68%] truncate text-xs text-zinc-500">
+                    {callMusicTrack ? callMusicTrack.title : t("callMusicNoTrack")}
+                  </p>
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-500">{t("callMusicHint")}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Input
+                    value={callMusicUrlDraft}
+                    onChange={(event) => {
+                      setCallMusicUrlDraft(event.target.value);
+                      if (callMusicError) {
+                        setCallMusicError("");
+                      }
+                    }}
+                    placeholder={t("callMusicUrlPlaceholder")}
+                    className="h-9 rounded-lg border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => void loadCallMusicTrack(callMusicUrlDraft, true)}
+                    className="h-9 rounded-lg border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:border-primary hover:bg-zinc-700"
+                    disabled={callMusicUrlDraft.trim().length === 0}
+                  >
+                    {t("callMusicLoad")}
+                  </Button>
+                </div>
+                {callMusicError ? (
+                  <p className="mt-2 text-[11px] text-red-300">{callMusicError}</p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => void joinCallMusicLocally()}
+                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                    disabled={!callMusicTrack}
+                  >
+                    {t("callMusicJoin")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => void playCallMusicForAll()}
+                    className="h-8 rounded-lg border border-primary/60 bg-primary/15 px-3 text-xs text-primary hover:bg-primary/25"
+                    disabled={!callMusicTrack && callMusicUrlDraft.trim().length === 0}
+                  >
+                    <Play className="size-3.5" />
+                    {t("callMusicPlay")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={pauseCallMusicForAll}
+                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                    disabled={!callMusicTrack || !isCallMusicPlaying}
+                  >
+                    <Pause className="size-3.5" />
+                    {t("callMusicPause")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={stopCallMusicForAll}
+                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                    disabled={!callMusicTrack}
+                  >
+                    <Square className="size-3.5" />
+                    {t("callMusicStop")}
+                  </Button>
+                </div>
+                <audio ref={callMusicAudioRef} preload="none" className="hidden" />
               </div>
             ) : null}
 
