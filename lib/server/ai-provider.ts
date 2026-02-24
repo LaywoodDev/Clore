@@ -1,5 +1,11 @@
 const DEFAULT_AI_MODEL = "openai/gpt-4o-mini";
 const DEFAULT_AI_BASE_URL = "https://openai.api.proxyapi.ru/v1";
+const DEFAULT_SEARCH_MODELS = [
+  "openai/gpt-4o-mini-search-preview-2025-03-11",
+  "gpt-4o-mini-search-preview-2025-03-11",
+  "openai/gpt-4o-mini-search-preview",
+  "gpt-4o-mini-search-preview",
+];
 
 type EnvEntry = {
   name: string;
@@ -85,17 +91,45 @@ export function getAiProviderConfig(): {
   };
 }
 
-export function buildModelCandidates(modelFromEnv: string): string[] {
-  return Array.from(
-    new Set(
-      [
-        modelFromEnv,
-        modelFromEnv.startsWith("openai/")
-          ? modelFromEnv.slice("openai/".length)
-          : "",
-        "openai/gpt-4o-mini",
-        "gpt-4o-mini",
-      ].filter((value) => value.length > 0)
-    )
-  );
+function isSearchModel(model: string): boolean {
+  return model.toLowerCase().includes("search");
+}
+
+function pushModelVariants(target: string[], model: string) {
+  const normalized = model.trim();
+  if (!normalized) {
+    return;
+  }
+  target.push(normalized);
+  if (normalized.startsWith("openai/")) {
+    target.push(normalized.slice("openai/".length));
+    return;
+  }
+  target.push(`openai/${normalized}`);
+}
+
+export function buildModelCandidates(
+  modelFromEnv: string,
+  searchEnabled: boolean
+): string[] {
+  const candidates: string[] = [];
+  if (searchEnabled) {
+    if (isSearchModel(modelFromEnv)) {
+      pushModelVariants(candidates, modelFromEnv);
+    }
+    for (const model of DEFAULT_SEARCH_MODELS) {
+      pushModelVariants(candidates, model);
+    }
+    if (!isSearchModel(modelFromEnv)) {
+      pushModelVariants(candidates, modelFromEnv);
+    }
+    pushModelVariants(candidates, DEFAULT_AI_MODEL);
+    return Array.from(new Set(candidates));
+  }
+
+  if (!isSearchModel(modelFromEnv)) {
+    pushModelVariants(candidates, modelFromEnv);
+  }
+  pushModelVariants(candidates, DEFAULT_AI_MODEL);
+  return Array.from(new Set(candidates));
 }

@@ -480,6 +480,8 @@ const PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY =
 const CHAT_CLEAR_HISTORY_STORAGE_PREFIX = "clore_chat_clear_history_v1_";
 const CHAT_DRAFTS_STORAGE_PREFIX = "clore_chat_drafts_v1_";
 const AI_ASSISTANT_HISTORY_STORAGE_KEY_PREFIX = "clore_ai_assistant_history_v1_";
+const AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX =
+  "clore_ai_assistant_search_mode_v1_";
 const INCOMING_MESSAGE_SOUND_PATH = "/sounds/meet-message-sound-1.mp3";
 const MAX_PINNED_CHATS = 5;
 const MIN_BIRTH_YEAR = 1900;
@@ -763,6 +765,8 @@ const translations = {
     aiAssistantEmptyTitle: "Start a new conversation",
     aiAssistantEmptyHint: "Ask a question and ChatGPT will answer right here.",
     aiAssistantClear: "Clear chat",
+    aiAssistantSearchMode: "Search mode",
+    aiAssistantSearchHint: "Allow web search for up-to-date answers",
     aiAssistantThinking: "Thinking...",
     onboardingApply: "Apply",
   },
@@ -1035,6 +1039,8 @@ const translations = {
     aiAssistantEmptyTitle: "Начните новый диалог",
     aiAssistantEmptyHint: "Задайте вопрос, и ChatGPT ответит прямо здесь.",
     aiAssistantClear: "Очистить чат",
+    aiAssistantSearchMode: "Режим поиска",
+    aiAssistantSearchHint: "Разрешить веб-поиск для актуальных ответов",
     aiAssistantThinking: "Думаю...",
     onboardingApply: "Применить",
   },
@@ -2036,6 +2042,20 @@ export function WebMessenger({
       return [];
     }
   });
+  const [aiSearchEnabled, setAiSearchEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    try {
+      return (
+        window.localStorage.getItem(
+          `${AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX}${currentUser.id}`
+        ) === "1"
+      );
+    } catch {
+      return false;
+    }
+  });
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState("");
   const [query, setQuery] = useState("");
@@ -2378,6 +2398,15 @@ export function WebMessenger({
     );
   }, [aiMessages, currentUser.id]);
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      `${AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      aiSearchEnabled ? "1" : "0"
+    );
+  }, [aiSearchEnabled, currentUser.id]);
+  useEffect(() => {
     if (activeSidebar !== "assistant") {
       return;
     }
@@ -2641,6 +2670,7 @@ export function WebMessenger({
         body: JSON.stringify({
           userId: currentUser.id,
           language,
+          searchEnabled: aiSearchEnabled,
           messages: conversation,
         }),
       });
@@ -2676,6 +2706,7 @@ export function WebMessenger({
       setIsAiSubmitting(false);
     }
   }, [
+    aiSearchEnabled,
     aiDraft,
     aiMessages,
     createAiMessageId,
@@ -7996,15 +8027,32 @@ export function WebMessenger({
                       </h2>
                       <p className="mt-1 text-sm text-zinc-400">{t("aiAssistantSubtitle")}</p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={clearAiConversation}
-                      disabled={isAiSubmitting || (aiMessages.length === 0 && !aiError)}
-                      className="h-9 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {t("aiAssistantClear")}
-                    </Button>
+                    <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                      <div className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5">
+                        <div className="text-right">
+                          <p className="text-xs font-medium text-zinc-100">
+                            {t("aiAssistantSearchMode")}
+                          </p>
+                          <p className="hidden text-[11px] text-zinc-500 sm:block">
+                            {t("aiAssistantSearchHint")}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={aiSearchEnabled}
+                          onCheckedChange={setAiSearchEnabled}
+                          aria-label={t("aiAssistantSearchMode")}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={clearAiConversation}
+                        disabled={isAiSubmitting || (aiMessages.length === 0 && !aiError)}
+                        className="h-9 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {t("aiAssistantClear")}
+                      </Button>
+                    </div>
                   </div>
                 </div>
                 <div

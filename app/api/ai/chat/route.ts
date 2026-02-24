@@ -15,6 +15,7 @@ type AiChatPayload = {
   userId?: string;
   language?: string;
   messages?: AiChatMessagePayload[];
+  searchEnabled?: boolean;
 };
 
 type NormalizedAiChatMessage = {
@@ -111,14 +112,15 @@ function extractChatCompletionText(payload: unknown): string {
 
 async function generateAssistantReply(
   language: "en" | "ru",
-  messages: NormalizedAiChatMessage[]
+  messages: NormalizedAiChatMessage[],
+  searchEnabled: boolean
 ): Promise<string> {
   const { apiKey, baseUrl, model: modelFromEnv } = getAiProviderConfig();
   const systemPrompt =
     language === "ru"
       ? "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully. Prefer Russian unless the user writes in another language."
       : "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully.";
-  const modelCandidates = buildModelCandidates(modelFromEnv);
+  const modelCandidates = buildModelCandidates(modelFromEnv, searchEnabled);
 
   let lastErrorMessage = "";
   for (const model of modelCandidates) {
@@ -180,6 +182,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as AiChatPayload | null;
   const userId = body?.userId?.trim() ?? "";
   const language: "en" | "ru" = body?.language === "ru" ? "ru" : "en";
+  const searchEnabled = body?.searchEnabled === true;
   const messages = normalizeMessages(Array.isArray(body?.messages) ? body.messages : []);
 
   if (!userId) {
@@ -202,7 +205,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    const reply = await generateAssistantReply(language, messages);
+    const reply = await generateAssistantReply(language, messages, searchEnabled);
     return NextResponse.json({ message: reply });
   } catch (error) {
     const message =
