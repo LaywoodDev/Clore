@@ -42,13 +42,6 @@ function normalizeMessages(input: AiChatMessagePayload[]): NormalizedAiChatMessa
     .slice(-MAX_MESSAGES);
 }
 
-function fallbackReply(language: "en" | "ru"): string {
-  if (language === "ru") {
-    return "Got your request. Add a bit more detail and I will help right away.";
-  }
-  return "I am ready to help. Share more details about your request and I will do my best to help.";
-}
-
 function extractResponseText(payload: unknown): string {
   if (!payload || typeof payload !== "object") {
     return "";
@@ -121,57 +114,81 @@ async function generateAssistantReply(
     process.env.OPENAI_API_KEY?.trim() ??
     "";
   if (!apiKey) {
-    return fallbackReply(language);
+    throw new Error("AI provider key is not configured on the server.");
   }
 
-  const model = process.env.CLORE_BOT_MODEL?.trim() || "openai/gpt-4o-mini";
+  const modelFromEnv = process.env.CLORE_BOT_MODEL?.trim() || "openai/gpt-4o-mini";
   const baseUrl =
     process.env.CLORE_BOT_BASE_URL?.trim() || "https://openai.api.proxyapi.ru/v1";
   const systemPrompt =
     language === "ru"
       ? "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully. Prefer Russian unless the user writes in another language."
       : "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully.";
+  const modelCandidates = Array.from(
+    new Set(
+      [
+        modelFromEnv,
+        modelFromEnv.startsWith("openai/") ? modelFromEnv.slice("openai/".length) : "",
+        "openai/gpt-4o-mini",
+        "gpt-4o-mini",
+      ].filter((value) => value.length > 0)
+    )
+  );
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), RESPONSE_TIMEOUT_MS);
+  let lastErrorMessage = "";
+  for (const model of modelCandidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RESPONSE_TIMEOUT_MS);
 
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system" as const,
-            content: systemPrompt,
-          },
-          ...messages,
-        ],
-        max_tokens: 500,
-      }),
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: "system" as const,
+              content: systemPrompt,
+            },
+            ...messages,
+          ],
+          max_tokens: 500,
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const errorPayload = await response.text().catch(() => "");
-      console.error(
-        `[ai-chat] Provider error ${response.status}: ${errorPayload.slice(0, 400)}`
-      );
-      return fallbackReply(language);
+      if (!response.ok) {
+        const errorPayload = await response.text().catch(() => "");
+        lastErrorMessage = `model "${model}" returned ${response.status}`;
+        console.error(
+          `[ai-chat] Provider error ${response.status} for model "${model}": ${errorPayload.slice(0, 400)}`
+        );
+        continue;
+      }
+
+      const payload = (await response.json().catch(() => null)) as unknown;
+      const text = extractChatCompletionText(payload) || extractResponseText(payload);
+      if (text.trim().length > 0) {
+        return text;
+      }
+      lastErrorMessage = `model "${model}" returned empty response`;
+      console.error(`[ai-chat] Empty response for model "${model}".`);
+    } catch (error) {
+      lastErrorMessage =
+        error instanceof Error && error.message.trim().length > 0
+          ? `model "${model}" failed: ${error.message}`
+          : `model "${model}" failed`;
+      console.error(`[ai-chat] ${lastErrorMessage}`);
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const payload = (await response.json().catch(() => null)) as unknown;
-    const text = extractChatCompletionText(payload) || extractResponseText(payload);
-    return text || fallbackReply(language);
-  } catch {
-    return fallbackReply(language);
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  throw new Error(lastErrorMessage || "AI provider request failed.");
 }
 
 export async function POST(request: Request) {
@@ -202,7 +219,15 @@ export async function POST(request: Request) {
 
     const reply = await generateAssistantReply(language, messages);
     return NextResponse.json({ message: reply });
-  } catch {
-    return NextResponse.json({ error: "Unable to generate response." }, { status: 500 });
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "Unable to generate response.";
+    const status =
+      message.includes("not configured") || message.includes("provider")
+        ? 502
+        : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
