@@ -11,6 +11,7 @@ import {
 type VisibilityScope = "everyone" | "contacts" | "nobody";
 type NextVisibilityScope = "everyone" | "selected" | "nobody";
 const LAST_SEEN_HEARTBEAT_MS = 15_000;
+const FAVORITES_CHAT_ID = "__favorites__";
 
 function canViewByVisibility(
   visibility: VisibilityScope | NextVisibilityScope,
@@ -142,11 +143,22 @@ export async function GET(request: Request) {
     : allThreads;
   const threadIds = new Set(allThreads.map((thread) => thread.id));
   const messages = store.messages
-    .filter(
-      (message) =>
-        threadIds.has(message.chatId) &&
-        (!hasSince || message.createdAt >= since)
-    )
+    .filter((message) => {
+      const isAccessibleThreadMessage = threadIds.has(message.chatId);
+      const isSelfFavoriteMessage =
+        message.chatId === FAVORITES_CHAT_ID && message.authorId === userId;
+      if (!isAccessibleThreadMessage && !isSelfFavoriteMessage) {
+        return false;
+      }
+      if (!hasSince) {
+        return true;
+      }
+      if (message.createdAt >= since) {
+        return true;
+      }
+      const favoriteChangedAt = Math.abs(message.savedBy?.[userId] ?? 0);
+      return favoriteChangedAt >= since;
+    })
     .sort((a, b) => a.createdAt - b.createdAt);
 
   return NextResponse.json({

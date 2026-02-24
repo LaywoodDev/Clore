@@ -540,7 +540,7 @@ export function AuthGate() {
                 }}
                 className={`h-10 flex-1 rounded-lg border text-sm font-medium ${
                   mode === "login"
-                    ? "border-violet-500 bg-violet-500 text-zinc-50"
+                    ? "border-primary bg-primary text-zinc-50"
                     : "border-zinc-700 bg-zinc-700 text-zinc-200"
                 }`}
               >
@@ -554,7 +554,7 @@ export function AuthGate() {
                 }}
                 className={`h-10 flex-1 rounded-lg border text-sm font-medium ${
                   mode === "register"
-                    ? "border-violet-500 bg-violet-500 text-zinc-50"
+                    ? "border-primary bg-primary text-zinc-50"
                     : "border-zinc-700 bg-zinc-700 text-zinc-200"
                 }`}
               >
@@ -600,7 +600,7 @@ export function AuthGate() {
                 />
                 <Button
                   type="submit"
-                  className="h-11 w-full rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                  className="h-11 w-full rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
                   disabled={submitting || !isLoginValid}
                 >
                   {submitting ? "Signing in..." : "Sign in"}
@@ -696,7 +696,7 @@ export function AuthGate() {
                 </p>
                 <Button
                   type="submit"
-                  className="h-11 w-full rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                  className="h-11 w-full rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
                   disabled={submitting || !isRegisterValid}
                 >
                   {submitting ? "Creating account..." : "Create account"}
@@ -718,4 +718,5 @@ export function AuthGate() {
     </main>
   );
 }
+
 

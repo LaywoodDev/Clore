@@ -40,6 +40,8 @@ type SendResult = {
   lastUserText: string;
 };
 
+const FAVORITES_CHAT_ID = "__favorites__";
+
 function fallbackBotReply(lastUserText: string): string {
   const isRussian = /[а-яё]/i.test(lastUserText);
   return isRussian
@@ -214,6 +216,38 @@ export async function POST(request: Request) {
   try {
     const result = await updateStore<SendResult>(
       (store) => {
+        if (chatId === FAVORITES_CHAT_ID) {
+          const hasUser = store.users.some((candidate) => candidate.id === userId);
+          if (!hasUser) {
+            throw new Error("User not found.");
+          }
+
+          const now = Date.now();
+          const message: StoredChatMessage = {
+            id: createEntityId("msg"),
+            chatId: FAVORITES_CHAT_ID,
+            authorId: userId,
+            text,
+            attachments,
+            replyToMessageId: "",
+            createdAt: now,
+            editedAt: 0,
+            savedBy: {
+              [userId]: now,
+            },
+          };
+          store.messages.push(message);
+
+          return {
+            messageId: message.id,
+            createdAt: now,
+            shouldAutoReply: false,
+            botUserId: null,
+            conversation: [],
+            lastUserText: text,
+          };
+        }
+
         const thread = store.threads.find(
           (candidate) =>
             candidate.id === chatId && candidate.memberIds.includes(userId)
@@ -253,6 +287,7 @@ export async function POST(request: Request) {
           replyToMessageId,
           createdAt: now,
           editedAt: 0,
+          savedBy: {},
         };
 
         store.messages.push(message);
@@ -324,6 +359,7 @@ export async function POST(request: Request) {
           replyToMessageId: "",
           createdAt: now,
           editedAt: 0,
+          savedBy: {},
         };
 
         store.messages.push(botMessage);
@@ -342,7 +378,9 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to send message.";
     const status =
-      message === "Chat not found." || message === "Reply target not found."
+      message === "Chat not found." ||
+      message === "Reply target not found." ||
+      message === "User not found."
         ? 404
         : message === "Cannot send message because one of users is blocked."
           ? 403

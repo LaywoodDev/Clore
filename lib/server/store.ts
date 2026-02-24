@@ -79,6 +79,7 @@ export type StoredChatMessage = {
   replyToMessageId: string;
   createdAt: number;
   editedAt: number;
+  savedBy: Record<string, number>;
 };
 
 export type StoredChatAttachment = {
@@ -764,6 +765,23 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
         : "";
     const createdAt = normalizeNumber(message.createdAt, Date.now());
     const editedAt = normalizeNumber(message.editedAt, 0);
+    const savedByRaw = asRecord(message.savedBy) ?? {};
+    const savedBy: Record<string, number> = {};
+    for (const [userId, rawSavedAt] of Object.entries(savedByRaw)) {
+      const normalizedUserId = userId.trim();
+      if (!normalizedUserId) {
+        continue;
+      }
+      if (typeof rawSavedAt === "number" && Number.isFinite(rawSavedAt)) {
+        savedBy[normalizedUserId] = Math.trunc(rawSavedAt);
+        continue;
+      }
+      if (rawSavedAt === true) {
+        savedBy[normalizedUserId] = createdAt;
+      } else if (rawSavedAt === false) {
+        savedBy[normalizedUserId] = -createdAt;
+      }
+    }
 
     if (!id || !chatId || !authorId || (!text.trim() && attachments.length === 0)) {
       continue;
@@ -778,6 +796,7 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
       replyToMessageId,
       createdAt,
       editedAt,
+      savedBy,
     });
   }
 

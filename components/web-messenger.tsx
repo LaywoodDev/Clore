@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   type MouseEvent as ReactMouseEvent,
@@ -15,6 +15,7 @@ import {
   ArrowUp,
   Bell,
   BellOff,
+  Bookmark,
   Bold,
   Check,
   CheckCheck,
@@ -129,6 +130,22 @@ const SettingsSidebarIcon = ({ className }: { className?: string }) => (
     <path stroke="none" d="M0 0h24v24H0z" fill="none" />
     <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" />
     <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  </svg>
+);
+
+const AiSidebarIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M17.964 2.733c.156 .563 .312 1 .484 1.353c.342 .71 .758 1.125 1.47 1.467c.353 .17 .79 .326 1.352 .484c.98 .276 .97 1.668 -.013 1.93a8.3 8.3 0 0 0 -1.34 .481c-.71 .342 -1.127 .757 -1.463 1.453a8 8 0 0 0 -.486 1.352c-.258 .988 -1.658 1 -1.932 .015c-.156 -.565 -.312 -1.002 -.484 -1.354c-.342 -.71 -.758 -1.124 -1.458 -1.46a8 8 0 0 0 -1.374 -.495a.4 .4 0 0 1 -.06 -.02l-.044 -.017l-.045 -.02l-.049 -.025l-.035 -.02a.4 .4 0 0 1 -.049 -.03l-.032 -.023l-.043 -.034l-.033 -.028l-.036 -.035l-.034 -.035l-.028 -.033l-.035 -.043l-.022 -.032a.4 .4 0 0 1 -.032 -.049l-.02 -.035l-.025 -.05l-.02 -.044l-.017 -.043a.4 .4 0 0 1 -.02 -.06l-.01 -.034a.5 .5 0 0 1 -.02 -.098l-.006 -.065l-.005 -.035v-.05a.4 .4 0 0 1 .003 -.085a.5 .5 0 0 1 .013 -.093a.5 .5 0 0 1 .024 -.103a.4 .4 0 0 1 .02 -.06l.017 -.044l.02 -.045l.025 -.049l.02 -.035a.4 .4 0 0 1 .03 -.049l.023 -.032l.034 -.043l.028 -.033l.035 -.036l.035 -.034q .015 -.015 .033 -.028l.043 -.035l.032 -.022a.4 .4 0 0 1 .049 -.032l.035 -.02l.05 -.025l.044 -.02l.043 -.017a.4 .4 0 0 1 .06 -.02l.027 -.008a8.3 8.3 0 0 0 1.339 -.48c.71 -.342 1.127 -.757 1.47 -1.466c.17 -.354 .327 -.792 .483 -1.355c.272 -.976 1.657 -.976 1.928 0" />
+    <path d="M10.965 6.737q .219 .801 .503 1.574c.856 2.28 1.945 3.363 4.23 4.22q .708 .265 1.571 .506c.976 .272 .974 1.656 -.002 1.927q -.798 .221 -1.568 .504c-2.288 .858 -3.376 1.94 -4.229 4.216a19 19 0 0 0 -.505 1.579c-.268 .983 -1.662 .983 -1.93 0a19 19 0 0 0 -.503 -1.574c-.856 -2.281 -1.944 -3.363 -4.226 -4.219a20 20 0 0 0 -1.594 -.513a.4 .4 0 0 1 -.054 -.018l-.044 -.017l-.043 -.02a.3 .3 0 0 1 -.048 -.024l-.036 -.02a.4 .4 0 0 1 -.048 -.03l-.032 -.024l-.044 -.034l-.033 -.029l-.037 -.034l-.034 -.037l-.03 -.033l-.033 -.044l-.023 -.032a.4 .4 0 0 1 -.03 -.048l-.021 -.036a.3 .3 0 0 1 -.024 -.048l-.02 -.043l-.017 -.044a.4 .4 0 0 1 -.018 -.054a.2 .2 0 0 1 -.01 -.039a.4 .4 0 0 1 -.014 -.059l-.007 -.04l-.007 -.056l-.003 -.044l-.002 -.05v-.05q 0 -.023 .004 -.044q .001 -.03 .007 -.057l.007 -.04a.4 .4 0 0 1 .017 -.076l.007 -.021a.4 .4 0 0 1 .018 -.054l.017 -.044l.02 -.043a.3 .3 0 0 1 .024 -.048l.02 -.036a.4 .4 0 0 1 .03 -.048l.024 -.032l.034 -.044l.029 -.033l.034 -.037l.037 -.034l.033 -.03l.044 -.033l.032 -.023a.4 .4 0 0 1 .048 -.03l.036 -.021a.3 .3 0 0 1 .048 -.024l.043 -.02l.044 -.017a.4 .4 0 0 1 .054 -.018l.021 -.007a20 20 0 0 0 1.568 -.504c2.287 -.858 3.375 -1.94 4.229 -4.216a19 19 0 0 0 .505 -1.579c.268 -.983 1.662 -.983 1.93 0" />
   </svg>
 );
 
@@ -259,6 +276,7 @@ type StoredChatMessage = {
   replyToMessageId: string;
   createdAt: number;
   editedAt: number;
+  savedBy: Record<string, number>;
 };
 
 type StoredChatAttachment = {
@@ -307,6 +325,9 @@ type RenderMessage = {
     previewText: string;
     missing: boolean;
   } | null;
+  isFavorite: boolean;
+  sourceChatId: string | null;
+  sourceChatName: string;
 };
 
 type ChatListItem = {
@@ -315,6 +336,8 @@ type ChatListItem = {
   memberIds: string[];
   groupRoles: Record<string, GroupRole>;
   isGroup: boolean;
+  isFavorites: boolean;
+  isPreview: boolean;
   createdById: string;
   isGroupCreator: boolean;
   myGroupRole: GroupRole | null;
@@ -419,7 +442,7 @@ type WebMessengerProps = {
 
 const sidebarItems: SidebarItem[] = [
   { id: "home", label: "Home", icon: Home },
-  { id: "assistant", label: "AI", icon: Sparkles },
+  { id: "assistant", label: "AI", icon: AiSidebarIcon },
   { id: "profile", label: "Profile", icon: ProfileSidebarIcon },
   { id: "settings", label: "Settings", icon: SettingsSidebarIcon },
 ];
@@ -457,8 +480,8 @@ const DEFAULT_CHAT_PERSONALIZATION: ChatPersonalization = {
 const accentPalette = [
   "from-orange-500 to-amber-400",
   "from-cyan-500 to-sky-400",
-  "from-purple-500 to-violet-500",
-  "from-violet-500 to-fuchsia-500",
+  "from-purple-500 to-primary",
+  "from-primary to-fuchsia-500",
   "from-rose-500 to-pink-500",
   "from-blue-500 to-indigo-500",
 ];
@@ -486,6 +509,10 @@ const PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY =
   "clore_personalization_onboarding_done_v1";
 const CHAT_CLEAR_HISTORY_STORAGE_PREFIX = "clore_chat_clear_history_v1_";
 const CHAT_DRAFTS_STORAGE_PREFIX = "clore_chat_drafts_v1_";
+const FAVORITES_CHAT_VISIBILITY_STORAGE_KEY_PREFIX =
+  "clore_favorites_chat_visibility_v1_";
+const FAVORITES_CHAT_PINNED_STORAGE_KEY_PREFIX =
+  "clore_favorites_chat_pinned_v1_";
 const AI_ASSISTANT_HISTORY_STORAGE_KEY_PREFIX = "clore_ai_assistant_history_v1_";
 const AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX =
   "clore_ai_assistant_search_mode_v1_";
@@ -504,6 +531,8 @@ const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_MAX_MEMBERS = 50;
 const MAX_AI_ASSISTANT_HISTORY_MESSAGES = 40;
 const BUILT_IN_ASSISTANT_USER_ID = "bot-chatgpt";
+const FAVORITES_CHAT_ID = "__favorites__";
+const PREVIEW_CHAT_ID_PREFIX = "__preview__";
 const translations = {
   en: {
     home: "Home",
@@ -566,6 +595,15 @@ const translations = {
     saveEdit: "Save",
     editedLabel: "edited",
     copyAttachmentLink: "Copy attachment link",
+    saveToFavorites: "Save to favorites",
+    removeFromFavorites: "Remove from favorites",
+    favorites: "Favorites",
+    openFavorites: "Open favorites",
+    deleteFavoritesAction: "Delete favorites",
+    favoritesDeleted: "Favorites deleted",
+    savedMessages: "Saved messages",
+    fromChat: "From",
+    openOriginalChat: "Open original chat",
     deleteMessage: "Delete message",
     pinChat: "Pin chat",
     unpinChat: "Unpin chat",
@@ -848,6 +886,15 @@ const translations = {
     saveEdit: "Сохранить",
     editedLabel: "изменено",
     copyAttachmentLink: "Скопировать ссылку вложения",
+    saveToFavorites: "Сохранить в избранное",
+    removeFromFavorites: "Удалить из избранного",
+    favorites: "Избранное",
+    openFavorites: "Открыть избранное",
+    deleteFavoritesAction: "Удалить избранное",
+    favoritesDeleted: "Избранное удалено",
+    savedMessages: "Сохраненные сообщения",
+    fromChat: "Из чата",
+    openOriginalChat: "Открыть исходный чат",
     deleteMessage: "Удалить сообщение",
     pinChat: "Закрепить чат",
     unpinChat: "Открепить чат",
@@ -1100,6 +1147,40 @@ type AiAssistantRequestMessage = {
 type AiAssistantChatResponse = {
   message: string;
 };
+
+function normalizeAiAssistantMessages(value: unknown): AiAssistantMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+      const candidate = item as Record<string, unknown>;
+      const id =
+        typeof candidate.id === "string" && candidate.id.trim().length > 0
+          ? candidate.id.trim()
+          : "";
+      const role = candidate.role;
+      const content = typeof candidate.content === "string" ? candidate.content : "";
+      const createdAt =
+        typeof candidate.createdAt === "number" && Number.isFinite(candidate.createdAt)
+          ? candidate.createdAt
+          : Date.now();
+      if (!id || (role !== "user" && role !== "assistant") || !content.trim()) {
+        return null;
+      }
+      return {
+        id,
+        role,
+        content,
+        createdAt,
+      } satisfies AiAssistantMessage;
+    })
+    .filter((message): message is AiAssistantMessage => message !== null)
+    .slice(-MAX_AI_ASSISTANT_HISTORY_MESSAGES);
+}
 
 type SendAttachmentPayload = {
   name: string;
@@ -1540,7 +1621,7 @@ function renderFormattedMessageText(text: string): ReactNode {
 
         if (line.startsWith("> ")) {
           return (
-            <div key={key} className="border-l-2 border-violet-400/70 pl-2 opacity-95">
+            <div key={key} className="border-l-2 border-primary/70 pl-2 opacity-95">
               {renderFormattedInlineContent(line.slice(2), `${key}-quote`)}
             </div>
           );
@@ -1897,7 +1978,7 @@ function AudioAttachmentPlayer({
         <div className="min-w-0 flex-1">
           <div className="h-1.5 overflow-hidden rounded-full bg-zinc-700">
             <div
-              className="h-full rounded-full bg-violet-400 transition-[width] duration-150"
+              className="h-full rounded-full bg-primary transition-[width] duration-150"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -1923,6 +2004,7 @@ export function WebMessenger({
   const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const activeChatSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const activeMessagesScrollRef = useRef<HTMLDivElement | null>(null);
   const aiMessagesScrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const chatPersonalizationDialogContentRef = useRef<HTMLDivElement | null>(null);
@@ -1955,7 +2037,9 @@ export function WebMessenger({
   const messagesRef = useRef<StoredChatMessage[]>([]);
   const draftRef = useRef("");
   const lastTypingChatIdRef = useRef<string | null>(null);
+  const lastOpenedChatIdRef = useRef<string | null>(null);
   const isTypingStateSentRef = useRef(false);
+  const shouldScrollActiveChatToBottomRef = useRef(false);
   const lastDataSyncTimestampRef = useRef(0);
   const lastFullSyncAtRef = useRef(0);
   const baseDocumentTitleRef = useRef("Clore");
@@ -2028,6 +2112,9 @@ export function WebMessenger({
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [knownUsers, setKnownUsers] = useState<AuthUser[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatPreviewUserId, setActiveChatPreviewUserId] = useState<string | null>(
+    null
+  );
   const [activeSidebar, setActiveSidebar] = useState<SidebarItem["id"]>("home");
   const [aiDraft, setAiDraft] = useState("");
   const [aiMessages, setAiMessages] = useState<AiAssistantMessage[]>(() => {
@@ -2042,42 +2129,12 @@ export function WebMessenger({
         return [];
       }
       const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-      return parsed
-        .map((item) => {
-          if (!item || typeof item !== "object") {
-            return null;
-          }
-          const candidate = item as Record<string, unknown>;
-          const id =
-            typeof candidate.id === "string" && candidate.id.trim().length > 0
-              ? candidate.id.trim()
-              : "";
-          const role = candidate.role;
-          const content = typeof candidate.content === "string" ? candidate.content : "";
-          const createdAt =
-            typeof candidate.createdAt === "number" && Number.isFinite(candidate.createdAt)
-              ? candidate.createdAt
-              : Date.now();
-          if (!id || (role !== "user" && role !== "assistant") || !content.trim()) {
-            return null;
-          }
-          return {
-            id,
-            role,
-            content,
-            createdAt,
-          } satisfies AiAssistantMessage;
-        })
-        .filter((message): message is AiAssistantMessage => message !== null)
-        .slice(-MAX_AI_ASSISTANT_HISTORY_MESSAGES);
+      return normalizeAiAssistantMessages(parsed);
     } catch {
       return [];
     }
   });
-  const [aiSearchEnabled, setAiSearchEnabled] = useState<boolean>(() => {
+  const [aiSearchEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") {
       return false;
     }
@@ -2126,6 +2183,34 @@ export function WebMessenger({
       );
     } catch {
       return {};
+    }
+  });
+  const [isFavoritesChatVisible, setIsFavoritesChatVisible] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    try {
+      return (
+        window.localStorage.getItem(
+          `${FAVORITES_CHAT_VISIBILITY_STORAGE_KEY_PREFIX}${currentUser.id}`
+        ) !== "0"
+      );
+    } catch {
+      return true;
+    }
+  });
+  const [isFavoritesChatPinned, setIsFavoritesChatPinned] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    try {
+      return (
+        window.localStorage.getItem(
+          `${FAVORITES_CHAT_PINNED_STORAGE_KEY_PREFIX}${currentUser.id}`
+        ) !== "0"
+      );
+    } catch {
+      return true;
     }
   });
   const [unreadBaselineByChatId, setUnreadBaselineByChatId] = useState<Record<string, number>>(
@@ -2423,6 +2508,25 @@ export function WebMessenger({
     if (typeof window === "undefined") {
       return;
     }
+    window.localStorage.setItem(
+      `${FAVORITES_CHAT_VISIBILITY_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      isFavoritesChatVisible ? "1" : "0"
+    );
+  }, [isFavoritesChatVisible, currentUser.id]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      `${FAVORITES_CHAT_PINNED_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      isFavoritesChatPinned ? "1" : "0"
+    );
+  }, [isFavoritesChatPinned, currentUser.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     const normalizedHistory = aiMessages
       .filter((message) => !message.pending)
       .slice(-MAX_AI_ASSISTANT_HISTORY_MESSAGES)
@@ -2456,6 +2560,52 @@ export function WebMessenger({
     }
     node.scrollTop = node.scrollHeight;
   }, [activeSidebar, aiMessages]);
+
+  useEffect(() => {
+    if (!activeChatId) {
+      lastOpenedChatIdRef.current = null;
+      shouldScrollActiveChatToBottomRef.current = false;
+      return;
+    }
+    if (lastOpenedChatIdRef.current === activeChatId) {
+      return;
+    }
+    lastOpenedChatIdRef.current = activeChatId;
+    shouldScrollActiveChatToBottomRef.current = true;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    if (!shouldScrollActiveChatToBottomRef.current) {
+      return;
+    }
+    if (!activeChatId || activeSidebar !== "home") {
+      return;
+    }
+
+    const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+    if (!isDesktop && mobileView !== "chat") {
+      return;
+    }
+
+    const node = activeMessagesScrollRef.current;
+    if (!node) {
+      return;
+    }
+
+    const scrollToBottom = () => {
+      node.scrollTop = node.scrollHeight;
+    };
+
+    scrollToBottom();
+    const frameId = window.requestAnimationFrame(() => {
+      scrollToBottom();
+      shouldScrollActiveChatToBottomRef.current = false;
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [activeChatId, activeSidebar, messages, mobileView]);
 
   useEffect(() => {
     setActiveChatSearchQuery("");
@@ -3269,6 +3419,7 @@ export function WebMessenger({
     const isActiveChatVisible =
       activeSidebar === "home" && (isDesktopViewport || mobileView === "chat");
     const usersById = new Map(knownUsers.map((user) => [user.id, user]));
+    const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
     const messagesByChat = new Map<string, StoredChatMessage[]>();
 
     for (const message of messages) {
@@ -3280,7 +3431,7 @@ export function WebMessenger({
       }
     }
 
-    return [...threads]
+    const regularChatItems = [...threads]
       .map((thread) => {
         const isGroup = thread.threadType === "group";
         const directMemberId = isGroup
@@ -3337,6 +3488,8 @@ export function WebMessenger({
           memberIds: thread.memberIds,
           groupRoles: normalizedGroupRoles,
           isGroup,
+          isFavorites: false,
+          isPreview: false,
           createdById: thread.createdById,
           isGroupCreator: isGroup && myGroupRole === "owner",
           myGroupRole,
@@ -3356,18 +3509,86 @@ export function WebMessenger({
           isMuted: thread.mutedBy?.[currentUser.id] === true,
         };
       })
-      .filter((item): item is ChatListItem => item !== null)
-      .sort((a, b) => {
-        if (a.isPinned !== b.isPinned) {
-          return a.isPinned ? -1 : 1;
-        }
-        return b.updatedAt - a.updatedAt;
-      });
+      .filter((item): item is ChatListItem => item !== null);
+
+    const favoriteMessages = messages
+      .map((message) => ({
+        message,
+        savedAt: message.savedBy?.[currentUser.id] ?? 0,
+      }))
+      .filter((item) => item.savedAt > 0)
+      .sort((a, b) => a.savedAt - b.savedAt);
+    const latestFavorite = favoriteMessages[favoriteMessages.length - 1] ?? null;
+    const favoriteThread = latestFavorite
+      ? threadsById.get(latestFavorite.message.chatId) ?? null
+      : null;
+    const favoriteLastMessagePreview = latestFavorite
+      ? latestFavorite.message.text.trim() ||
+        (latestFavorite.message.attachments.length > 0
+          ? t("attachment")
+          : t("noMessagesYet"))
+      : t("noMessagesYet");
+
+    const sortedRegularChatItems = [...regularChatItems].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) {
+        return a.isPinned ? -1 : 1;
+      }
+      return b.updatedAt - a.updatedAt;
+    });
+    const shouldShowFavoritesChat =
+      isFavoritesChatVisible || favoriteMessages.length > 0;
+
+    if (!shouldShowFavoritesChat) {
+      return sortedRegularChatItems;
+    }
+
+    const favoriteChatItem: ChatListItem = {
+      id: FAVORITES_CHAT_ID,
+      memberId: null,
+      memberIds: [currentUser.id],
+      groupRoles: {},
+      isGroup: false,
+      isFavorites: true,
+      isPreview: false,
+      createdById: currentUser.id,
+      isGroupCreator: false,
+      myGroupRole: null,
+      name: t("favorites"),
+      username:
+        latestFavorite && favoriteThread
+          ? favoriteThread.threadType === "group"
+            ? favoriteThread.title || t("groupChat")
+            : (() => {
+                const peerId =
+                  favoriteThread.memberIds.find((memberId) => memberId !== currentUser.id) ??
+                  "";
+                return usersById.get(peerId)?.name ?? t("unknownUser");
+              })()
+          : t("savedMessages"),
+      avatarUrl: "",
+      bannerUrl: "",
+      accent: pickAccent(FAVORITES_CHAT_ID),
+      lastMessage: favoriteLastMessagePreview,
+      lastTime: latestFavorite ? formatChatTime(latestFavorite.savedAt, language) : "",
+      unread: 0,
+      updatedAt: latestFavorite?.savedAt ?? 0,
+      isPinned: isFavoritesChatPinned,
+      isMuted: false,
+    };
+
+    return [favoriteChatItem, ...sortedRegularChatItems].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) {
+        return a.isPinned ? -1 : 1;
+      }
+      return b.updatedAt - a.updatedAt;
+    });
   }, [
     threads,
     messages,
     knownUsers,
     currentUser.id,
+    isFavoritesChatVisible,
+    isFavoritesChatPinned,
     language,
     t,
     activeSidebar,
@@ -3394,19 +3615,59 @@ export function WebMessenger({
     });
   }, [chatItems, query]);
 
+  const activePreviewChat = useMemo<ChatListItem | null>(() => {
+    if (!activeChatPreviewUserId) {
+      return null;
+    }
+    const previewUser =
+      knownUsers.find((candidate) => candidate.id === activeChatPreviewUserId) ?? null;
+    if (!previewUser) {
+      return null;
+    }
+    return {
+      id: `${PREVIEW_CHAT_ID_PREFIX}${previewUser.id}`,
+      memberId: previewUser.id,
+      memberIds: [currentUser.id, previewUser.id],
+      groupRoles: {},
+      isGroup: false,
+      isFavorites: false,
+      isPreview: true,
+      createdById: currentUser.id,
+      isGroupCreator: false,
+      myGroupRole: null,
+      name: previewUser.name || t("unknownUser"),
+      username: previewUser.username || "unknown",
+      avatarUrl: previewUser.avatarUrl ?? "",
+      bannerUrl: previewUser.bannerUrl ?? "",
+      accent: pickAccent(previewUser.id),
+      lastMessage: t("noMessagesYet"),
+      lastTime: "",
+      unread: 0,
+      updatedAt: 0,
+      isPinned: false,
+      isMuted: false,
+    };
+  }, [activeChatPreviewUserId, currentUser.id, knownUsers, t]);
+
   const pinnedChatsCount = useMemo(
-    () => chatItems.filter((chat) => chat.isPinned).length,
+    () => chatItems.filter((chat) => !chat.isFavorites && chat.isPinned).length,
     [chatItems]
   );
 
   useEffect(() => {
+    if (activeChatPreviewUserId) {
+      return;
+    }
     if (activeChatId && chatItems.some((chat) => chat.id === activeChatId)) {
       return;
     }
-    setActiveChatId(chatItems[0]?.id ?? null);
-  }, [chatItems, activeChatId]);
+    setActiveChatId(
+      chatItems.find((chat) => !chat.isFavorites)?.id ?? chatItems[0]?.id ?? null
+    );
+  }, [activeChatPreviewUserId, chatItems, activeChatId]);
 
   const activeChat =
+    activePreviewChat ??
     chatItems.find((chat) => chat.id === activeChatId) ??
     filteredChats[0] ??
     null;
@@ -3458,7 +3719,10 @@ export function WebMessenger({
 
   const activeChatUser = useMemo(
     () =>
-      activeChat && !activeChat.isGroup && activeChat.memberId
+      activeChat &&
+      !activeChat.isGroup &&
+      !activeChat.isFavorites &&
+      activeChat.memberId
         ? knownUsers.find((user) => user.id === activeChat.memberId) ?? null
         : null,
     [activeChat, knownUsers]
@@ -3479,7 +3743,7 @@ export function WebMessenger({
     return `${t("lastSeenAt")} ${formatLastSeen(activeChatUser.lastSeenAt, language)}`;
   }, [activeChatUser, t, language]);
   const activeChatTypingText = useMemo(() => {
-    if (!activeChat) {
+    if (!activeChat || activeChat.isFavorites || activeChat.isPreview) {
       return "";
     }
 
@@ -3584,6 +3848,8 @@ export function WebMessenger({
     callSession.chatId === activeChat.id;
   const shouldDisableCallButton =
     !activeChat ||
+    activeChat.isFavorites ||
+    activeChat.isPreview ||
     (callSession !== null && !callChatMatchesActive);
 
   useEffect(() => {
@@ -4166,7 +4432,7 @@ export function WebMessenger({
   );
 
   const startAudioCall = useCallback(async () => {
-    if (!activeChat) {
+    if (!activeChat || activeChat.isFavorites || activeChat.isPreview) {
       return;
     }
 
@@ -4573,14 +4839,106 @@ export function WebMessenger({
     if (!activeChat) {
       return [];
     }
+    const usersById = new Map(knownUsers.map((user) => [user.id, user]));
+    const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
+    const resolveSourceChatName = (chatId: string) => {
+      if (chatId === FAVORITES_CHAT_ID) {
+        return t("savedMessages");
+      }
+      const sourceThread = threadsById.get(chatId);
+      if (!sourceThread) {
+        return t("unknownUser");
+      }
+      if (sourceThread.threadType === "group") {
+        return sourceThread.title || t("groupChat");
+      }
+      const peerId =
+        sourceThread.memberIds.find((memberId) => memberId !== currentUser.id) ?? "";
+      return usersById.get(peerId)?.name ?? t("unknownUser");
+    };
+
+    if (activeChat.isFavorites) {
+      const clearedAt = clearedChatAtById[FAVORITES_CHAT_ID] ?? 0;
+      const favoriteMessages = messages
+        .map((message) => ({
+          message,
+          savedAt: message.savedBy?.[currentUser.id] ?? 0,
+        }))
+        .filter((item) => item.savedAt > 0 && item.savedAt > clearedAt)
+        .sort(
+          (a, b) =>
+            a.savedAt - b.savedAt || a.message.createdAt - b.message.createdAt
+        );
+      const favoriteMessagesById = new Map(
+        favoriteMessages.map((item) => [item.message.id, item.message])
+      );
+
+      return favoriteMessages.map<RenderMessage>(({ message, savedAt }) => {
+        const replyTarget = message.replyToMessageId
+          ? favoriteMessagesById.get(message.replyToMessageId) ?? null
+          : null;
+        const replyAuthorName = replyTarget
+          ? replyTarget.authorId === currentUser.id
+            ? t("you")
+            : (usersById.get(replyTarget.authorId)?.name ?? t("unknownUser"))
+          : "";
+        const replyPreviewText = replyTarget
+          ? replyTarget.text.trim() ||
+            (replyTarget.attachments.length > 0
+              ? t("attachment")
+              : t("noMessagesYet"))
+          : t("originalMessageUnavailable");
+
+        return {
+          id: message.id,
+          chatId: message.chatId,
+          authorId: message.authorId,
+          author: message.authorId === currentUser.id ? "me" : "them",
+          authorLabel:
+            message.authorId === currentUser.id
+              ? t("you")
+              : (usersById.get(message.authorId)?.name ?? t("unknownUser")),
+          authorUsername:
+            message.authorId === currentUser.id
+              ? currentUser.username
+              : (usersById.get(message.authorId)?.username ?? ""),
+          text: message.text,
+          createdAt: savedAt,
+          attachments: message.attachments.map((attachment) => ({
+            id: attachment.id,
+            name: attachment.name,
+            size: attachment.size,
+            url: attachment.url,
+            kind: getAttachmentKind(attachment.type),
+          })),
+          time: formatMessageTime(savedAt, language),
+          isReadByPeer: false,
+          groupReadByCount: 0,
+          groupReadByLabels: [],
+          isEdited: message.editedAt > 0,
+          reply: message.replyToMessageId
+            ? {
+                targetMessageId: message.replyToMessageId,
+                authorLabel: replyAuthorName,
+                previewText: replyPreviewText,
+                missing: replyTarget === null,
+              }
+            : null,
+          isFavorite: true,
+          sourceChatId:
+            message.chatId === FAVORITES_CHAT_ID ? null : message.chatId,
+          sourceChatName: resolveSourceChatName(message.chatId),
+        };
+      });
+    }
+
     const clearedAt = clearedChatAtById[activeChat.id] ?? 0;
-    const activeThread = threads.find((thread) => thread.id === activeChat.id);
+    const activeThread = threadsById.get(activeChat.id);
     const peerReadAt =
       !activeChat.isGroup && activeChat.memberId
         ? activeThread?.readBy?.[activeChat.memberId] ?? 0
         : 0;
     const groupMemberIds = activeThread?.memberIds ?? activeChat.memberIds;
-    const usersById = new Map(knownUsers.map((user) => [user.id, user]));
     const chatMessages = messages
       .filter(
         (message) => message.chatId === activeChat.id && message.createdAt > clearedAt
@@ -4650,6 +5008,9 @@ export function WebMessenger({
               missing: replyTarget === null,
             }
           : null,
+        isFavorite: (message.savedBy?.[currentUser.id] ?? 0) > 0,
+        sourceChatId: null,
+        sourceChatName: "",
       };
     });
   }, [
@@ -4831,6 +5192,13 @@ export function WebMessenger({
 
   const markChatAsRead = useCallback(
     async (chatId: string) => {
+      const hasThread = threads.some(
+        (thread) => thread.id === chatId && thread.memberIds.includes(currentUser.id)
+      );
+      if (!hasThread) {
+        return;
+      }
+
       const now = Date.now();
       setThreads((prev) => {
         return prev.map((thread) => {
@@ -4859,7 +5227,7 @@ export function WebMessenger({
         // UI state is already updated optimistically.
       }
     },
-    [currentUser.id]
+    [currentUser.id, threads]
   );
 
   const openChat = useCallback(
@@ -4871,16 +5239,114 @@ export function WebMessenger({
           [chatId]: existingThread.readBy?.[currentUser.id] ?? 0,
         }));
       }
+      setActiveChatPreviewUserId(null);
       setActiveChatId(chatId);
       setMobileView("chat");
       setIsChatPersonalizationOpen(false);
       setPendingAttachments([]);
       setViewerImageId(null);
       setManuallyLoadedMediaIds(new Set());
-      void markChatAsRead(chatId);
+      if (chatId !== FAVORITES_CHAT_ID) {
+        void markChatAsRead(chatId);
+      }
     },
     [currentUser.id, markChatAsRead, threads]
   );
+
+  const openUserPreview = useCallback(
+    (targetUserId: string) => {
+      if (
+        !targetUserId ||
+        targetUserId === currentUser.id ||
+        targetUserId === BUILT_IN_ASSISTANT_USER_ID
+      ) {
+        return;
+      }
+
+      const existingDirectChat = chatItems.find(
+        (chat) =>
+          !chat.isGroup &&
+          !chat.isFavorites &&
+          !chat.isPreview &&
+          chat.memberId === targetUserId
+      );
+      if (existingDirectChat) {
+        openChat(existingDirectChat.id);
+        setActiveSidebar("home");
+        setQuery("");
+        return;
+      }
+
+      setIsActiveChatProfileSidebarOpen(false);
+      setActiveChatPreviewUserId(targetUserId);
+      setActiveChatId(null);
+      setActiveSidebar("home");
+      setMobileView("chat");
+      setQuery("");
+      setIsChatPersonalizationOpen(false);
+      setPendingAttachments([]);
+      setViewerImageId(null);
+      setManuallyLoadedMediaIds(new Set());
+    },
+    [chatItems, currentUser.id, openChat]
+  );
+
+  const openFavoritesChat = useCallback(() => {
+    setIsFavoritesChatVisible(true);
+    openChat(FAVORITES_CHAT_ID);
+    setActiveSidebar("home");
+  }, [openChat]);
+
+  const deleteFavoritesChat = useCallback(async () => {
+    const wasVisible = isFavoritesChatVisible;
+    const wasActive = activeChatId === FAVORITES_CHAT_ID;
+
+    setIsFavoritesChatVisible(false);
+    setDraftsByChatId((prev) => {
+      if (!(FAVORITES_CHAT_ID in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[FAVORITES_CHAT_ID];
+      return next;
+    });
+
+    if (wasActive) {
+      setActiveChatId(null);
+      setMobileView("list");
+      setPendingAttachments([]);
+      setViewerImageId(null);
+      setReplyToMessageId(null);
+      setEditingMessageId(null);
+      setDraft("");
+    }
+
+    try {
+      await requestJson<{ ok: boolean }>("/api/messenger/favorites-chat", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: currentUser.id,
+        }),
+      });
+      await loadChatData({ forceFullSync: true });
+      showToast(t("favoritesDeleted"));
+    } catch (error) {
+      setIsFavoritesChatVisible(wasVisible);
+      if (wasActive) {
+        setActiveChatId(FAVORITES_CHAT_ID);
+        setMobileView("chat");
+      }
+      showToast(getRequestErrorMessage(error));
+    }
+  }, [
+    activeChatId,
+    currentUser.id,
+    getRequestErrorMessage,
+    isFavoritesChatVisible,
+    loadChatData,
+    showToast,
+    t,
+  ]);
 
   const updateActiveChatPersonalization = useCallback(
     (partial: Partial<ChatPersonalization>) => {
@@ -4906,14 +5372,23 @@ export function WebMessenger({
     [activeChat]
   );
 
-  const startReplyToMessage = useCallback((messageId: string) => {
-    setEditingMessageId(null);
-    setReplyToMessageId(messageId);
-    messageInputRef.current?.focus();
-  }, []);
+  const startReplyToMessage = useCallback(
+    (messageId: string) => {
+      if (activeChat?.isFavorites || activeChat?.isPreview) {
+        return;
+      }
+      setEditingMessageId(null);
+      setReplyToMessageId(messageId);
+      messageInputRef.current?.focus();
+    },
+    [activeChat]
+  );
 
   const startEditingMessage = useCallback(
     (messageId: string) => {
+      if (activeChat?.isFavorites || activeChat?.isPreview) {
+        return;
+      }
       const target = activeMessages.find((message) => message.id === messageId);
       if (!target) {
         return;
@@ -4925,7 +5400,7 @@ export function WebMessenger({
       setIsEmojiMenuOpen(false);
       messageInputRef.current?.focus();
     },
-    [activeMessages]
+    [activeChat, activeMessages]
   );
 
   const focusReplyTargetMessage = useCallback((messageId: string) => {
@@ -4968,7 +5443,10 @@ export function WebMessenger({
   );
 
   useEffect(() => {
-    const chatId = activeChat?.id ?? null;
+    const chatId =
+      activeChat && !activeChat.isFavorites && !activeChat.isPreview
+        ? activeChat.id
+        : null;
     const previousChatId = lastTypingChatIdRef.current;
 
     if (previousChatId && previousChatId !== chatId && isTypingStateSentRef.current) {
@@ -4993,10 +5471,13 @@ export function WebMessenger({
       void sendTypingState(chatId, false);
       isTypingStateSentRef.current = false;
     }
-  }, [activeChat?.id, draft, sendTypingState]);
+  }, [activeChat, draft, sendTypingState]);
 
   useEffect(() => {
-    const chatId = activeChat?.id ?? null;
+    const chatId =
+      activeChat && !activeChat.isFavorites && !activeChat.isPreview
+        ? activeChat.id
+        : null;
     if (!chatId) {
       return;
     }
@@ -5017,7 +5498,7 @@ export function WebMessenger({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeChat?.id, sendTypingState]);
+  }, [activeChat, sendTypingState]);
 
   useEffect(() => {
     return () => {
@@ -5061,6 +5542,76 @@ export function WebMessenger({
     }
   }, []);
 
+  const toggleMessageFavorite = useCallback(
+    async (messageId: string, saved: boolean) => {
+      const targetMessage =
+        messagesRef.current.find((message) => message.id === messageId) ?? null;
+      if (!targetMessage) {
+        return;
+      }
+
+      if (saved) {
+        setIsFavoritesChatVisible(true);
+      }
+
+      const now = Date.now();
+      const nextSavedAt = saved ? now : -now;
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                savedBy: {
+                  ...message.savedBy,
+                  [currentUser.id]: nextSavedAt,
+                },
+              }
+            : message
+        )
+      );
+
+      try {
+        await requestJson<{ ok: boolean }>("/api/messenger/favorite", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            messageId,
+            saved,
+          }),
+        });
+      } catch {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  savedBy: { ...targetMessage.savedBy },
+                }
+              : message
+          )
+        );
+        showToast(t("actionFailed"));
+      }
+    },
+    [currentUser.id, showToast, t]
+  );
+
+  const openFavoriteSourceMessage = useCallback(
+    (sourceChatId: string, messageId: string) => {
+      const sourceExists = chatItems.some(
+        (chat) => chat.id === sourceChatId && !chat.isFavorites
+      );
+      if (!sourceExists) {
+        return;
+      }
+      openChat(sourceChatId);
+      window.setTimeout(() => {
+        focusReplyTargetMessage(messageId);
+      }, 120);
+    },
+    [chatItems, focusReplyTargetMessage, openChat]
+  );
+
   const playIncomingMessageSound = useCallback(() => {
     if (!messageSoundEnabled) {
       return;
@@ -5075,7 +5626,7 @@ export function WebMessenger({
 
   const deleteMessage = useCallback(
     async (messageId: string) => {
-      if (!activeChat) {
+      if (!activeChat || activeChat.isFavorites || activeChat.isPreview) {
         return;
       }
 
@@ -5163,7 +5714,12 @@ export function WebMessenger({
   );
 
   useEffect(() => {
-    if (!activeChat || activeSidebar !== "home") {
+    if (
+      !activeChat ||
+      activeSidebar !== "home" ||
+      activeChat.isFavorites ||
+      activeChat.isPreview
+    ) {
       return;
     }
 
@@ -5369,6 +5925,7 @@ export function WebMessenger({
         );
         setActiveSidebar("home");
         setIsActiveChatProfileSidebarOpen(false);
+        setActiveChatPreviewUserId(null);
         setActiveChatId(result.chatId);
         setMobileView("chat");
         setQuery("");
@@ -5474,7 +6031,7 @@ export function WebMessenger({
   }, [activeChatJumpDate, activeMessages, focusReplyTargetMessage, showToast, t]);
 
   const clearHistoryForMe = useCallback(() => {
-    if (!activeChat) {
+    if (!activeChat || activeChat.isFavorites || activeChat.isPreview) {
       return;
     }
     setClearedChatAtById((prev) => ({
@@ -5496,6 +6053,10 @@ export function WebMessenger({
   }, [activeChat, showToast, t]);
 
   const setChatPinned = async (chatId: string, pinned: boolean) => {
+    if (chatId === FAVORITES_CHAT_ID) {
+      setIsFavoritesChatPinned(pinned);
+      return;
+    }
     const targetChat = chatItems.find((chat) => chat.id === chatId);
     if (pinned && !targetChat?.isPinned && pinnedChatsCount >= MAX_PINNED_CHATS) {
       return;
@@ -5532,6 +6093,9 @@ export function WebMessenger({
 
   const setChatMuted = useCallback(
     async (chatId: string, muted: boolean, options?: { silentToast?: boolean }) => {
+      if (chatId === FAVORITES_CHAT_ID) {
+        return;
+      }
       setThreads((prev) =>
         prev.map((thread) => {
           if (thread.id !== chatId) {
@@ -6116,6 +6680,18 @@ export function WebMessenger({
       return;
     }
 
+    let chatIdForSend = activeChat.id;
+    if (activeChat.isPreview) {
+      if (!activeChat.memberId) {
+        return;
+      }
+      const resolvedChatId = await createOrOpenChat(activeChat.memberId);
+      if (!resolvedChatId) {
+        return;
+      }
+      chatIdForSend = resolvedChatId;
+    }
+
     setDraft("");
     setPendingAttachments([]);
     setReplyToMessageId(null);
@@ -6128,7 +6704,7 @@ export function WebMessenger({
           method: "POST",
           body: JSON.stringify({
             userId: currentUser.id,
-            chatId: activeChat.id,
+            chatId: chatIdForSend,
             text,
             attachments: attachments.map(
               (attachment): SendAttachmentPayload => ({
@@ -6704,6 +7280,12 @@ export function WebMessenger({
     if (!activeChat) {
       return false;
     }
+    if (activeChat.isFavorites) {
+      setProfileUserId(currentUser.id);
+      setProfileTab("media");
+      setIsEditingProfile(false);
+      return true;
+    }
     if (activeChat.isGroup) {
       setProfileUserId(activeChat.id);
     } else if (activeChat.memberId) {
@@ -6714,7 +7296,7 @@ export function WebMessenger({
     setProfileTab("media");
     setIsEditingProfile(false);
     return true;
-  }, [activeChat]);
+  }, [activeChat, currentUser.id]);
 
   const openActiveChatProfile = useCallback(() => {
     if (!prepareActiveChatProfileTarget()) {
@@ -6793,6 +7375,10 @@ export function WebMessenger({
       setIsActiveChatProfileSidebarOpen(false);
       return;
     }
+    if (activeChat.isFavorites) {
+      setProfileUserId((prev) => (prev === currentUser.id ? prev : currentUser.id));
+      return;
+    }
     if (activeChat.isGroup) {
       setProfileUserId((prev) => (prev === activeChat.id ? prev : activeChat.id));
     } else if (activeChat.memberId) {
@@ -6803,7 +7389,7 @@ export function WebMessenger({
       setIsActiveChatProfileSidebarOpen(false);
       return;
     }
-  }, [activeChat, isActiveChatProfileSidebarOpen]);
+  }, [activeChat, currentUser.id, isActiveChatProfileSidebarOpen]);
 
   const renameSelectedGroup = async () => {
     const selectedGroup = selectedGroupChat;
@@ -7288,11 +7874,11 @@ export function WebMessenger({
   const uiRadiusBubbleClass =
     uiRadius === "sharp" ? "rounded-md" : uiRadius === "rounded" ? "rounded-3xl" : "rounded-2xl";
   const unifiedSelectTriggerClassName =
-    "rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-100 transition-colors hover:border-violet-500 hover:bg-zinc-700 focus-visible:border-violet-500 focus-visible:ring-1 focus-visible:ring-violet-500 data-[state=open]:border-violet-500 data-[state=open]:bg-zinc-700";
+    "rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-100 transition-colors hover:border-primary hover:bg-zinc-700 focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary data-[state=open]:border-primary data-[state=open]:bg-zinc-700";
   const unifiedSelectContentClassName =
     "overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 p-1 text-zinc-100 shadow-xl";
   const unifiedSelectItemClassName =
-    "rounded-md px-7 py-1.5 text-xs text-zinc-100 outline-none data-[highlighted]:bg-violet-500 data-[highlighted]:text-zinc-50 data-[state=checked]:bg-violet-500 data-[state=checked]:text-zinc-50";
+    "rounded-md px-7 py-1.5 text-xs text-zinc-100 outline-none data-[highlighted]:bg-primary data-[highlighted]:text-zinc-50 data-[state=checked]:bg-primary data-[state=checked]:text-zinc-50";
   const getLanguageLabel = (value: string) => {
     if (value === "ru") {
       return t("russian");
@@ -7429,7 +8015,7 @@ export function WebMessenger({
                       }}
                       className={`relative flex items-center justify-center rounded-lg border px-2 py-3 text-sm font-medium ${
                         active
-                          ? "border-violet-500 bg-violet-500 text-zinc-100"
+                          ? "border-primary bg-primary text-zinc-100"
                           : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100"
                       }`}
                       aria-label={t(item.id)}
@@ -7461,7 +8047,7 @@ export function WebMessenger({
                     onClick={() => setIsGroupMenuOpen(true)}
                     aria-label={t("newGroup")}
                     title={t("newGroup")}
-                    className="h-9 w-9 rounded-lg bg-violet-500 p-0 text-zinc-100 hover:bg-violet-400 hover:text-zinc-100"
+                    className="h-9 w-9 rounded-lg bg-primary p-0 text-zinc-100 hover:bg-primary/90 hover:text-zinc-100"
                   >
                     <Plus className="size-4" />
                   </Button>
@@ -7504,12 +8090,12 @@ export function WebMessenger({
                             onClick={() => toggleGroupMember(user.id)}
                             className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm ${
                               selected
-                                ? "border-violet-500/50 bg-zinc-700 text-zinc-100"
+                                ? "border-primary/50 bg-zinc-700 text-zinc-100"
                                 : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                             }`}
                           >
                             <span className="truncate">{user.name}</span>
-                            {selected ? <Check className="size-4 text-violet-400" /> : null}
+                            {selected ? <Check className="size-4 text-primary" /> : null}
                           </button>
                         );
                       })}
@@ -7531,7 +8117,7 @@ export function WebMessenger({
                         groupMemberIdsDraft.length < 2 ||
                         groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS
                       }
-                      className="h-10 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
                     >
                       {t("createGroup")}
                     </Button>
@@ -7546,7 +8132,9 @@ export function WebMessenger({
                 {filteredChats.map((chat) => {
                   const selected = chat.id === activeChat?.id;
                   const pinLimitReached =
-                    !chat.isPinned && pinnedChatsCount >= MAX_PINNED_CHATS;
+                    !chat.isFavorites &&
+                    !chat.isPinned &&
+                    pinnedChatsCount >= MAX_PINNED_CHATS;
                   const chatDraftPreview = (draftsByChatId[chat.id] ?? "").trim();
                   return (
                     <ContextMenu key={chat.id}>
@@ -7556,7 +8144,7 @@ export function WebMessenger({
                           onClick={() => openChat(chat.id)}
                           className={`w-full ${uiRadiusCardClass} border px-3 text-left ${
                             selected
-                              ? "border-violet-400/35 bg-zinc-700 text-zinc-100"
+                              ? "border-primary/35 bg-zinc-700 text-zinc-100"
                               : "border-zinc-700 bg-zinc-800 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-700/90"
                           } ${uiDensity === "compact" ? "py-1.5" : "py-3"}`}
                         >
@@ -7575,7 +8163,13 @@ export function WebMessenger({
                                   uiDensity === "compact" ? "size-8 text-xs" : "size-10 text-sm"
                                 } ${chat.accent}`}
                               >
-                                {chat.isGroup ? <Users className="size-4" /> : chat.name.slice(0, 2).toUpperCase()}
+                                {chat.isGroup ? (
+                                  <Users className="size-4" />
+                                ) : chat.isFavorites ? (
+                                  <Bookmark className="size-4" />
+                                ) : (
+                                  chat.name.slice(0, 2).toUpperCase()
+                                )}
                               </span>
                             )}
                             <span className="min-w-0 flex-1">
@@ -7593,7 +8187,7 @@ export function WebMessenger({
                                 </span>
                                 <span
                                   className={`text-xs ${
-                                    selected ? "text-violet-300" : "text-zinc-500"
+                                    selected ? "text-primary" : "text-zinc-500"
                                   }`}
                                 >
                                   {chat.lastTime}
@@ -7622,13 +8216,13 @@ export function WebMessenger({
                               </span>
                             </span>
                             {chat.isPinned ? (
-                              <PinFilledIcon className="size-4 shrink-0 text-violet-400" />
+                              <PinFilledIcon className="size-4 shrink-0 text-primary" />
                             ) : null}
                             {chat.isMuted ? (
                               <BellOff className="size-4 shrink-0 text-zinc-400" />
                             ) : null}
                             {chat.unread > 0 ? (
-                              <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-violet-400 px-2 py-0.5 text-xs font-semibold text-zinc-50">
+                              <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-zinc-50">
                                 {chat.unread}
                               </span>
                             ) : null}
@@ -7638,52 +8232,83 @@ export function WebMessenger({
                       <ContextMenuContent
                         className={chatActionMenuContentClassName}
                       >
-                        <ContextMenuItem
-                          className={chatActionMenuItemClassName}
-                          onSelect={() => void setChatPinned(chat.id, !chat.isPinned)}
-                          disabled={pinLimitReached}
-                        >
-                          {chat.isPinned ? (
-                            <PinOffIcon className="size-4" />
-                          ) : (
-                            <PinFilledIcon className="size-4" />
-                          )}
-                          {chat.isPinned ? t("unpinChat") : t("pinChat")}
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          className={chatActionMenuItemClassName}
-                          onSelect={() => void setChatMuted(chat.id, !chat.isMuted)}
-                        >
-                          {chat.isMuted ? (
-                            <Bell className="size-4" />
-                          ) : (
-                            <BellOff className="size-4" />
-                          )}
-                          {chat.isMuted ? t("unmuteChat") : t("muteChat")}
-                        </ContextMenuItem>
-                        <ContextMenuSeparator
-                          className={chatActionMenuSeparatorClassName}
-                        />
-                        {chat.isGroup && !chat.isGroupCreator ? (
-                          <ContextMenuItem
-                            variant="destructive"
-                            className={chatActionMenuDestructiveItemClassName}
-                            onSelect={() => void leaveGroup(chat.id)}
-                          >
-                            <ArrowLeft className="size-4" />
-                            {t("leaveGroup")}
-                          </ContextMenuItem>
+                        {chat.isFavorites ? (
+                          <>
+                            <ContextMenuItem
+                              className={chatActionMenuItemClassName}
+                              onSelect={() => void setChatPinned(chat.id, !chat.isPinned)}
+                            >
+                              {chat.isPinned ? (
+                                <PinOffIcon className="size-4" />
+                              ) : (
+                                <PinFilledIcon className="size-4" />
+                              )}
+                              {chat.isPinned ? t("unpinChat") : t("pinChat")}
+                            </ContextMenuItem>
+                            <ContextMenuSeparator
+                              className={chatActionMenuSeparatorClassName}
+                            />
+                            <ContextMenuItem
+                              className={chatActionMenuItemClassName}
+                              onSelect={() => {
+                                setChatIdToConfirmDelete(FAVORITES_CHAT_ID);
+                                setIsDeleteChatDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="size-4" />
+                              {t("deleteFavoritesAction")}
+                            </ContextMenuItem>
+                          </>
                         ) : (
-                          <ContextMenuItem
-                            className={chatActionMenuItemClassName}
-                            onSelect={() => {
-                              setChatIdToConfirmDelete(chat.id);
-                              setIsDeleteChatDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="size-4" />
-                            {chat.isGroup ? t("deleteGroup") : t("deleteForBoth")}
-                          </ContextMenuItem>
+                          <>
+                            <ContextMenuItem
+                              className={chatActionMenuItemClassName}
+                              onSelect={() => void setChatPinned(chat.id, !chat.isPinned)}
+                              disabled={pinLimitReached}
+                            >
+                              {chat.isPinned ? (
+                                <PinOffIcon className="size-4" />
+                              ) : (
+                                <PinFilledIcon className="size-4" />
+                              )}
+                              {chat.isPinned ? t("unpinChat") : t("pinChat")}
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              className={chatActionMenuItemClassName}
+                              onSelect={() => void setChatMuted(chat.id, !chat.isMuted)}
+                            >
+                              {chat.isMuted ? (
+                                <Bell className="size-4" />
+                              ) : (
+                                <BellOff className="size-4" />
+                              )}
+                              {chat.isMuted ? t("unmuteChat") : t("muteChat")}
+                            </ContextMenuItem>
+                            <ContextMenuSeparator
+                              className={chatActionMenuSeparatorClassName}
+                            />
+                            {chat.isGroup && !chat.isGroupCreator ? (
+                              <ContextMenuItem
+                                variant="destructive"
+                                className={chatActionMenuDestructiveItemClassName}
+                                onSelect={() => void leaveGroup(chat.id)}
+                              >
+                                <ArrowLeft className="size-4" />
+                                {t("leaveGroup")}
+                              </ContextMenuItem>
+                            ) : (
+                              <ContextMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() => {
+                                  setChatIdToConfirmDelete(chat.id);
+                                  setIsDeleteChatDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="size-4" />
+                                {chat.isGroup ? t("deleteGroup") : t("deleteForBoth")}
+                              </ContextMenuItem>
+                            )}
+                          </>
                         )}
                       </ContextMenuContent>
                     </ContextMenu>
@@ -7699,7 +8324,7 @@ export function WebMessenger({
                         <button
                           key={user.id}
                           type="button"
-                          onClick={() => createOrOpenChat(user.id)}
+                          onClick={() => openUserPreview(user.id)}
                           className={`w-full ${uiRadiusCardClass} border border-zinc-700 bg-zinc-700 px-3 text-left hover:bg-zinc-600 ${
                             uiDensity === "compact" ? "py-2" : "py-3"
                           }`}
@@ -7772,7 +8397,13 @@ export function WebMessenger({
                             uiDensity === "compact" ? "size-8 text-xs" : "size-10 text-sm"
                           } ${activeChat.accent}`}
                         >
-                          {activeChat.isGroup ? <Users className="size-4" /> : activeChat.name.slice(0, 2).toUpperCase()}
+                          {activeChat.isGroup ? (
+                            <Users className="size-4" />
+                          ) : activeChat.isFavorites ? (
+                            <Bookmark className="size-4" />
+                          ) : (
+                            activeChat.name.slice(0, 2).toUpperCase()
+                          )}
                         </span>
                       )}
                       <span className="min-w-0">
@@ -7801,9 +8432,11 @@ export function WebMessenger({
                         }`}
                       >
                         {activeChatTypingText ||
-                          (activeChat.isGroup
-                            ? `${Math.max(2, activeChat.memberIds.length)} ${t("members")}`
-                            : activeChatLastSeenText)}
+                          (activeChat.isFavorites
+                            ? t("savedMessages")
+                            : activeChat.isGroup
+                              ? `${Math.max(2, activeChat.memberIds.length)} ${t("members")}`
+                              : activeChatLastSeenText)}
                       </p>
                       </span>
                     </div>
@@ -7818,7 +8451,7 @@ export function WebMessenger({
                         onClick={() => openActiveChatSearch()}
                         className={`border hover:text-zinc-100 ${uiDensity === "compact" ? "h-8 w-8" : ""} ${
                           isActiveChatSearchOpen
-                            ? "border-violet-500/70 bg-violet-500/20 text-violet-200 hover:bg-violet-500/25"
+                            ? "border-primary/70 bg-primary/20 text-primary/80 hover:bg-primary/25"
                             : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
                         }`}
                       >
@@ -7854,7 +8487,7 @@ export function WebMessenger({
                         onClick={() => toggleActiveChatProfileSidebar()}
                         className={`border hover:text-zinc-100 ${uiDensity === "compact" ? "h-8 w-8" : ""} ${
                           isCompactActiveChatProfileSidebar
-                            ? "border-violet-500/70 bg-violet-500/20 text-violet-200 hover:bg-violet-500/25"
+                            ? "border-primary/70 bg-primary/20 text-primary/80 hover:bg-primary/25"
                             : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
                         }`}
                       >
@@ -7880,6 +8513,7 @@ export function WebMessenger({
                           <DropdownMenuItem
                             className={chatActionMenuItemClassName}
                             onSelect={() => setIsChatPersonalizationOpen(true)}
+                            disabled={activeChat.isPreview}
                           >
                             <SettingsSidebarIcon className="size-4" />
                             {t("openChatPersonalization")}
@@ -7890,6 +8524,7 @@ export function WebMessenger({
                           <DropdownMenuItem
                             className={chatActionMenuItemClassName}
                             onSelect={() => clearHistoryForMe()}
+                            disabled={activeChat.isPreview}
                           >
                             <Eraser className="size-4" />
                             {t("clearHistoryForMe")}
@@ -7900,12 +8535,23 @@ export function WebMessenger({
                               if (!activeChat) {
                                 return;
                               }
+                              if (activeChat.isFavorites) {
+                                setChatIdToConfirmDelete(FAVORITES_CHAT_ID);
+                                setIsDeleteChatDialogOpen(true);
+                                return;
+                              }
+                              if (activeChat.isPreview) {
+                                return;
+                              }
                               setChatIdToConfirmDelete(activeChat.id);
                               setIsDeleteChatDialogOpen(true);
                             }}
+                            disabled={activeChat.isPreview}
                           >
                             <Trash2 className="size-4" />
-                            {t("deleteChatAction")}
+                            {activeChat.isFavorites
+                              ? t("deleteFavoritesAction")
+                              : t("deleteChatAction")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -7980,6 +8626,7 @@ export function WebMessenger({
                     style={activeChatBackgroundStyle}
                   >
                     <div
+                      ref={activeMessagesScrollRef}
                       className={`flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
                         uiDensity === "compact" ? "space-y-1.5 px-4 py-3" : "space-y-2 px-4 py-5"
                       }`}
@@ -7994,8 +8641,11 @@ export function WebMessenger({
                     {filteredActiveMessages.map((message) => {
                       const hasMessageText = message.text.trim().length > 0;
                       const firstAttachmentUrl = message.attachments[0]?.url ?? "";
-                      const canDeleteMessage = message.author === "me";
-                      const hasCopyActions = hasMessageText || firstAttachmentUrl.length > 0;
+                      const canDeleteMessage =
+                        message.author === "me" && !activeChat.isFavorites;
+                      const canReplyToMessage = !activeChat.isFavorites;
+                      const canOpenOriginalChat =
+                        activeChat.isFavorites && Boolean(message.sourceChatId);
                       const reply = message.reply;
                       const shouldShowUnreadDivider =
                         unreadDividerMessageId === message.id &&
@@ -8036,10 +8686,28 @@ export function WebMessenger({
                                       : ""
                                   } ${
                                     message.author === "me"
-                                      ? "bg-violet-500 text-zinc-100"
+                                      ? "bg-primary text-zinc-100"
                                       : "border border-zinc-600 bg-zinc-700 text-zinc-100"
                                   }`}
                                 >
+                                {activeChat.isFavorites && message.sourceChatId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openFavoriteSourceMessage(message.sourceChatId ?? "", message.id)
+                                    }
+                                    className={`mb-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-left text-[11px] font-medium ${
+                                      message.author === "me"
+                                        ? "border-zinc-100/30 bg-zinc-100/10 text-zinc-100/90"
+                                        : "border-zinc-500/40 bg-zinc-800/70 text-zinc-200"
+                                    }`}
+                                  >
+                                    <Bookmark className="size-3.5 shrink-0" />
+                                    <span className="truncate">
+                                      {`${t("fromChat")}: ${message.sourceChatName}`}
+                                    </span>
+                                  </button>
+                                ) : null}
                                 {reply ? (
                                   <button
                                     type="button"
@@ -8052,7 +8720,7 @@ export function WebMessenger({
                                     className={`mb-2 rounded-lg border-l-2 px-2 py-1 ${
                                       message.author === "me"
                                         ? "border-zinc-100/60 bg-zinc-100/10"
-                                        : "border-violet-500/70 bg-zinc-800/70"
+                                        : "border-primary/70 bg-zinc-800/70"
                                     } ${
                                       reply.missing
                                         ? "cursor-default opacity-80"
@@ -8177,7 +8845,7 @@ export function WebMessenger({
                                     <span className="opacity-80">{t("editedLabel")}</span>
                                   ) : null}
                                   <span>{message.time}</span>
-                                  {message.author === "me" ? (
+                                  {!activeChat.isFavorites && message.author === "me" ? (
                                     activeChat.isGroup ? (
                                       message.groupReadByCount > 0 ? (
                                         <span className="rounded-full border border-zinc-100/25 px-1.5 py-px text-[10px] font-medium text-zinc-100/90">
@@ -8193,7 +8861,8 @@ export function WebMessenger({
                                     )
                                   ) : null}
                                 </div>
-                                {message.author === "me" &&
+                                {!activeChat.isFavorites &&
+                                message.author === "me" &&
                                 activeChat.isGroup &&
                                 message.groupReadByCount > 0 ? (
                                   <p className="mt-1 truncate text-right text-[11px] text-zinc-100/70">
@@ -8206,12 +8875,46 @@ export function WebMessenger({
                             <ContextMenuContent
                               className={chatActionMenuContentClassName}
                             >
+                            {canReplyToMessage ? (
+                              <ContextMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() => startReplyToMessage(message.id)}
+                              >
+                                <CornerUpLeft className="size-4" />
+                                {t("replyToMessage")}
+                              </ContextMenuItem>
+                            ) : null}
+                            {canOpenOriginalChat ? (
+                              <ContextMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() => {
+                                  if (!message.sourceChatId) {
+                                    return;
+                                  }
+                                  openFavoriteSourceMessage(message.sourceChatId, message.id);
+                                }}
+                              >
+                                <ArrowRight className="size-4" />
+                                {t("openOriginalChat")}
+                              </ContextMenuItem>
+                            ) : null}
+                            {canReplyToMessage || canOpenOriginalChat ? (
+                              <ContextMenuSeparator
+                                className={chatActionMenuSeparatorClassName}
+                              />
+                            ) : null}
                             <ContextMenuItem
                               className={chatActionMenuItemClassName}
-                              onSelect={() => startReplyToMessage(message.id)}
+                              onSelect={() =>
+                                void toggleMessageFavorite(message.id, !message.isFavorite)
+                              }
                             >
-                              <CornerUpLeft className="size-4" />
-                              {t("replyToMessage")}
+                              <Bookmark
+                                className={`size-4 ${message.isFavorite ? "fill-current" : ""}`}
+                              />
+                              {message.isFavorite
+                                ? t("removeFromFavorites")
+                                : t("saveToFavorites")}
                             </ContextMenuItem>
                             {(hasMessageText || firstAttachmentUrl) ? (
                               <ContextMenuSeparator
@@ -8238,11 +8941,9 @@ export function WebMessenger({
                             ) : null}
                             {canDeleteMessage ? (
                               <>
-                                {hasCopyActions ? (
-                                  <ContextMenuSeparator
-                                    className={chatActionMenuSeparatorClassName}
-                                  />
-                                ) : null}
+                                <ContextMenuSeparator
+                                  className={chatActionMenuSeparatorClassName}
+                                />
                                 <ContextMenuItem
                                   className={chatActionMenuItemClassName}
                                   onSelect={() => startEditingMessage(message.id)}
@@ -8288,7 +8989,7 @@ export function WebMessenger({
                         }`}
                       >
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-violet-300">
+                          <p className="text-xs font-medium text-primary">
                             {t("editingMessage")}
                           </p>
                           <p className="truncate text-xs text-zinc-200">
@@ -8320,7 +9021,7 @@ export function WebMessenger({
                         }`}
                       >
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-violet-300">
+                          <p className="text-xs font-medium text-primary">
                             {t("replyingTo")}{" "}
                             {replyTargetMessage.authorLabel}
                           </p>
@@ -8398,7 +9099,7 @@ export function WebMessenger({
                                   size="icon"
                                   aria-label={control.label}
                                   title={control.label}
-                                  className="h-8 w-8 rounded-lg border border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:border-violet-500 hover:bg-zinc-700 hover:text-violet-300"
+                                  className="h-8 w-8 rounded-lg border border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:border-primary hover:bg-zinc-700 hover:text-primary"
                                   onClick={() => {
                                     applyFormattingToDraft(action);
                                     setFormattingMenuPosition(null);
@@ -8442,7 +9143,7 @@ export function WebMessenger({
                             aria-label={t("attachFiles")}
                             title={t("attachFiles")}
                             disabled={Boolean(editingTargetMessage)}
-                            className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-violet-500 hover:bg-zinc-600 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-50 ${
+                            className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-primary hover:bg-zinc-600 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 ${
                               uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
                             }`}
                             onClick={openAttachmentPicker}
@@ -8499,7 +9200,7 @@ export function WebMessenger({
                               size="icon"
                               aria-label="Emoji"
                               title="Emoji"
-                              className={`absolute top-1/2 -translate-y-1/2 rounded-md border-0 bg-transparent p-0 text-zinc-300 shadow-none hover:bg-transparent hover:text-violet-300 focus-visible:ring-0 ${
+                              className={`absolute top-1/2 -translate-y-1/2 rounded-md border-0 bg-transparent p-0 text-zinc-300 shadow-none hover:bg-transparent hover:text-primary focus-visible:ring-0 ${
                                 uiDensity === "compact" ? "right-1.5 h-6 w-6" : "right-2 h-7 w-7"
                               }`}
                               onClick={() => setIsEmojiMenuOpen((prev) => !prev)}
@@ -8518,7 +9219,7 @@ export function WebMessenger({
                               size="icon"
                               aria-label={t("startVoiceRecording")}
                               title={t("startVoiceRecording")}
-                              className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-violet-500 hover:bg-zinc-600 hover:text-violet-300 ${
+                              className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-primary hover:bg-zinc-600 hover:text-primary ${
                                 uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
                               }`}
                               onClick={toggleVoiceRecording}
@@ -8530,7 +9231,7 @@ export function WebMessenger({
                               type="submit"
                               aria-label={editingTargetMessage ? t("saveEdit") : t("send")}
                               title={editingTargetMessage ? t("saveEdit") : t("send")}
-                              className={`shrink-0 rounded-lg bg-violet-500 p-0 text-zinc-50 hover:bg-violet-400 ${
+                              className={`shrink-0 rounded-lg bg-primary p-0 text-zinc-50 hover:bg-primary/90 ${
                                 uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
                               }`}
                               disabled={
@@ -8560,34 +9261,15 @@ export function WebMessenger({
               </>
             ) : null}
             {activeSidebar === "assistant" ? (
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-900">
-                <div className="sticky top-0 z-10 border-b border-zinc-700 bg-zinc-900 px-4 py-4 sm:px-6">
-                  <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-xl font-semibold text-zinc-100">
-                        {t("aiAssistantTitle")}
-                      </h2>
-                      <p className="mt-1 text-sm text-zinc-400">{t("aiAssistantSubtitle")}</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={clearAiConversation}
-                      disabled={isAiSubmitting || (aiMessages.length === 0 && !aiError)}
-                      className="h-9 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {t("aiAssistantClear")}
-                    </Button>
-                  </div>
-                </div>
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_10%_0%,rgba(139,92,246,0.14),transparent_36%),linear-gradient(180deg,#09090b_0%,#101015_100%)]">
                 <div
                   ref={aiMessagesScrollRef}
-                  className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6"
+                  className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
                 >
-                  <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 pb-8">
+                  <div className="flex w-full flex-col gap-2.5 pb-6">
                     {aiMessages.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-5 py-12 text-center">
-                        <div className="mx-auto mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-violet-300">
+                      <div className="rounded-2xl border border-zinc-800/90 bg-zinc-950/70 px-5 py-10 text-center shadow-[0_20px_50px_-36px_rgba(0,0,0,0.95)]">
+                        <div className="mx-auto mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary">
                           <Sparkles className="size-5" />
                         </div>
                         <p className="text-base font-semibold text-zinc-100">
@@ -8602,15 +9284,20 @@ export function WebMessenger({
                           className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                           <div
-                            className={`max-w-[92%] rounded-2xl border px-3 py-2 text-sm ring-1 ring-white/5 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.85)] sm:max-w-[80%] ${
+                            className={`max-w-[94%] rounded-2xl border px-3.5 py-2.5 text-sm shadow-[0_14px_30px_-24px_rgba(0,0,0,0.9)] sm:max-w-[82%] ${
                               message.role === "user"
-                                ? "border-violet-500/40 bg-violet-500 text-zinc-50"
+                                ? "border-primary/35 bg-primary/90 text-zinc-50"
                                 : message.error
                                   ? "border-red-500/35 bg-red-500/10 text-red-100"
-                                  : "border-zinc-700 bg-zinc-800 text-zinc-100"
+                                  : "border-zinc-700/90 bg-zinc-900/90 text-zinc-100"
                             }`}
                           >
-                            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                            <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] opacity-70">
+                              {message.role === "user" ? t("you") : t("aiAssistantTitle")}
+                            </p>
+                            <p className="whitespace-pre-wrap break-words leading-relaxed">
+                              {message.content}
+                            </p>
                           </div>
                         </div>
                       ))
@@ -8618,14 +9305,30 @@ export function WebMessenger({
                   </div>
                 </div>
                 <form
-                  className="border-t border-zinc-700 bg-zinc-900 px-4 py-3 sm:px-6"
+                  className="px-3 py-3 sm:px-6 sm:py-4"
                   onSubmit={(event) => {
                     event.preventDefault();
                     void sendAiPrompt();
                   }}
                 >
-                  <div className="mx-auto w-full max-w-5xl">
-                    <div className={`${uiRadiusCardClass} border border-zinc-700 bg-zinc-950/85 p-2`}>
+                  <div className="w-full">
+                    <div className="mb-2 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={clearAiConversation}
+                        disabled={isAiSubmitting || (aiMessages.length === 0 && !aiError)}
+                        className="h-8 rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {t("aiAssistantClear")}
+                      </Button>
+                    </div>
+                    {aiError ? (
+                      <p className="mb-2 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+                        {aiError}
+                      </p>
+                    ) : null}
+                    <div className="flex items-end gap-2 rounded-2xl border border-zinc-700/90 bg-zinc-950/90 p-2 shadow-[0_16px_40px_-28px_rgba(0,0,0,0.95)]">
                       <Textarea
                         value={aiDraft}
                         placeholder={t("aiAssistantPlaceholder")}
@@ -8636,39 +9339,19 @@ export function WebMessenger({
                             void sendAiPrompt();
                           }
                         }}
-                        className={`max-h-44 border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400 ${
+                        className={`max-h-44 flex-1 border-0 bg-transparent text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-0 ${
                           uiDensity === "compact"
-                            ? "min-h-[72px] py-2 text-sm"
-                            : "min-h-[88px] py-2.5"
+                            ? "min-h-[58px] px-1 py-1.5 text-sm"
+                            : "min-h-[72px] px-1 py-2"
                         }`}
                       />
-                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-900/70 px-2.5 py-1.5">
-                            <p className="text-xs text-zinc-300">
-                              {t("aiAssistantSearchMode")}
-                            </p>
-                            <Switch
-                              checked={aiSearchEnabled}
-                              onCheckedChange={setAiSearchEnabled}
-                              aria-label={t("aiAssistantSearchMode")}
-                            />
-                          </div>
-                          <p className="hidden text-[11px] text-zinc-500 sm:block">
-                            {t("aiAssistantSearchHint")}
-                          </p>
-                        </div>
-                        <Button
-                          type="submit"
-                          disabled={isAiSubmitting || aiDraft.trim().length === 0}
-                          className="h-9 rounded-lg bg-violet-500 px-4 text-zinc-50 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAiSubmitting ? t("aiAssistantThinking") : t("send")}
-                        </Button>
-                      </div>
-                      <p className="mt-2 text-xs text-zinc-500">
-                        {aiError || t("formattingHotkeyHint")}
-                      </p>
+                      <Button
+                        type="submit"
+                        disabled={isAiSubmitting || aiDraft.trim().length === 0}
+                        className="h-10 rounded-xl bg-primary px-4 text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isAiSubmitting ? t("aiAssistantThinking") : t("send")}
+                      </Button>
                     </div>
                   </div>
                 </form>
@@ -8724,7 +9407,7 @@ export function WebMessenger({
                         </AlertDialogAction>
                       ) : null}
                       <AlertDialogAction
-                        className="bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                        className="bg-primary text-zinc-50 hover:bg-primary/90"
                         onClick={triggerImagePick}
                       >
                         {t("changeFile")}
@@ -8777,7 +9460,7 @@ export function WebMessenger({
                       />
                     ) : (
                       <span
-                        className={`inline-flex size-24 items-center justify-center rounded-full border-4 border-zinc-900 bg-violet-500 text-2xl font-semibold text-zinc-50 sm:size-28 ${
+                        className={`inline-flex size-24 items-center justify-center rounded-full border-4 border-zinc-900 bg-primary text-2xl font-semibold text-zinc-50 sm:size-28 ${
                           canEditViewedProfileImages ? "cursor-pointer" : ""
                         }`}
                         onClick={() => openImagePickerDialog("avatar")}
@@ -8794,7 +9477,7 @@ export function WebMessenger({
                             <Button
                               type="button"
                               onClick={() => void saveProfileEdit()}
-                              className="h-9 flex-1 rounded-lg bg-violet-500 px-3 text-zinc-50 hover:bg-violet-400"
+                              className="h-9 flex-1 rounded-lg bg-primary px-3 text-zinc-50 hover:bg-primary/90"
                             >
                               {t("save")}
                             </Button>
@@ -8939,10 +9622,19 @@ export function WebMessenger({
                               <Button
                                 type="button"
                                 onClick={startProfileEdit}
-                                className="h-9 flex-1 rounded-lg bg-violet-500 px-3 text-zinc-50 hover:bg-violet-400"
+                                className="h-9 flex-1 rounded-lg bg-primary px-3 text-zinc-50 hover:bg-primary/90"
                               >
                                 <Pencil className="size-4" />
                                 {t("editProfile")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={openFavoritesChat}
+                                className="h-9 rounded-lg border border-zinc-600 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100"
+                              >
+                                <Bookmark className="size-4" />
+                                {t("favorites")}
                               </Button>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -8977,7 +9669,7 @@ export function WebMessenger({
                               <Button
                                 type="button"
                                 onClick={() => void createOrOpenChat(viewedUserId)}
-                                className="h-9 flex-1 rounded-lg bg-violet-500 px-3 text-zinc-50 hover:bg-violet-400"
+                                className="h-9 flex-1 rounded-lg bg-primary px-3 text-zinc-50 hover:bg-primary/90"
                               >
                                 <MessageCircle className="size-4" />
                                 {t("openChat")}
@@ -9094,7 +9786,7 @@ export function WebMessenger({
                                       groupRenameDraft.trim().replace(/\s+/g, " ") ===
                                         (selectedGroupChat?.name ?? "")
                                     }
-                                    className="h-8 rounded-md bg-violet-500 px-3 text-xs text-zinc-50 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="h-8 rounded-md bg-primary px-3 text-xs text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     {t("save")}
                                   </Button>
@@ -9115,7 +9807,7 @@ export function WebMessenger({
                                         className="flex w-full items-center justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-left text-xs text-zinc-200 hover:border-zinc-600 hover:bg-zinc-700"
                                       >
                                         <span className="truncate">{`${candidate.name} (@${candidate.username})`}</span>
-                                        <Plus className="size-3.5 shrink-0 text-violet-300" />
+                                        <Plus className="size-3.5 shrink-0 text-primary" />
                                       </button>
                                     ))}
                                   </div>
@@ -9146,7 +9838,7 @@ export function WebMessenger({
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       {member.role === "admin" ? (
-                                        <span className="rounded-full border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">
+                                        <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                                           {t("admin")}
                                         </span>
                                       ) : null}
@@ -9253,7 +9945,7 @@ export function WebMessenger({
                           onClick={() => setProfileTab(tab.id)}
                           className={`border-b-2 px-4 py-3 text-sm font-medium ${
                             profileTab === tab.id
-                              ? "border-violet-400 text-zinc-100"
+                              ? "border-primary text-zinc-100"
                               : "border-transparent text-zinc-500"
                           }`}
                         >
@@ -9279,7 +9971,7 @@ export function WebMessenger({
                       {profileMediaItems.map((item) => (
                         <div
                           key={item.id}
-                          className="relative aspect-square overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 hover:border-violet-500/50"
+                          className="relative aspect-square overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 hover:border-primary/50"
                         >
                           {item.kind === "video" ? (
                             <video
@@ -9343,7 +10035,7 @@ export function WebMessenger({
                           href={item.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="block rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 hover:border-violet-500/50"
+                          className="block rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 hover:border-primary/50"
                         >
                           <p className="truncate text-sm text-zinc-200">{item.url}</p>
                           <p className="mt-1 text-xs text-zinc-500">{item.time}</p>
@@ -9377,7 +10069,7 @@ export function WebMessenger({
                             onClick={() => setActiveSettingsSection(section)}
                             className={`h-10 rounded-lg border px-3 text-sm font-medium transition-colors ${
                               activeSettingsSection === section
-                                ? "border-violet-500 bg-violet-500 text-zinc-50"
+                                ? "border-primary bg-primary text-zinc-50"
                                 : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
                             }`}
                           >
@@ -9965,7 +10657,7 @@ export function WebMessenger({
                   }}
                   className={`flex h-12 flex-col items-center justify-center gap-1 rounded-lg border text-[11px] font-medium ${
                     active
-                      ? "border-violet-500 bg-violet-500 text-zinc-50"
+                      ? "border-primary bg-primary text-zinc-50"
                       : "border-zinc-700 bg-zinc-800 text-zinc-300"
                   }`}
                   aria-label={t(item.id)}
@@ -10008,6 +10700,7 @@ export function WebMessenger({
                   void setChatMuted(activeChat.id, checked);
                 }}
                 aria-label={t("muteThisChat")}
+                disabled={activeChat?.isFavorites || activeChat?.isPreview}
               />
             </div>
             <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-3 py-2.5 backdrop-blur-lg">
@@ -10148,17 +10841,28 @@ export function WebMessenger({
               {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
-              className="h-10 rounded-lg border border-red-500/70 bg-red-500/20 text-red-100 hover:bg-red-500/30 hover:!text-zinc-100"
+              className={`h-10 rounded-lg ${
+                chatIdToConfirmDelete === FAVORITES_CHAT_ID
+                  ? "border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 hover:!text-zinc-100"
+                  : "border border-red-500/70 bg-red-500/20 text-red-100 hover:bg-red-500/30 hover:!text-zinc-100"
+              }`}
               onClick={() => {
                 if (!chatIdToConfirmDelete) {
                   return;
                 }
+                const deletingFavorites = chatIdToConfirmDelete === FAVORITES_CHAT_ID;
                 setIsDeleteChatDialogOpen(false);
-                void deleteChat(chatIdToConfirmDelete);
+                if (deletingFavorites) {
+                  void deleteFavoritesChat();
+                } else {
+                  void deleteChat(chatIdToConfirmDelete);
+                }
                 setChatIdToConfirmDelete(null);
               }}
             >
-              {t("deleteChatAction")}
+              {chatIdToConfirmDelete === FAVORITES_CHAT_ID
+                ? t("deleteFavoritesAction")
+                : t("deleteChatAction")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -10183,7 +10887,7 @@ export function WebMessenger({
                   onClick={() => setLanguage("en")}
                   className={`h-10 rounded-lg border ${
                     language === "en"
-                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
                       : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                   }`}
                 >
@@ -10194,7 +10898,7 @@ export function WebMessenger({
                   onClick={() => setLanguage("ru")}
                   className={`h-10 rounded-lg border ${
                     language === "ru"
-                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
                       : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                   }`}
                 >
@@ -10211,7 +10915,7 @@ export function WebMessenger({
                   onClick={() => setUiDensity("comfortable")}
                   className={`h-10 rounded-lg border ${
                     uiDensity === "comfortable"
-                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
                       : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                   }`}
                 >
@@ -10222,7 +10926,7 @@ export function WebMessenger({
                   onClick={() => setUiDensity("compact")}
                   className={`h-10 rounded-lg border ${
                     uiDensity === "compact"
-                      ? "border-violet-500 bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
                       : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                   }`}
                 >
@@ -10244,7 +10948,7 @@ export function WebMessenger({
           </div>
           <AlertDialogFooter className="gap-2">
             <AlertDialogAction
-              className="h-10 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
+              className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
               onClick={() => {
                 window.localStorage.setItem(
                   PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY,
@@ -10342,7 +11046,7 @@ export function WebMessenger({
               setPrivacyPickerQuery("");
             }}
             aria-label={t("closeViewer")}
-            className="absolute right-4 top-4 rounded-md border border-zinc-600 bg-zinc-800 p-1.5 text-zinc-300 hover:border-violet-500 hover:text-violet-300"
+            className="absolute right-4 top-4 rounded-md border border-zinc-600 bg-zinc-800 p-1.5 text-zinc-300 hover:border-primary hover:text-primary"
           >
             <X className="size-4" />
           </button>
@@ -10388,14 +11092,14 @@ export function WebMessenger({
                       }}
                       className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm ${
                         selected
-                          ? "border-violet-500/70 bg-zinc-700 text-zinc-100"
+                          ? "border-primary/70 bg-zinc-700 text-zinc-100"
                           : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-700"
                       }`}
                     >
                       <span className="truncate">
                         {user.name} (@{user.username})
                       </span>
-                      {selected ? <Check className="size-4 text-violet-400" /> : null}
+                      {selected ? <Check className="size-4 text-primary" /> : null}
                     </button>
                   );
                 })
@@ -10414,7 +11118,7 @@ export function WebMessenger({
         <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-1/2 z-[125] flex w-[min(92vw,560px)] -translate-x-1/2 items-center justify-between gap-3 overflow-hidden rounded-xl border border-zinc-600 bg-zinc-900/95 px-4 py-3 text-sm text-zinc-100 shadow-2xl backdrop-blur">
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-violet-400/80"
+            className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-primary/80"
             style={{
               width: `${toastProgress}%`,
               transition: `width ${UNDO_WINDOW_MS}ms linear`,
@@ -10426,7 +11130,7 @@ export function WebMessenger({
               <Button
                 type="button"
                 variant="ghost"
-                className="h-8 rounded-md border border-zinc-500 !bg-zinc-800 px-3 text-xs font-medium text-zinc-100 hover:!border-violet-500 hover:!bg-zinc-700 hover:!text-violet-300"
+                className="h-8 rounded-md border border-zinc-500 !bg-zinc-800 px-3 text-xs font-medium text-zinc-100 hover:!border-primary hover:!bg-zinc-700 hover:!text-primary"
                 onClick={toast.action.onClick}
               >
                 {toast.action.label}
@@ -10555,7 +11259,7 @@ export function WebMessenger({
                   <Button
                     type="button"
                     onClick={() => void acceptIncomingCall()}
-                    className="h-10 flex-1 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                    className="h-10 flex-1 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
                   >
                     {t("acceptCall")}
                   </Button>
@@ -10637,7 +11341,7 @@ export function WebMessenger({
           <button
             type="button"
             aria-label={t("closeViewer")}
-            className="absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300"
+            className="absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-primary hover:text-primary"
             onClick={closeImageViewer}
           >
             <X className="size-5" />
@@ -10646,7 +11350,7 @@ export function WebMessenger({
             href={viewerImage.url}
             download={viewerImage.name}
             aria-label={t("download")}
-            className="absolute right-16 top-[calc(env(safe-area-inset-top)+1rem)] rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300"
+            className="absolute right-16 top-[calc(env(safe-area-inset-top)+1rem)] rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-primary hover:text-primary"
           >
             <Download className="size-5" />
           </a>
@@ -10655,7 +11359,7 @@ export function WebMessenger({
               <button
                 type="button"
                 aria-label={t("previousImage")}
-                className="absolute left-3 rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300 sm:left-6"
+                className="absolute left-3 rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-primary hover:text-primary sm:left-6"
                 onClick={showPreviousImage}
               >
                 <ArrowLeft className="size-5" />
@@ -10663,7 +11367,7 @@ export function WebMessenger({
               <button
                 type="button"
                 aria-label={t("nextImage")}
-                className="absolute right-3 rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-violet-500 hover:text-violet-300 sm:right-6"
+                className="absolute right-3 rounded-full border border-zinc-600 bg-zinc-950/85 p-2 text-zinc-200 hover:border-primary hover:text-primary sm:right-6"
                 onClick={showNextImage}
               >
                 <ArrowRight className="size-5" />
@@ -10776,6 +11480,7 @@ export function WebMessenger({
     </>
   );
 }
+
 
 
 
