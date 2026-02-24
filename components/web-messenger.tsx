@@ -35,6 +35,7 @@ import {
   Plus,
   Search,
   Smile,
+  Sparkles,
   Square,
   SquareCode as Code2,
   Strikethrough,
@@ -324,7 +325,7 @@ type ChatListItem = {
 };
 
 type SidebarItem = {
-  id: "profile" | "home" | "settings";
+  id: "profile" | "home" | "assistant" | "settings";
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 };
@@ -376,6 +377,15 @@ type ChatPersonalization = {
   fontSize: ChatFontSizeSetting;
   autoLoadMedia: boolean;
 };
+type AiAssistantMessageRole = "user" | "assistant";
+type AiAssistantMessage = {
+  id: string;
+  role: AiAssistantMessageRole;
+  content: string;
+  createdAt: number;
+  pending?: boolean;
+  error?: boolean;
+};
 type GroupRole = "owner" | "admin" | "member";
 type TextFormattingAction = "bold" | "italic" | "strike" | "code" | "quote" | "list";
 
@@ -402,12 +412,14 @@ type WebMessengerProps = {
 
 const sidebarItems: SidebarItem[] = [
   { id: "home", label: "Home", icon: Home },
+  { id: "assistant", label: "AI", icon: Sparkles },
   { id: "profile", label: "Profile", icon: ProfileSidebarIcon },
   { id: "settings", label: "Settings", icon: SettingsSidebarIcon },
 ];
-const SIDEBAR_ITEM_IDS: SidebarItem["id"][] = ["home", "profile", "settings"];
+const SIDEBAR_ITEM_IDS: SidebarItem["id"][] = ["home", "assistant", "profile", "settings"];
 const DEFAULT_SIDEBAR_VISIBILITY: Record<SidebarItem["id"], boolean> = {
   home: true,
+  assistant: true,
   profile: true,
   settings: true,
 };
@@ -467,6 +479,7 @@ const PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY =
   "clore_personalization_onboarding_done_v1";
 const CHAT_CLEAR_HISTORY_STORAGE_PREFIX = "clore_chat_clear_history_v1_";
 const CHAT_DRAFTS_STORAGE_PREFIX = "clore_chat_drafts_v1_";
+const AI_ASSISTANT_HISTORY_STORAGE_KEY_PREFIX = "clore_ai_assistant_history_v1_";
 const INCOMING_MESSAGE_SOUND_PATH = "/sounds/meet-message-sound-1.mp3";
 const MAX_PINNED_CHATS = 5;
 const MIN_BIRTH_YEAR = 1900;
@@ -480,9 +493,12 @@ const UNDO_WINDOW_MS = 5_000;
 const GROUP_TITLE_MIN_LENGTH = 3;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_MAX_MEMBERS = 50;
+const MAX_AI_ASSISTANT_HISTORY_MESSAGES = 40;
+const BUILT_IN_ASSISTANT_USER_ID = "bot-chatgpt";
 const translations = {
   en: {
     home: "Home",
+    assistant: "AI",
     profile: "Profile",
     settings: "Settings",
     chats: "Chats",
@@ -741,10 +757,18 @@ const translations = {
     autoLoadMedia: "Auto-load media",
     autoLoadMediaHint: "Automatically load images and videos in this chat",
     loadMedia: "Load media",
+    aiAssistantTitle: "ChatGPT",
+    aiAssistantSubtitle: "Built-in AI assistant for ideas, writing, and coding help.",
+    aiAssistantPlaceholder: "Ask anything...",
+    aiAssistantEmptyTitle: "Start a new conversation",
+    aiAssistantEmptyHint: "Ask a question and ChatGPT will answer right here.",
+    aiAssistantClear: "Clear chat",
+    aiAssistantThinking: "Thinking...",
     onboardingApply: "Apply",
   },
   ru: {
     home: "Главная",
+    assistant: "AI",
     profile: "Профиль",
     settings: "Настройки",
     chats: "Чаты",
@@ -1005,6 +1029,13 @@ const translations = {
     autoLoadMedia: "Автозагрузка медиа",
     autoLoadMediaHint: "Автоматически загружать изображения и видео в этом чате",
     loadMedia: "Загрузить медиа",
+    aiAssistantTitle: "ChatGPT",
+    aiAssistantSubtitle: "Встроенный AI-помощник для идей, текста и кода.",
+    aiAssistantPlaceholder: "Спросите что угодно...",
+    aiAssistantEmptyTitle: "Начните новый диалог",
+    aiAssistantEmptyHint: "Задайте вопрос, и ChatGPT ответит прямо здесь.",
+    aiAssistantClear: "Очистить чат",
+    aiAssistantThinking: "Думаю...",
     onboardingApply: "Применить",
   },
 } as const;
@@ -1028,6 +1059,13 @@ type BlockUserResponse = {
 
 type CreateGroupResponse = {
   chatId: string;
+};
+type AiAssistantRequestMessage = {
+  role: AiAssistantMessageRole;
+  content: string;
+};
+type AiAssistantChatResponse = {
+  message: string;
 };
 
 type SendAttachmentPayload = {
@@ -1850,6 +1888,7 @@ export function WebMessenger({
   const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const activeChatSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const aiMessagesScrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const chatPersonalizationDialogContentRef = useRef<HTMLDivElement | null>(null);
   const emojiMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1949,6 +1988,56 @@ export function WebMessenger({
   const [knownUsers, setKnownUsers] = useState<AuthUser[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeSidebar, setActiveSidebar] = useState<SidebarItem["id"]>("home");
+  const [aiDraft, setAiDraft] = useState("");
+  const [aiMessages, setAiMessages] = useState<AiAssistantMessage[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+    try {
+      const raw = window.localStorage.getItem(
+        `${AI_ASSISTANT_HISTORY_STORAGE_KEY_PREFIX}${currentUser.id}`
+      );
+      if (!raw) {
+        return [];
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed
+        .map((item) => {
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+          const candidate = item as Record<string, unknown>;
+          const id =
+            typeof candidate.id === "string" && candidate.id.trim().length > 0
+              ? candidate.id.trim()
+              : "";
+          const role = candidate.role;
+          const content = typeof candidate.content === "string" ? candidate.content : "";
+          const createdAt =
+            typeof candidate.createdAt === "number" && Number.isFinite(candidate.createdAt)
+              ? candidate.createdAt
+              : Date.now();
+          if (!id || (role !== "user" && role !== "assistant") || !content.trim()) {
+            return null;
+          }
+          return {
+            id,
+            role,
+            content,
+            createdAt,
+          } satisfies AiAssistantMessage;
+        })
+        .filter((message): message is AiAssistantMessage => message !== null)
+        .slice(-MAX_AI_ASSISTANT_HISTORY_MESSAGES);
+    } catch {
+      return [];
+    }
+  });
+  const [isAiSubmitting, setIsAiSubmitting] = useState(false);
+  const [aiError, setAiError] = useState("");
   const [query, setQuery] = useState("");
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [groupMemberIdsDraft, setGroupMemberIdsDraft] = useState<string[]>([]);
@@ -2270,6 +2359,34 @@ export function WebMessenger({
       JSON.stringify(draftsByChatId)
     );
   }, [draftsByChatId, currentUser.id]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const normalizedHistory = aiMessages
+      .filter((message) => !message.pending)
+      .slice(-MAX_AI_ASSISTANT_HISTORY_MESSAGES)
+      .map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt,
+      }));
+    window.localStorage.setItem(
+      `${AI_ASSISTANT_HISTORY_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      JSON.stringify(normalizedHistory)
+    );
+  }, [aiMessages, currentUser.id]);
+  useEffect(() => {
+    if (activeSidebar !== "assistant") {
+      return;
+    }
+    const node = aiMessagesScrollRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
+  }, [activeSidebar, aiMessages]);
 
   useEffect(() => {
     setActiveChatSearchQuery("");
@@ -2469,6 +2586,105 @@ export function WebMessenger({
         : t("actionFailed"),
     [t]
   );
+  const createAiMessageId = useCallback(() => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }, []);
+  const clearAiConversation = useCallback(() => {
+    setAiMessages([]);
+    setAiError("");
+  }, []);
+  const sendAiPrompt = useCallback(async () => {
+    const prompt = aiDraft.trim();
+    if (!prompt || isAiSubmitting) {
+      return;
+    }
+
+    const userMessage: AiAssistantMessage = {
+      id: createAiMessageId(),
+      role: "user",
+      content: prompt,
+      createdAt: Date.now(),
+    };
+    const pendingAssistantId = createAiMessageId();
+    const pendingAssistantMessage: AiAssistantMessage = {
+      id: pendingAssistantId,
+      role: "assistant",
+      content: t("aiAssistantThinking"),
+      createdAt: Date.now(),
+      pending: true,
+    };
+    const conversation: AiAssistantRequestMessage[] = [
+      ...aiMessages
+        .filter((message) => !message.pending && message.content.trim().length > 0)
+        .slice(-20)
+        .map((message) => ({
+          role: message.role,
+          content: message.content.trim(),
+        })),
+      {
+        role: "user",
+        content: prompt,
+      },
+    ];
+
+    setAiDraft("");
+    setAiError("");
+    setIsAiSubmitting(true);
+    setAiMessages((prev) => [...prev, userMessage, pendingAssistantMessage]);
+
+    try {
+      const response = await requestJson<AiAssistantChatResponse>("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          language,
+          messages: conversation,
+        }),
+      });
+      const reply = response.message.trim() || t("actionFailed");
+      setAiMessages((prev) =>
+        prev.map((message) =>
+          message.id === pendingAssistantId
+            ? {
+                ...message,
+                content: reply,
+                pending: false,
+                error: false,
+              }
+            : message
+        )
+      );
+    } catch (error) {
+      const message = getRequestErrorMessage(error);
+      setAiError(message);
+      setAiMessages((prev) =>
+        prev.map((item) =>
+          item.id === pendingAssistantId
+            ? {
+                ...item,
+                content: message,
+                pending: false,
+                error: true,
+              }
+            : item
+        )
+      );
+    } finally {
+      setIsAiSubmitting(false);
+    }
+  }, [
+    aiDraft,
+    aiMessages,
+    createAiMessageId,
+    currentUser.id,
+    getRequestErrorMessage,
+    isAiSubmitting,
+    language,
+    t,
+  ]);
   const dismissToast = useCallback(() => {
     if (toastTimerRef.current) {
       window.clearTimeout(toastTimerRef.current);
@@ -2543,7 +2759,11 @@ export function WebMessenger({
   const currentBirthdayAllowedUserIds =
     currentUser.birthdayAllowedUserIds ?? EMPTY_USER_IDS;
   const availablePrivacyUsers = useMemo(
-    () => knownUsers.filter((user) => user.id !== currentUser.id),
+    () =>
+      knownUsers.filter(
+        (user) =>
+          user.id !== currentUser.id && user.id !== BUILT_IN_ASSISTANT_USER_ID
+      ),
     [currentUser.id, knownUsers]
   );
   const filteredPrivacyUsers = useMemo(() => {
@@ -2996,6 +3216,11 @@ export function WebMessenger({
           ? null
           : (thread.memberIds.find((userId) => userId !== currentUser.id) ??
             currentUser.id);
+        const isBuiltInAssistantThread =
+          !isGroup && directMemberId === BUILT_IN_ASSISTANT_USER_ID;
+        if (isBuiltInAssistantThread) {
+          return null;
+        }
         const directMember = directMemberId ? usersById.get(directMemberId) : null;
         const groupMembers = thread.memberIds
           .filter((userId) => userId !== currentUser.id)
@@ -3060,6 +3285,7 @@ export function WebMessenger({
           isMuted: thread.mutedBy?.[currentUser.id] === true,
         };
       })
+      .filter((item): item is ChatListItem => item !== null)
       .sort((a, b) => {
         if (a.isPinned !== b.isPinned) {
           return a.isPinned ? -1 : 1;
@@ -4006,7 +4232,10 @@ export function WebMessenger({
   const availableUsers = useMemo(() => {
     const normalized = normalizeSearchQuery(query);
     return knownUsers.filter((user) => {
-      if (user.id === currentUser.id) {
+      if (
+        user.id === currentUser.id ||
+        user.id === BUILT_IN_ASSISTANT_USER_ID
+      ) {
         return false;
       }
       if (!normalized.raw) {
@@ -4020,7 +4249,11 @@ export function WebMessenger({
     });
   }, [knownUsers, query, currentUser.id]);
   const groupCandidates = useMemo(
-    () => knownUsers.filter((user) => user.id !== currentUser.id),
+    () =>
+      knownUsers.filter(
+        (user) =>
+          user.id !== currentUser.id && user.id !== BUILT_IN_ASSISTANT_USER_ID
+      ),
     [knownUsers, currentUser.id]
   );
 
@@ -5960,6 +6193,8 @@ export function WebMessenger({
         openOwnProfile();
       } else if (key === "e") {
         setActiveSidebar("settings");
+      } else if (key === "r") {
+        setActiveSidebar("assistant");
       } else {
         return;
       }
@@ -6451,6 +6686,9 @@ export function WebMessenger({
     activeSidebar === "profile" || isCompactActiveChatProfileSidebar;
   const shouldShowMobileNavigation =
     activeSidebar !== "home" || mobileView === "list";
+  const mobileMainPaddingClass = shouldShowMobileNavigation
+    ? "pb-[calc(4rem+max(env(safe-area-inset-bottom),0.5rem))] md:pb-0"
+    : "";
   const renderableSidebarItems =
     visibleSidebarItems.length > 0 ? visibleSidebarItems : orderedSidebarItems;
   const chatActionMenuContentClassName = `${CHAT_ACTION_MENU_CONTENT_CLASS_NAME} ${
@@ -6594,7 +6832,7 @@ export function WebMessenger({
         className="hidden"
       />
       <main
-        className="flex h-[100dvh] min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_10%_8%,rgba(139,92,246,0.1),transparent_34%),radial-gradient(circle_at_88%_0%,rgba(139,92,246,0.06),transparent_30%),linear-gradient(160deg,#0b0b0d_0%,#101014_55%,#141419_100%)] pt-[env(safe-area-inset-top)] text-zinc-100"
+        className={`flex h-[100dvh] min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_10%_8%,rgba(139,92,246,0.1),transparent_34%),radial-gradient(circle_at_88%_0%,rgba(139,92,246,0.06),transparent_30%),linear-gradient(160deg,#0b0b0d_0%,#101014_55%,#141419_100%)] pt-[env(safe-area-inset-top)] text-zinc-100 ${mobileMainPaddingClass}`}
       >
       <section className="flex min-h-0 w-full flex-1">
         <div className="relative flex h-full min-h-0 w-full overflow-hidden border border-zinc-800/90 bg-zinc-950/80 shadow-[0_28px_70px_-42px_rgba(0,0,0,0.95)] ring-1 ring-black/40 backdrop-blur-2xl">
@@ -7107,8 +7345,8 @@ export function WebMessenger({
                         uiDensity === "compact" ? "px-3 py-2 sm:px-4" : "px-4 py-3 sm:px-6"
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <div className="relative w-full sm:flex-1">
                           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
                           <Input
                             ref={activeChatSearchInputRef}
@@ -7120,41 +7358,45 @@ export function WebMessenger({
                             onChange={(event) => setActiveChatSearchQuery(event.target.value)}
                           />
                         </div>
-                        <Input
-                          type="date"
-                          aria-label={t("date")}
-                          className={`rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 ${
-                            uiDensity === "compact" ? "h-9 w-[150px] text-sm" : "h-10 w-[170px]"
-                          }`}
-                          value={activeChatJumpDate}
-                          onChange={(event) => setActiveChatJumpDate(event.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          aria-label={t("jumpToDate")}
-                          className={`rounded-lg border border-zinc-600 bg-zinc-700 px-3 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 ${
-                            uiDensity === "compact" ? "h-9" : "h-10"
-                          }`}
-                          onClick={() => jumpToDate()}
-                        >
-                          {t("jumpToDate")}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("cancel")}
-                          className={`rounded-lg border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100 ${
-                            uiDensity === "compact" ? "h-9 w-9" : "h-10 w-10"
-                          }`}
-                          onClick={() => {
-                            setIsActiveChatSearchOpen(false);
-                            setActiveChatSearchQuery("");
-                          }}
-                        >
-                          <X className="size-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="date"
+                            aria-label={t("date")}
+                            className={`flex-1 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 sm:flex-none ${
+                              uiDensity === "compact"
+                                ? "h-9 text-sm sm:w-[150px]"
+                                : "h-10 sm:w-[170px]"
+                            }`}
+                            value={activeChatJumpDate}
+                            onChange={(event) => setActiveChatJumpDate(event.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            aria-label={t("jumpToDate")}
+                            className={`flex-1 rounded-lg border border-zinc-600 bg-zinc-700 px-3 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 sm:flex-none ${
+                              uiDensity === "compact" ? "h-9" : "h-10"
+                            }`}
+                            onClick={() => jumpToDate()}
+                          >
+                            {t("jumpToDate")}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t("cancel")}
+                            className={`shrink-0 rounded-lg border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100 ${
+                              uiDensity === "compact" ? "h-9 w-9" : "h-10 w-10"
+                            }`}
+                            onClick={() => {
+                              setIsActiveChatSearchOpen(false);
+                              setActiveChatSearchQuery("");
+                            }}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
                       </div>
                       <p className="mt-2 text-[11px] text-zinc-500">{t("searchAdvancedHint")}</p>
                     </div>
@@ -7744,6 +7986,106 @@ export function WebMessenger({
                 </div>
               </>
             ) : null}
+            {activeSidebar === "assistant" ? (
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-900">
+                <div className="sticky top-0 z-10 border-b border-zinc-700 bg-zinc-900 px-4 py-4 sm:px-6">
+                  <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-xl font-semibold text-zinc-100">
+                        {t("aiAssistantTitle")}
+                      </h2>
+                      <p className="mt-1 text-sm text-zinc-400">{t("aiAssistantSubtitle")}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={clearAiConversation}
+                      disabled={isAiSubmitting || (aiMessages.length === 0 && !aiError)}
+                      className="h-9 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {t("aiAssistantClear")}
+                    </Button>
+                  </div>
+                </div>
+                <div
+                  ref={aiMessagesScrollRef}
+                  className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6"
+                >
+                  <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 pb-8">
+                    {aiMessages.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-5 py-12 text-center">
+                        <div className="mx-auto mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-violet-300">
+                          <Sparkles className="size-5" />
+                        </div>
+                        <p className="text-base font-semibold text-zinc-100">
+                          {t("aiAssistantEmptyTitle")}
+                        </p>
+                        <p className="mt-1 text-sm text-zinc-400">{t("aiAssistantEmptyHint")}</p>
+                      </div>
+                    ) : (
+                      aiMessages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                        >
+                          <div
+                            className={`max-w-[92%] rounded-2xl border px-3 py-2 text-sm ring-1 ring-white/5 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.85)] sm:max-w-[80%] ${
+                              message.role === "user"
+                                ? "border-violet-500/40 bg-violet-500 text-zinc-50"
+                                : message.error
+                                  ? "border-red-500/35 bg-red-500/10 text-red-100"
+                                  : "border-zinc-700 bg-zinc-800 text-zinc-100"
+                            }`}
+                          >
+                            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <form
+                  className="border-t border-zinc-700 bg-zinc-900 px-4 py-3 sm:px-6"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void sendAiPrompt();
+                  }}
+                >
+                  <div className="mx-auto w-full max-w-5xl">
+                    <div className={`${uiRadiusCardClass} border border-zinc-700 bg-zinc-950/85 p-2`}>
+                      <Textarea
+                        value={aiDraft}
+                        placeholder={t("aiAssistantPlaceholder")}
+                        onChange={(event) => setAiDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            void sendAiPrompt();
+                          }
+                        }}
+                        className={`max-h-44 border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400 ${
+                          uiDensity === "compact"
+                            ? "min-h-[72px] py-2 text-sm"
+                            : "min-h-[88px] py-2.5"
+                        }`}
+                      />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <p className="text-xs text-zinc-500">
+                          {aiError || t("formattingHotkeyHint")}
+                        </p>
+                        <Button
+                          type="submit"
+                          disabled={isAiSubmitting || aiDraft.trim().length === 0}
+                          className="h-9 rounded-lg bg-violet-500 px-4 text-zinc-50 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAiSubmitting ? t("aiAssistantThinking") : t("send")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            ) : null}
             {shouldShowProfileSidebar ? (
               <div
                 className={`min-h-0 min-w-0 flex-col bg-[linear-gradient(180deg,rgba(39,39,42,0.62)_0%,rgba(24,24,27,0.5)_100%)] backdrop-blur-xl ${
@@ -7910,14 +8252,16 @@ export function WebMessenger({
                           placeholder={t("bio")}
                           className="min-h-24 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400"
                         />
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                           <Select
                             value={birthdayDraft.day || undefined}
                             onValueChange={(value) =>
                               handleBirthdayPartChange("day", value)
                             }
                           >
-                            <SelectTrigger className={`h-10 flex-1 ${unifiedSelectTriggerClassName}`}>
+                            <SelectTrigger
+                              className={`h-10 w-full sm:flex-1 ${unifiedSelectTriggerClassName}`}
+                            >
                               <SelectValue placeholder="Day" />
                             </SelectTrigger>
                             <SelectContent className={unifiedSelectContentClassName}>
@@ -7938,7 +8282,9 @@ export function WebMessenger({
                               handleBirthdayPartChange("month", value)
                             }
                           >
-                            <SelectTrigger className={`h-10 flex-1 ${unifiedSelectTriggerClassName}`}>
+                            <SelectTrigger
+                              className={`h-10 w-full sm:flex-1 ${unifiedSelectTriggerClassName}`}
+                            >
                               <SelectValue placeholder="Month" />
                             </SelectTrigger>
                             <SelectContent className={unifiedSelectContentClassName}>
@@ -7959,7 +8305,9 @@ export function WebMessenger({
                               handleBirthdayPartChange("year", value)
                             }
                           >
-                            <SelectTrigger className={`h-10 flex-1 ${unifiedSelectTriggerClassName}`}>
+                            <SelectTrigger
+                              className={`h-10 w-full sm:flex-1 ${unifiedSelectTriggerClassName}`}
+                            >
                               <SelectValue placeholder="Year" />
                             </SelectTrigger>
                             <SelectContent className={unifiedSelectContentClassName}>
@@ -7984,7 +8332,7 @@ export function WebMessenger({
                                   birthday: "",
                                 }));
                               }}
-                              className="h-10 rounded-lg border border-zinc-600 bg-zinc-700 px-3 text-sm text-zinc-200 hover:bg-zinc-600"
+                              className="h-10 w-full rounded-lg border border-zinc-600 bg-zinc-700 px-3 text-sm text-zinc-200 hover:bg-zinc-600 sm:w-auto"
                             >
                               {t("remove")}
                             </button>
@@ -9003,7 +9351,7 @@ export function WebMessenger({
       {shouldShowMobileNavigation ? (
         <nav
           aria-label={t("menu")}
-          className="border-t border-zinc-800/90 bg-zinc-950/90 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur-xl md:hidden"
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800/90 bg-zinc-950/90 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur-xl md:hidden"
         >
           <div
             className="grid gap-2"
