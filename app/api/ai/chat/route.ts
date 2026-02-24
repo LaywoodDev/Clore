@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+import {
+  buildModelCandidates,
+  getAiProviderConfig,
+} from "@/lib/server/ai-provider";
 import { getStore } from "@/lib/server/store";
 
 type AiChatMessagePayload = {
@@ -109,31 +113,12 @@ async function generateAssistantReply(
   language: "en" | "ru",
   messages: NormalizedAiChatMessage[]
 ): Promise<string> {
-  const apiKey =
-    process.env.PROXYAPI_API_KEY?.trim() ??
-    process.env.OPENAI_API_KEY?.trim() ??
-    "";
-  if (!apiKey) {
-    throw new Error("AI provider key is not configured on the server.");
-  }
-
-  const modelFromEnv = process.env.CLORE_BOT_MODEL?.trim() || "openai/gpt-4o-mini";
-  const baseUrl =
-    process.env.CLORE_BOT_BASE_URL?.trim() || "https://openai.api.proxyapi.ru/v1";
+  const { apiKey, baseUrl, model: modelFromEnv } = getAiProviderConfig();
   const systemPrompt =
     language === "ru"
       ? "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully. Prefer Russian unless the user writes in another language."
       : "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully.";
-  const modelCandidates = Array.from(
-    new Set(
-      [
-        modelFromEnv,
-        modelFromEnv.startsWith("openai/") ? modelFromEnv.slice("openai/".length) : "",
-        "openai/gpt-4o-mini",
-        "gpt-4o-mini",
-      ].filter((value) => value.length > 0)
-    )
-  );
+  const modelCandidates = buildModelCandidates(modelFromEnv);
 
   let lastErrorMessage = "";
   for (const model of modelCandidates) {
@@ -224,8 +209,12 @@ export async function POST(request: Request) {
       error instanceof Error && error.message.trim().length > 0
         ? error.message
         : "Unable to generate response.";
+    const isConfigError =
+      message.includes("not configured") ||
+      message.includes("API_KEY") ||
+      message.includes("CLORE_BOT_");
     const status =
-      message.includes("not configured") || message.includes("provider")
+      isConfigError || message.includes("provider")
         ? 502
         : 500;
     return NextResponse.json({ error: message }, { status });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getAiProviderConfig } from "@/lib/server/ai-provider";
 import {
   BOT_USER_ID,
   createEntityId,
@@ -114,17 +115,17 @@ async function generateBotReply(
   conversation: BotConversationMessage[],
   lastUserText: string
 ): Promise<string> {
-  const apiKey =
-    process.env.PROXYAPI_API_KEY?.trim() ??
-    process.env.OPENAI_API_KEY?.trim() ??
-    "";
-  if (!apiKey) {
+  let providerConfig: ReturnType<typeof getAiProviderConfig> | null = null;
+  try {
+    providerConfig = getAiProviderConfig();
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(`[bot] ${error.message}`);
+    }
     return fallbackBotReply(lastUserText);
   }
 
-  const model = process.env.CLORE_BOT_MODEL?.trim() || "openai/gpt-4o-mini";
-  const baseUrl =
-    process.env.CLORE_BOT_BASE_URL?.trim() || "https://openai.api.proxyapi.ru/v1";
+  const { apiKey, model, baseUrl } = providerConfig;
   const systemPrompt =
     "You are ChatGPT in a team messenger. Reply briefly, clearly, and helpfully. Keep responses conversational and safe.";
 
