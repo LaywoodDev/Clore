@@ -154,6 +154,8 @@ const IS_VERCEL_RUNTIME =
   process.env.VERCEL === "1" ||
   process.env.VERCEL === "true" ||
   Boolean(process.env.VERCEL_ENV);
+const REQUIRE_DATABASE_STORE =
+  process.env.CLORE_REQUIRE_DATABASE_STORE?.trim().toLowerCase() === "true";
 const DATABASE_URL_RAW =
   process.env.DATABASE_URL?.trim() ||
   process.env.POSTGRES_URL?.trim() ||
@@ -197,11 +199,12 @@ function getDatabaseHost(rawUrl: string): string {
 
 const DATABASE_URL = sanitizeDatabaseUrl(DATABASE_URL_RAW);
 const USE_DATABASE_STORE = DATABASE_URL.length > 0;
-const REQUIRE_DATABASE_STORE = IS_VERCEL_RUNTIME;
 const STORE_ROW_ID = "main";
 const STORE_FILE_PATH =
   process.env.CLORE_STORE_FILE_PATH?.trim() ??
-  path.join(process.cwd(), "data", "clore-store.json");
+  (IS_VERCEL_RUNTIME
+    ? path.join("/tmp", "clore-store.json")
+    : path.join(process.cwd(), "data", "clore-store.json"));
 const STORE_BACKUP_FILE_PATH = `${STORE_FILE_PATH}.backup`;
 const STORE_TMP_FILE_PATH = `${STORE_FILE_PATH}.tmp`;
 const EMPTY_STORE: StoreData = {
@@ -327,7 +330,7 @@ export function canRemoveGroupMember(
 function ensureDatabaseConfigured() {
   if (REQUIRE_DATABASE_STORE && !USE_DATABASE_STORE) {
     throw new Error(
-      "DATABASE_URL (or POSTGRES_URL) is required in production."
+      "DATABASE_URL (or POSTGRES_URL) is required when CLORE_REQUIRE_DATABASE_STORE=true."
     );
   }
 }
