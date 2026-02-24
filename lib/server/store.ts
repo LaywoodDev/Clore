@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Pool } from "pg";
 
@@ -200,13 +201,12 @@ function getDatabaseHost(rawUrl: string): string {
 const DATABASE_URL = sanitizeDatabaseUrl(DATABASE_URL_RAW);
 const USE_DATABASE_STORE = DATABASE_URL.length > 0;
 const STORE_ROW_ID = "main";
-const STORE_FILE_PATH =
+const DEFAULT_STORE_FILE_PATH =
   process.env.CLORE_STORE_FILE_PATH?.trim() ??
   (IS_VERCEL_RUNTIME
     ? path.join("/tmp", "clore-store.json")
     : path.join(process.cwd(), "data", "clore-store.json"));
-const STORE_BACKUP_FILE_PATH = `${STORE_FILE_PATH}.backup`;
-const STORE_TMP_FILE_PATH = `${STORE_FILE_PATH}.tmp`;
+const FALLBACK_STORE_FILE_PATH = path.join(os.tmpdir(), "clore-store.json");
 const EMPTY_STORE: StoreData = {
   users: [],
   threads: [],
@@ -218,6 +218,43 @@ let writeQueue: Promise<void> = Promise.resolve();
 let pool: Pool | null = null;
 let ensureDatabaseReadyPromise: Promise<void> | null = null;
 let lastValidFileStoreSnapshot: StoreData | null = null;
+let storeFilePath = DEFAULT_STORE_FILE_PATH;
+
+function resolveStoreFilePaths(): {
+  storeFilePath: string;
+  backupFilePath: string;
+  tmpFilePath: string;
+} {
+  return {
+    storeFilePath,
+    backupFilePath: `${storeFilePath}.backup`,
+    tmpFilePath: `${storeFilePath}.tmp`,
+  };
+}
+
+function isPermissionOrReadOnlyError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "EACCES" || code === "EPERM" || code === "EROFS";
+}
+
+async function runWithStorePathFallback<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (
+      storeFilePath === FALLBACK_STORE_FILE_PATH ||
+      !isPermissionOrReadOnlyError(error)
+    ) {
+      throw error;
+    }
+    const errorCode = (error as NodeJS.ErrnoException | null)?.code ?? "UNKNOWN";
+    console.warn(
+      `[store] File store path "${storeFilePath}" is not writable (${errorCode}), falling back to "${FALLBACK_STORE_FILE_PATH}".`
+    );
+    storeFilePath = FALLBACK_STORE_FILE_PATH;
+    return action();
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") {
@@ -371,16 +408,19 @@ function getPool() {
 }
 
 async function ensureStoreFile() {
-  await fs.mkdir(path.dirname(STORE_FILE_PATH), { recursive: true });
-  try {
-    await fs.access(STORE_FILE_PATH);
-  } catch {
-    await fs.writeFile(
-      STORE_FILE_PATH,
-      JSON.stringify(EMPTY_STORE, null, 2),
-      "utf8"
-    );
-  }
+  await runWithStorePathFallback(async () => {
+    const paths = resolveStoreFilePaths();
+    await fs.mkdir(path.dirname(paths.storeFilePath), { recursive: true });
+    try {
+      await fs.access(paths.storeFilePath);
+    } catch {
+      await fs.writeFile(
+        paths.storeFilePath,
+        JSON.stringify(EMPTY_STORE, null, 2),
+        "utf8"
+      );
+    }
+  });
 }
 
 function isPotentiallyDataLossStore(store: StoreData): boolean {
@@ -925,6 +965,7 @@ async function updateStoreInDatabase<T>(
 
 async function readStoreFile(): Promise<StoreData> {
   await ensureStoreFile();
+  const paths = resolveStoreFilePaths();
 
   const maybeRestoreFromBackup = async (
     primarySnapshot: StoreData
@@ -932,7 +973,7 @@ async function readStoreFile(): Promise<StoreData> {
     if (!isPotentiallyDataLossStore(primarySnapshot)) {
       return primarySnapshot;
     }
-    const backupSnapshot = await readStoreSnapshotFromPath(STORE_BACKUP_FILE_PATH);
+    const backupSnapshot = await readStoreSnapshotFromPath(paths.backupFilePath);
     if (backupSnapshot && !isPotentiallyDataLossStore(backupSnapshot)) {
       lastValidFileStoreSnapshot = backupSnapshot;
       return backupSnapshot;
@@ -940,7 +981,7 @@ async function readStoreFile(): Promise<StoreData> {
     return primarySnapshot;
   };
 
-  const firstAttempt = await readStoreSnapshotFromPath(STORE_FILE_PATH);
+  const firstAttempt = await readStoreSnapshotFromPath(paths.storeFilePath);
   if (firstAttempt) {
     const restored = await maybeRestoreFromBackup(firstAttempt);
     lastValidFileStoreSnapshot = restored;
@@ -949,14 +990,14 @@ async function readStoreFile(): Promise<StoreData> {
 
   // In local file mode reads can overlap writes and briefly observe incomplete JSON.
   await new Promise((resolve) => setTimeout(resolve, 20));
-  const secondAttempt = await readStoreSnapshotFromPath(STORE_FILE_PATH);
+  const secondAttempt = await readStoreSnapshotFromPath(paths.storeFilePath);
   if (secondAttempt) {
     const restored = await maybeRestoreFromBackup(secondAttempt);
     lastValidFileStoreSnapshot = restored;
     return restored;
   }
 
-  const backupAttempt = await readStoreSnapshotFromPath(STORE_BACKUP_FILE_PATH);
+  const backupAttempt = await readStoreSnapshotFromPath(paths.backupFilePath);
   if (backupAttempt) {
     lastValidFileStoreSnapshot = backupAttempt;
     return backupAttempt;
@@ -972,43 +1013,46 @@ async function readStoreFile(): Promise<StoreData> {
 }
 
 async function writeStoreFile(store: StoreData): Promise<void> {
-  await ensureStoreFile();
-  const sanitizedNextStore = sanitizeStore(store);
-  const currentSnapshot = await readStoreSnapshotFromPath(STORE_FILE_PATH);
+  await runWithStorePathFallback(async () => {
+    await ensureStoreFile();
+    const sanitizedNextStore = sanitizeStore(store);
+    const paths = resolveStoreFilePaths();
+    const currentSnapshot = await readStoreSnapshotFromPath(paths.storeFilePath);
 
-  if (
-    currentSnapshot &&
-    !isPotentiallyDataLossStore(currentSnapshot) &&
-    isPotentiallyDataLossStore(sanitizedNextStore)
-  ) {
-    throw new Error(
-      "Refusing to overwrite non-empty store with potentially empty snapshot."
+    if (
+      currentSnapshot &&
+      !isPotentiallyDataLossStore(currentSnapshot) &&
+      isPotentiallyDataLossStore(sanitizedNextStore)
+    ) {
+      throw new Error(
+        "Refusing to overwrite non-empty store with potentially empty snapshot."
+      );
+    }
+
+    try {
+      const currentRaw = await fs.readFile(paths.storeFilePath, "utf8");
+      await fs.writeFile(paths.backupFilePath, currentRaw, "utf8");
+    } catch {
+      // Best-effort backup.
+    }
+
+    await fs.writeFile(
+      paths.tmpFilePath,
+      JSON.stringify(sanitizedNextStore, null, 2),
+      "utf8"
     );
-  }
 
-  try {
-    const currentRaw = await fs.readFile(STORE_FILE_PATH, "utf8");
-    await fs.writeFile(STORE_BACKUP_FILE_PATH, currentRaw, "utf8");
-  } catch {
-    // Best-effort backup.
-  }
+    try {
+      await fs.rename(paths.tmpFilePath, paths.storeFilePath);
+    } catch {
+      await fs.unlink(paths.storeFilePath).catch(() => undefined);
+      await fs.rename(paths.tmpFilePath, paths.storeFilePath);
+    } finally {
+      await fs.unlink(paths.tmpFilePath).catch(() => undefined);
+    }
 
-  await fs.writeFile(
-    STORE_TMP_FILE_PATH,
-    JSON.stringify(sanitizedNextStore, null, 2),
-    "utf8"
-  );
-
-  try {
-    await fs.rename(STORE_TMP_FILE_PATH, STORE_FILE_PATH);
-  } catch {
-    await fs.unlink(STORE_FILE_PATH).catch(() => undefined);
-    await fs.rename(STORE_TMP_FILE_PATH, STORE_FILE_PATH);
-  } finally {
-    await fs.unlink(STORE_TMP_FILE_PATH).catch(() => undefined);
-  }
-
-  lastValidFileStoreSnapshot = sanitizedNextStore;
+    lastValidFileStoreSnapshot = sanitizedNextStore;
+  });
 }
 
 export async function getStoreUpdateMarker(): Promise<number> {
@@ -1034,7 +1078,10 @@ export async function getStoreUpdateMarker(): Promise<number> {
 
   try {
     await ensureStoreFile();
-    const stats = await fs.stat(STORE_FILE_PATH);
+    const stats = await runWithStorePathFallback(async () => {
+      const paths = resolveStoreFilePaths();
+      return fs.stat(paths.storeFilePath);
+    });
     return Number.isFinite(stats.mtimeMs) ? stats.mtimeMs : 0;
   } catch {
     return 0;

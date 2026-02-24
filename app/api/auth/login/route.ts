@@ -19,16 +19,21 @@ export async function POST(request: Request) {
     );
   }
 
-  const store = await getStore();
-  const normalizedUsername = normalizeUsername(identifier);
-  const user = store.users.find(
-    (candidate) =>
-      candidate.email === identifier || candidate.username === normalizedUsername
-  );
+  try {
+    const store = await getStore();
+    const normalizedUsername = normalizeUsername(identifier);
+    const user = store.users.find(
+      (candidate) =>
+        candidate.email === identifier || candidate.username === normalizedUsername
+    );
 
-  if (!user || user.password !== password) {
-    return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
+    if (!user || user.password !== password) {
+      return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
+    }
+
+    return NextResponse.json({ user: toPublicUser(user) });
+  } catch (error) {
+    console.error("Login route failed.", error);
+    return NextResponse.json({ error: "Unable to sign in." }, { status: 500 });
   }
-
-  return NextResponse.json({ user: toPublicUser(user) });
 }
