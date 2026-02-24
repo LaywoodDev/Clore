@@ -21,7 +21,10 @@ import {
   Copy,
   Download,
   Eraser,
+  Maximize2,
   Mic,
+  MicOff,
+  Minimize2,
   MessageCircle,
   EllipsisVertical as MoreVertical,
   House as Home,
@@ -34,6 +37,8 @@ import {
   Play,
   Plus,
   Search,
+  ScreenShare,
+  ScreenShareOff,
   Smile,
   Sparkles,
   Square,
@@ -43,6 +48,8 @@ import {
   Trash2,
   Undo2 as CornerUpLeft,
   Users,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 
@@ -577,12 +584,22 @@ const translations = {
     acceptCall: "Accept",
     declineCall: "Decline",
     endCall: "End call",
+    muteMic: "Mute mic",
+    unmuteMic: "Unmute mic",
+    muteSound: "Mute sound",
+    unmuteSound: "Unmute sound",
+    shareScreen: "Share screen",
+    stopShareScreen: "Stop sharing",
+    openFullscreenCall: "Open fullscreen",
+    closeFullscreenCall: "Exit fullscreen",
     callEnded: "Call ended",
     callDeclined: "Call declined",
     callBusy: "User is in another call",
     callFailed: "Unable to start call",
     micAccessDenied: "Microphone access denied",
-    callBrowserNotSupported: "Audio calls are not supported in this browser",
+    callBrowserNotSupported: "Calls are not supported in this browser",
+    screenShareNotSupported: "Screen sharing is not supported in this browser",
+    screenShareFailed: "Unable to start screen sharing",
     callDirectOnly: "Audio calls are available only in direct chats",
     menu: "Menu",
     collapseSidebar: "Collapse sidebar",
@@ -849,12 +866,22 @@ const translations = {
     acceptCall: "Принять",
     declineCall: "Отклонить",
     endCall: "Завершить",
+    muteMic: "Выключить микрофон",
+    unmuteMic: "Включить микрофон",
+    muteSound: "Выключить звук",
+    unmuteSound: "Включить звук",
+    shareScreen: "Поделиться экраном",
+    stopShareScreen: "Остановить показ",
+    openFullscreenCall: "Открыть на весь экран",
+    closeFullscreenCall: "Выйти из полноэкранного",
     callEnded: "Звонок завершен",
     callDeclined: "Звонок отклонен",
     callBusy: "Пользователь уже в другом звонке",
     callFailed: "Не удалось начать звонок",
     micAccessDenied: "Нет доступа к микрофону",
-    callBrowserNotSupported: "Браузер не поддерживает аудиозвонки",
+    callBrowserNotSupported: "Браузер не поддерживает звонки",
+    screenShareNotSupported: "Браузер не поддерживает демонстрацию экрана",
+    screenShareFailed: "Не удалось начать демонстрацию экрана",
     callDirectOnly: "Аудиозвонки доступны только в личных чатах",
     menu: "Меню",
     collapseSidebar: "Свернуть боковую панель",
@@ -1106,8 +1133,10 @@ type CallSignalPollResponse = {
 type CallSessionState = {
   phase: "incoming" | "outgoing" | "connecting" | "active";
   chatId: string;
-  peerUserId: string;
-  peerName: string;
+  isGroup: boolean;
+  initiatorUserId: string;
+  initiatorName: string;
+  participantUserIds: string[];
   startedAt: number | null;
 };
 
@@ -1900,12 +1929,18 @@ export function WebMessenger({
   const emojiMenuRef = useRef<HTMLDivElement | null>(null);
   const emojiCloseTimerRef = useRef<number | null>(null);
   const messageSoundRef = useRef<HTMLAudioElement | null>(null);
-  const remoteCallAudioRef = useRef<HTMLAudioElement | null>(null);
-  const callPeerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const callOverlayRef = useRef<HTMLDivElement | null>(null);
   const localCallStreamRef = useRef<MediaStream | null>(null);
-  const incomingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
-  const pendingRemoteIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
-  const callTargetRef = useRef<{ chatId: string; peerUserId: string } | null>(null);
+  const screenShareStreamRef = useRef<MediaStream | null>(null);
+  const callPeerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const incomingOffersRef = useRef<Map<string, RTCSessionDescriptionInit>>(new Map());
+  const pendingRemoteIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(
+    new Map()
+  );
+  const callRemoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+  const callRemoteMediaElementsRef = useRef<Map<string, HTMLMediaElement>>(new Map());
+  const callChatMemberIdsRef = useRef<string[]>([]);
+  const callSessionRef = useRef<CallSessionState | null>(null);
   const callSignalPollInFlightRef = useRef(false);
   const isCallSignalingUnavailableRef = useRef(false);
   const hasLoadedInitialChatDataRef = useRef(false);
@@ -2324,6 +2359,11 @@ export function WebMessenger({
   const [callSession, setCallSession] = useState<CallSessionState | null>(null);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
   const [callNotice, setCallNotice] = useState("");
+  const [callRemoteUserIds, setCallRemoteUserIds] = useState<string[]>([]);
+  const [isCallMicMuted, setIsCallMicMuted] = useState(false);
+  const [isCallSoundMuted, setIsCallSoundMuted] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isCallFullscreen, setIsCallFullscreen] = useState(false);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("privacy");
@@ -3482,6 +3522,12 @@ export function WebMessenger({
       ? `${typingUsers.length} РїРµС‡Р°С‚Р°СЋС‚...`
       : `${typingUsers.length} typing...`;
   }, [activeChat, currentUser.id, knownUsers, language, t, threads]);
+  const resolveCallPeerName = useCallback(
+    (userId: string) => {
+      return knownUsers.find((user) => user.id === userId)?.name ?? t("unknownUser");
+    },
+    [knownUsers, t]
+  );
   const callStatusText = useMemo(() => {
     if (!callSession) {
       return "";
@@ -3495,46 +3541,122 @@ export function WebMessenger({
     if (callSession.phase === "connecting") {
       return t("connectingCall");
     }
-    return `${t("inCall")} В· ${formatCallDuration(callDurationSeconds)}`;
-  }, [callSession, callDurationSeconds, t]);
+    const participantsCount = Math.max(1, callRemoteUserIds.length + 1);
+    const participantsLabel =
+      callSession.isGroup && participantsCount > 1
+        ? ` · ${participantsCount} ${t("participants").toLowerCase()}`
+        : "";
+    return `${t("inCall")} · ${formatCallDuration(callDurationSeconds)}${participantsLabel}`;
+  }, [callDurationSeconds, callRemoteUserIds.length, callSession, t]);
+  const callTitle = useMemo(() => {
+    if (!callSession) {
+      return "";
+    }
+    if (callSession.isGroup) {
+      return (
+        chatItems.find((chat) => chat.id === callSession.chatId)?.name ??
+        t("groupChat")
+      );
+    }
+    const firstPeerId = callSession.participantUserIds[0];
+    if (firstPeerId) {
+      return resolveCallPeerName(firstPeerId);
+    }
+    return callSession.initiatorName || t("unknownUser");
+  }, [callSession, chatItems, resolveCallPeerName, t]);
+  const callParticipantsSummary = useMemo(() => {
+    if (!callSession || !callSession.isGroup) {
+      return "";
+    }
+    const names = callSession.participantUserIds
+      .map((userId) => resolveCallPeerName(userId))
+      .filter((name, index, source) => source.indexOf(name) === index)
+      .slice(0, 4);
+    if (names.length === 0) {
+      return "";
+    }
+    const extraCount = Math.max(0, callSession.participantUserIds.length - names.length);
+    return extraCount > 0 ? `${names.join(", ")} +${extraCount}` : names.join(", ");
+  }, [callSession, resolveCallPeerName]);
   const callChatMatchesActive =
     callSession !== null &&
     activeChat !== null &&
-    callSession.chatId === activeChat.id &&
-    callSession.peerUserId === activeChat.memberId;
+    callSession.chatId === activeChat.id;
   const shouldDisableCallButton =
     !activeChat ||
-    activeChat.isGroup ||
-    !activeChat.memberId ||
     (callSession !== null && !callChatMatchesActive);
 
+  useEffect(() => {
+    callSessionRef.current = callSession;
+  }, [callSession]);
+
+  const registerRemoteMediaElement = useCallback(
+    (userId: string, element: HTMLMediaElement | null) => {
+      if (!element) {
+        const previous = callRemoteMediaElementsRef.current.get(userId);
+        if (previous) {
+          previous.pause();
+          previous.srcObject = null;
+        }
+        callRemoteMediaElementsRef.current.delete(userId);
+        return;
+      }
+
+      callRemoteMediaElementsRef.current.set(userId, element);
+      const stream = callRemoteStreamsRef.current.get(userId) ?? null;
+      element.srcObject = stream;
+      element.muted = isCallSoundMuted;
+      if (stream) {
+        void element.play().catch(() => undefined);
+      }
+    },
+    [isCallSoundMuted]
+  );
+
   const closeCallResources = useCallback(() => {
-    const connection = callPeerConnectionRef.current;
-    if (connection) {
+    for (const connection of callPeerConnectionsRef.current.values()) {
       connection.onicecandidate = null;
       connection.ontrack = null;
       connection.onconnectionstatechange = null;
       connection.close();
-      callPeerConnectionRef.current = null;
+    }
+    callPeerConnectionsRef.current.clear();
+
+    for (const mediaElement of callRemoteMediaElementsRef.current.values()) {
+      mediaElement.pause();
+      mediaElement.srcObject = null;
+    }
+    callRemoteMediaElementsRef.current.clear();
+    callRemoteStreamsRef.current.clear();
+    setCallRemoteUserIds([]);
+
+    const screenShareStream = screenShareStreamRef.current;
+    if (screenShareStream) {
+      for (const track of screenShareStream.getTracks()) {
+        track.stop();
+      }
+      screenShareStreamRef.current = null;
     }
 
-    const stream = localCallStreamRef.current;
-    if (stream) {
-      for (const track of stream.getTracks()) {
+    const localStream = localCallStreamRef.current;
+    if (localStream) {
+      for (const track of localStream.getTracks()) {
         track.stop();
       }
       localCallStreamRef.current = null;
     }
 
-    const remoteAudio = remoteCallAudioRef.current;
-    if (remoteAudio) {
-      remoteAudio.pause();
-      remoteAudio.srcObject = null;
-    }
+    pendingRemoteIceCandidatesRef.current.clear();
+    incomingOffersRef.current.clear();
+    callChatMemberIdsRef.current = [];
+    setIsScreenSharing(false);
+    setIsCallMicMuted(false);
+    setIsCallSoundMuted(false);
 
-    pendingRemoteIceCandidatesRef.current = [];
-    incomingOfferRef.current = null;
-    callTargetRef.current = null;
+    if (typeof document !== "undefined" && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+    setIsCallFullscreen(false);
   }, []);
 
   const closeCallSession = useCallback(
@@ -3575,8 +3697,81 @@ export function WebMessenger({
     [currentUser.id]
   );
 
-  const createCallPeerConnection = useCallback(
+  const isCallSupported = useCallback(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return false;
+    }
+    return Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
+  }, []);
+
+  const ensurePendingIceQueue = useCallback((peerUserId: string) => {
+    const queue = pendingRemoteIceCandidatesRef.current.get(peerUserId);
+    if (queue) {
+      return queue;
+    }
+    const nextQueue: RTCIceCandidateInit[] = [];
+    pendingRemoteIceCandidatesRef.current.set(peerUserId, nextQueue);
+    return nextQueue;
+  }, []);
+
+  const removePeerConnection = useCallback((peerUserId: string) => {
+    const connection = callPeerConnectionsRef.current.get(peerUserId);
+    if (connection) {
+      connection.onicecandidate = null;
+      connection.ontrack = null;
+      connection.onconnectionstatechange = null;
+      connection.close();
+      callPeerConnectionsRef.current.delete(peerUserId);
+    }
+
+    const remoteStream = callRemoteStreamsRef.current.get(peerUserId);
+    if (remoteStream) {
+      for (const track of remoteStream.getTracks()) {
+        track.stop();
+      }
+      callRemoteStreamsRef.current.delete(peerUserId);
+    }
+
+    const remoteElement = callRemoteMediaElementsRef.current.get(peerUserId);
+    if (remoteElement) {
+      remoteElement.pause();
+      remoteElement.srcObject = null;
+      callRemoteMediaElementsRef.current.delete(peerUserId);
+    }
+
+    pendingRemoteIceCandidatesRef.current.delete(peerUserId);
+    incomingOffersRef.current.delete(peerUserId);
+    setCallRemoteUserIds([...callRemoteStreamsRef.current.keys()].sort());
+  }, []);
+
+  const flushPendingRemoteIceCandidates = useCallback(
+    async (peerUserId: string) => {
+      const connection = callPeerConnectionsRef.current.get(peerUserId);
+      if (!connection || !connection.remoteDescription) {
+        return;
+      }
+
+      const queuedCandidates = [...ensurePendingIceQueue(peerUserId)];
+      pendingRemoteIceCandidatesRef.current.set(peerUserId, []);
+
+      for (const candidate of queuedCandidates) {
+        try {
+          await connection.addIceCandidate(candidate);
+        } catch {
+          // Ignore malformed or stale ICE candidates.
+        }
+      }
+    },
+    [ensurePendingIceQueue]
+  );
+
+  const ensureCallPeerConnection = useCallback(
     (chatId: string, peerUserId: string) => {
+      const existingConnection = callPeerConnectionsRef.current.get(peerUserId);
+      if (existingConnection) {
+        return existingConnection;
+      }
+
       const connection = new RTCPeerConnection({
         iceServers: [
           {
@@ -3595,16 +3790,20 @@ export function WebMessenger({
       };
 
       connection.ontrack = (event) => {
-        const stream = event.streams[0];
-        if (!stream) {
+        const remoteStream = event.streams[0];
+        if (!remoteStream) {
           return;
         }
-        const audio = remoteCallAudioRef.current;
-        if (!audio) {
+        callRemoteStreamsRef.current.set(peerUserId, remoteStream);
+        setCallRemoteUserIds([...callRemoteStreamsRef.current.keys()].sort());
+
+        const mediaElement = callRemoteMediaElementsRef.current.get(peerUserId);
+        if (!mediaElement) {
           return;
         }
-        audio.srcObject = stream;
-        void audio.play().catch(() => undefined);
+        mediaElement.srcObject = remoteStream;
+        mediaElement.muted = isCallSoundMuted;
+        void mediaElement.play().catch(() => undefined);
       };
 
       connection.onconnectionstatechange = () => {
@@ -3620,104 +3819,309 @@ export function WebMessenger({
           );
           return;
         }
+
         if (
           connection.connectionState === "failed" ||
           connection.connectionState === "disconnected" ||
           connection.connectionState === "closed"
         ) {
-          closeCallSession(t("callEnded"));
+          removePeerConnection(peerUserId);
+          setCallSession((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  participantUserIds: prev.participantUserIds.filter((id) => id !== peerUserId),
+                }
+              : prev
+          );
+          const currentSession = callSessionRef.current;
+          if (!currentSession) {
+            return;
+          }
+          if (!currentSession.isGroup) {
+            closeCallSession(t("callEnded"));
+            return;
+          }
+          if (
+            callPeerConnectionsRef.current.size === 0 &&
+            currentSession.phase !== "incoming"
+          ) {
+            closeCallSession(t("callEnded"));
+          }
         }
       };
 
+      callPeerConnectionsRef.current.set(peerUserId, connection);
       return connection;
     },
-    [closeCallSession, sendCallSignal, t]
+    [closeCallSession, isCallSoundMuted, removePeerConnection, sendCallSignal, t]
   );
 
-  const flushPendingRemoteIceCandidates = useCallback(async () => {
-    const connection = callPeerConnectionRef.current;
-    if (!connection || !connection.remoteDescription) {
-      return;
-    }
-
-    const queuedCandidates = [...pendingRemoteIceCandidatesRef.current];
-    pendingRemoteIceCandidatesRef.current = [];
-
-    for (const candidate of queuedCandidates) {
-      try {
-        await connection.addIceCandidate(candidate);
-      } catch {
-        // Ignore malformed or stale ICE candidates.
-      }
-    }
-  }, []);
-
-  const isAudioCallSupported = useCallback(() => {
-    if (typeof window === "undefined" || typeof navigator === "undefined") {
-      return false;
-    }
-    return Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
-  }, []);
-
-  const hangupCurrentCall = useCallback(async () => {
-    const target = callTargetRef.current;
-    closeCallSession();
-    if (!target) {
-      return;
-    }
-    await sendCallSignal(target.chatId, target.peerUserId, "hangup", {
-      reason: "hangup",
-    });
-  }, [closeCallSession, sendCallSignal]);
-
-  const startAudioCallToTarget = useCallback(
-    async (target: { chatId: string; peerUserId: string; peerName: string }) => {
-      if (callSession) {
-        setCallNotice(t("callBusy"));
-        return;
-      }
-      if (!isAudioCallSupported()) {
-        setCallNotice(t("callBrowserNotSupported"));
-        return;
-      }
-
-      const { chatId, peerUserId, peerName } = target;
-      callTargetRef.current = {
-        chatId,
-        peerUserId,
-      };
-      incomingOfferRef.current = null;
-      pendingRemoteIceCandidatesRef.current = [];
-      setCallSession({
-        phase: "outgoing",
-        chatId,
-        peerUserId,
-        peerName,
-        startedAt: null,
-      });
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
-        localCallStreamRef.current = stream;
-
-        const connection = createCallPeerConnection(chatId, peerUserId);
-        callPeerConnectionRef.current = connection;
-        for (const track of stream.getTracks()) {
+  const attachLocalStreamToConnection = useCallback(
+    (connection: RTCPeerConnection, stream: MediaStream) => {
+      for (const track of stream.getTracks()) {
+        const hasTrack = connection.getSenders().some((sender) => sender.track === track);
+        if (!hasTrack) {
           connection.addTrack(track, stream);
         }
+      }
+    },
+    []
+  );
 
+  const ensureLocalCallStream = useCallback(async () => {
+    const existingStream = localCallStreamRef.current;
+    if (existingStream) {
+      return existingStream;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+      for (const track of stream.getAudioTracks()) {
+        track.enabled = !isCallMicMuted;
+      }
+      localCallStreamRef.current = stream;
+      return stream;
+    } catch {
+      throw new Error("MIC_ACCESS_DENIED");
+    }
+  }, [isCallMicMuted]);
+
+  const createOfferToPeer = useCallback(
+    async (chatId: string, peerUserId: string) => {
+      const localStream = localCallStreamRef.current;
+      if (!localStream) {
+        return false;
+      }
+
+      const connection = ensureCallPeerConnection(chatId, peerUserId);
+      attachLocalStreamToConnection(connection, localStream);
+
+      if (connection.signalingState !== "stable") {
+        return true;
+      }
+
+      try {
         const offer = await connection.createOffer({
           offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
         });
         await connection.setLocalDescription(offer);
         const delivered = await sendCallSignal(chatId, peerUserId, "offer", {
           sdp: offer,
         });
-
         if (!delivered) {
+          removePeerConnection(peerUserId);
+        }
+        return delivered;
+      } catch {
+        removePeerConnection(peerUserId);
+        return false;
+      }
+    },
+    [attachLocalStreamToConnection, ensureCallPeerConnection, removePeerConnection, sendCallSignal]
+  );
+
+  const syncScreenShareTrack = useCallback(
+    async (videoTrack: MediaStreamTrack | null) => {
+      const localStream = localCallStreamRef.current;
+      const currentSession = callSessionRef.current;
+      if (!localStream || !currentSession) {
+        return;
+      }
+
+      for (const track of localStream.getVideoTracks()) {
+        localStream.removeTrack(track);
+        if (videoTrack !== track) {
+          track.stop();
+        }
+      }
+      if (videoTrack) {
+        localStream.addTrack(videoTrack);
+      }
+
+      for (const [peerUserId, connection] of callPeerConnectionsRef.current.entries()) {
+        const videoSender = connection
+          .getSenders()
+          .find((sender) => sender.track?.kind === "video");
+        try {
+          if (videoTrack) {
+            if (videoSender) {
+              await videoSender.replaceTrack(videoTrack);
+            } else {
+              connection.addTrack(videoTrack, localStream);
+            }
+          } else if (videoSender) {
+            await videoSender.replaceTrack(null);
+            connection.removeTrack(videoSender);
+          }
+        } catch {
+          // Ignore per-peer replace/remove failures and continue syncing.
+        }
+
+        void createOfferToPeer(currentSession.chatId, peerUserId);
+      }
+    },
+    [createOfferToPeer]
+  );
+
+  const stopScreenShare = useCallback(async () => {
+    const screenShareStream = screenShareStreamRef.current;
+    if (screenShareStream) {
+      for (const track of screenShareStream.getTracks()) {
+        track.stop();
+      }
+      screenShareStreamRef.current = null;
+    }
+
+    await syncScreenShareTrack(null);
+    setIsScreenSharing(false);
+  }, [syncScreenShareTrack]);
+
+  const startScreenShare = useCallback(async () => {
+    if (!callSessionRef.current) {
+      return;
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setCallNotice(t("screenShareNotSupported"));
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false,
+      });
+      const screenTrack = stream.getVideoTracks()[0];
+      if (!screenTrack) {
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
+        setCallNotice(t("screenShareFailed"));
+        return;
+      }
+
+      screenTrack.addEventListener(
+        "ended",
+        () => {
+          void stopScreenShare();
+        },
+        { once: true }
+      );
+
+      screenShareStreamRef.current = stream;
+      await syncScreenShareTrack(screenTrack);
+      setIsScreenSharing(true);
+    } catch {
+      setCallNotice(t("screenShareFailed"));
+    }
+  }, [stopScreenShare, syncScreenShareTrack, t]);
+
+  const toggleCallMicMute = useCallback(() => {
+    setIsCallMicMuted((previousValue) => {
+      const nextValue = !previousValue;
+      const localStream = localCallStreamRef.current;
+      if (localStream) {
+        for (const track of localStream.getAudioTracks()) {
+          track.enabled = !nextValue;
+        }
+      }
+      return nextValue;
+    });
+  }, []);
+
+  const toggleCallSoundMute = useCallback(() => {
+    setIsCallSoundMuted((previousValue) => !previousValue);
+  }, []);
+
+  const toggleCallFullscreen = useCallback(async () => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => undefined);
+      setIsCallFullscreen(false);
+      return;
+    }
+
+    const overlay = callOverlayRef.current;
+    if (overlay && overlay.requestFullscreen) {
+      await overlay.requestFullscreen().catch(() => undefined);
+    }
+    setIsCallFullscreen(true);
+  }, []);
+
+  const hangupCurrentCall = useCallback(async () => {
+    const currentSession = callSessionRef.current;
+    if (!currentSession) {
+      return;
+    }
+
+    const peerUserIds = new Set<string>([
+      ...callChatMemberIdsRef.current,
+      ...currentSession.participantUserIds,
+      ...callPeerConnectionsRef.current.keys(),
+    ]);
+
+    closeCallSession();
+
+    await Promise.all(
+      [...peerUserIds]
+        .filter((peerUserId) => peerUserId !== currentUser.id)
+        .map((peerUserId) =>
+          sendCallSignal(currentSession.chatId, peerUserId, "hangup", {
+            reason: "hangup",
+          })
+        )
+    );
+  }, [closeCallSession, currentUser.id, sendCallSignal]);
+
+  const startCallToTargets = useCallback(
+    async (target: { chatId: string; chatName: string; isGroup: boolean; memberIds: string[] }) => {
+      if (callSessionRef.current) {
+        setCallNotice(t("callBusy"));
+        return;
+      }
+      if (!isCallSupported()) {
+        setCallNotice(t("callBrowserNotSupported"));
+        return;
+      }
+
+      const peerUserIds = [...new Set(target.memberIds.filter((id) => id !== currentUser.id))];
+      if (peerUserIds.length === 0) {
+        setCallNotice(t("callFailed"));
+        return;
+      }
+
+      callChatMemberIdsRef.current = peerUserIds;
+      incomingOffersRef.current.clear();
+      pendingRemoteIceCandidatesRef.current.clear();
+
+      setCallSession({
+        phase: "outgoing",
+        chatId: target.chatId,
+        isGroup: target.isGroup,
+        initiatorUserId: currentUser.id,
+        initiatorName: currentUser.name.trim() || target.chatName,
+        participantUserIds: peerUserIds,
+        startedAt: null,
+      });
+
+      try {
+        await ensureLocalCallStream();
+
+        let deliveredCount = 0;
+        for (const peerUserId of peerUserIds) {
+          if (await createOfferToPeer(target.chatId, peerUserId)) {
+            deliveredCount += 1;
+          }
+        }
+
+        if (deliveredCount === 0) {
           closeCallSession(t("callFailed"));
           return;
         }
@@ -3730,64 +4134,92 @@ export function WebMessenger({
               }
             : prev
         );
-      } catch {
-        closeCallSession(t("micAccessDenied"));
+      } catch (error) {
+        if (error instanceof Error && error.message === "MIC_ACCESS_DENIED") {
+          closeCallSession(t("micAccessDenied"));
+          return;
+        }
+        closeCallSession(t("callFailed"));
       }
     },
     [
-      callSession,
       closeCallSession,
-      createCallPeerConnection,
-      isAudioCallSupported,
-      sendCallSignal,
+      createOfferToPeer,
+      currentUser.id,
+      currentUser.name,
+      ensureLocalCallStream,
+      isCallSupported,
       t,
     ]
   );
 
+  const startAudioCallToTarget = useCallback(
+    async (target: { chatId: string; peerUserId: string; peerName: string }) => {
+      await startCallToTargets({
+        chatId: target.chatId,
+        chatName: target.peerName,
+        isGroup: false,
+        memberIds: [target.peerUserId],
+      });
+    },
+    [startCallToTargets]
+  );
+
   const startAudioCall = useCallback(async () => {
-    if (!activeChat || activeChat.isGroup || !activeChat.memberId) {
-      setCallNotice(t("callDirectOnly"));
+    if (!activeChat) {
       return;
     }
 
-    await startAudioCallToTarget({
+    const memberIds =
+      activeChat.isGroup
+        ? activeChat.memberIds.filter((memberId) => memberId !== currentUser.id)
+        : activeChat.memberId
+          ? [activeChat.memberId]
+          : [];
+
+    await startCallToTargets({
       chatId: activeChat.id,
-      peerUserId: activeChat.memberId,
-      peerName: activeChat.name,
+      chatName: activeChat.name,
+      isGroup: activeChat.isGroup,
+      memberIds,
     });
-  }, [activeChat, startAudioCallToTarget, t]);
+  }, [activeChat, currentUser.id, startCallToTargets]);
 
   const declineIncomingCall = useCallback(async () => {
-    if (!callSession || callSession.phase !== "incoming") {
+    const currentSession = callSessionRef.current;
+    if (!currentSession || currentSession.phase !== "incoming") {
       return;
     }
-    const target = callTargetRef.current;
+
+    const peerUserIds = new Set<string>([
+      ...incomingOffersRef.current.keys(),
+      ...currentSession.participantUserIds,
+    ]);
     closeCallSession();
-    if (!target) {
-      return;
-    }
-    await sendCallSignal(target.chatId, target.peerUserId, "reject", {
-      reason: "declined",
-    });
-  }, [callSession, closeCallSession, sendCallSignal]);
+
+    await Promise.all(
+      [...peerUserIds]
+        .filter((peerUserId) => peerUserId !== currentUser.id)
+        .map((peerUserId) =>
+          sendCallSignal(currentSession.chatId, peerUserId, "reject", {
+            reason: "declined",
+          })
+        )
+    );
+  }, [closeCallSession, currentUser.id, sendCallSignal]);
 
   const acceptIncomingCall = useCallback(async () => {
-    if (!callSession || callSession.phase !== "incoming") {
+    const currentSession = callSessionRef.current;
+    if (!currentSession || currentSession.phase !== "incoming") {
       return;
     }
-    if (!isAudioCallSupported()) {
+    if (!isCallSupported()) {
       closeCallSession(t("callBrowserNotSupported"));
       return;
     }
 
-    const offer = incomingOfferRef.current;
-    if (!offer) {
-      closeCallSession(t("callFailed"));
-      return;
-    }
-
-    const target = callTargetRef.current;
-    if (!target) {
+    const pendingOffers = [...incomingOffersRef.current.entries()];
+    if (pendingOffers.length === 0) {
       closeCallSession(t("callFailed"));
       return;
     }
@@ -3802,34 +4234,31 @@ export function WebMessenger({
     );
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
-      localCallStreamRef.current = stream;
+      const localStream = await ensureLocalCallStream();
+      const answeredPeerIds = new Set<string>();
 
-      const connection = createCallPeerConnection(target.chatId, target.peerUserId);
-      callPeerConnectionRef.current = connection;
-      for (const track of stream.getTracks()) {
-        connection.addTrack(track, stream);
+      for (const [peerUserId, offer] of pendingOffers) {
+        const connection = ensureCallPeerConnection(currentSession.chatId, peerUserId);
+        attachLocalStreamToConnection(connection, localStream);
+        await connection.setRemoteDescription(offer);
+        await flushPendingRemoteIceCandidates(peerUserId);
+        const answer = await connection.createAnswer();
+        await connection.setLocalDescription(answer);
+
+        const delivered = await sendCallSignal(currentSession.chatId, peerUserId, "answer", {
+          sdp: answer,
+        });
+        if (delivered) {
+          answeredPeerIds.add(peerUserId);
+        }
+        incomingOffersRef.current.delete(peerUserId);
       }
 
-      await connection.setRemoteDescription(offer);
-      await flushPendingRemoteIceCandidates();
-      const answer = await connection.createAnswer();
-      await connection.setLocalDescription(answer);
-      const delivered = await sendCallSignal(
-        target.chatId,
-        target.peerUserId,
-        "answer",
-        {
-          sdp: answer,
-        }
+      const additionalPeerIds = callChatMemberIdsRef.current.filter(
+        (peerUserId) => peerUserId !== currentUser.id && !answeredPeerIds.has(peerUserId)
       );
-
-      if (!delivered) {
-        closeCallSession(t("callFailed"));
-        return;
+      for (const peerUserId of additionalPeerIds) {
+        await createOfferToPeer(currentSession.chatId, peerUserId);
       }
 
       setCallSession((prev) =>
@@ -3838,21 +4267,26 @@ export function WebMessenger({
               ...prev,
               phase: "active",
               startedAt: Date.now(),
+              participantUserIds: [...new Set([...prev.participantUserIds, ...answeredPeerIds])],
             }
           : prev
       );
-    } catch {
-      closeCallSession(t("micAccessDenied"));
-      await sendCallSignal(target.chatId, target.peerUserId, "reject", {
-        reason: "accept-failed",
-      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "MIC_ACCESS_DENIED") {
+        closeCallSession(t("micAccessDenied"));
+      } else {
+        closeCallSession(t("callFailed"));
+      }
     }
   }, [
-    callSession,
+    attachLocalStreamToConnection,
     closeCallSession,
-    createCallPeerConnection,
+    createOfferToPeer,
+    currentUser.id,
+    ensureCallPeerConnection,
+    ensureLocalCallStream,
     flushPendingRemoteIceCandidates,
-    isAudioCallSupported,
+    isCallSupported,
     sendCallSignal,
     t,
   ]);
@@ -3863,76 +4297,130 @@ export function WebMessenger({
         return;
       }
 
-      const activeTarget = callTargetRef.current;
-      const fromUser = knownUsers.find((user) => user.id === signal.fromUserId);
-      const peerName = fromUser?.name ?? t("unknownUser");
+      const fromUserId = signal.fromUserId;
+      const currentSession = callSessionRef.current;
+      const thread = threads.find((candidate) => candidate.id === signal.chatId);
+      const threadMemberIds =
+        thread?.memberIds.filter((memberId) => memberId !== currentUser.id) ?? [];
+      const isGroupChat = thread?.threadType === "group" || threadMemberIds.length > 1;
+      const fromUserName = resolveCallPeerName(fromUserId);
 
       if (signal.type === "offer") {
         const sdp = parseSignalSdp(signal.data);
         if (!sdp) {
           return;
         }
-        if (callSession && callSession.phase !== "incoming") {
-          await sendCallSignal(signal.chatId, signal.fromUserId, "reject", {
+
+        ensurePendingIceQueue(fromUserId);
+        incomingOffersRef.current.set(fromUserId, sdp);
+        if (threadMemberIds.length > 0) {
+          callChatMemberIdsRef.current = threadMemberIds;
+        } else if (!callChatMemberIdsRef.current.includes(fromUserId)) {
+          callChatMemberIdsRef.current = [...callChatMemberIdsRef.current, fromUserId];
+        }
+
+        if (!currentSession) {
+          setCallSession({
+            phase: "incoming",
+            chatId: signal.chatId,
+            isGroup: isGroupChat,
+            initiatorUserId: fromUserId,
+            initiatorName: fromUserName,
+            participantUserIds: [...new Set([...callChatMemberIdsRef.current, fromUserId])],
+            startedAt: null,
+          });
+          return;
+        }
+
+        if (currentSession.chatId !== signal.chatId) {
+          await sendCallSignal(signal.chatId, fromUserId, "reject", {
             reason: "busy",
           });
           return;
         }
-        if (
-          activeTarget &&
-          (activeTarget.chatId !== signal.chatId ||
-            activeTarget.peerUserId !== signal.fromUserId)
-        ) {
-          await sendCallSignal(signal.chatId, signal.fromUserId, "reject", {
-            reason: "busy",
-          });
+
+        setCallSession((previous) =>
+          previous
+            ? {
+                ...previous,
+                participantUserIds: [
+                  ...new Set([...previous.participantUserIds, fromUserId]),
+                ],
+              }
+            : previous
+        );
+
+        if (currentSession.phase === "incoming") {
           return;
         }
 
-        incomingOfferRef.current = sdp;
-        pendingRemoteIceCandidatesRef.current = [];
-        callTargetRef.current = {
-          chatId: signal.chatId,
-          peerUserId: signal.fromUserId,
-        };
-        setCallSession({
-          phase: "incoming",
-          chatId: signal.chatId,
-          peerUserId: signal.fromUserId,
-          peerName,
-          startedAt: null,
-        });
-        return;
-      }
-
-      if (
-        !activeTarget ||
-        activeTarget.chatId !== signal.chatId ||
-        activeTarget.peerUserId !== signal.fromUserId
-      ) {
-        return;
-      }
-
-      if (signal.type === "answer") {
-        const sdp = parseSignalSdp(signal.data);
-        const connection = callPeerConnectionRef.current;
-        if (!sdp || !connection) {
+        const localStream = localCallStreamRef.current;
+        if (!localStream) {
           return;
         }
+
         try {
+          const connection = ensureCallPeerConnection(signal.chatId, fromUserId);
+          attachLocalStreamToConnection(connection, localStream);
+
+          if (connection.signalingState !== "stable") {
+            await connection
+              .setLocalDescription({ type: "rollback" } as RTCSessionDescriptionInit)
+              .catch(() => undefined);
+          }
+
           await connection.setRemoteDescription(sdp);
-          await flushPendingRemoteIceCandidates();
+          await flushPendingRemoteIceCandidates(fromUserId);
+          const answer = await connection.createAnswer();
+          await connection.setLocalDescription(answer);
+          await sendCallSignal(signal.chatId, fromUserId, "answer", {
+            sdp: answer,
+          });
+
           setCallSession((prev) =>
             prev
               ? {
                   ...prev,
                   phase: "active",
-                  startedAt: Date.now(),
+                  startedAt: prev.startedAt ?? Date.now(),
                 }
               : prev
           );
         } catch {
-          closeCallSession(t("callFailed"));
+          await sendCallSignal(signal.chatId, fromUserId, "reject", {
+            reason: "accept-failed",
+          });
+        }
+        return;
+      }
+
+      if (!currentSession || currentSession.chatId !== signal.chatId) {
+        return;
+      }
+
+      if (signal.type === "answer") {
+        const sdp = parseSignalSdp(signal.data);
+        const connection = callPeerConnectionsRef.current.get(fromUserId);
+        if (!sdp || !connection) {
+          return;
+        }
+        try {
+          await connection.setRemoteDescription(sdp);
+          await flushPendingRemoteIceCandidates(fromUserId);
+          setCallSession((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  phase: "active",
+                  startedAt: prev.startedAt ?? Date.now(),
+                }
+              : prev
+          );
+        } catch {
+          removePeerConnection(fromUserId);
+          if (!currentSession.isGroup) {
+            closeCallSession(t("callFailed"));
+          }
         }
         return;
       }
@@ -3942,12 +4430,9 @@ export function WebMessenger({
         if (!candidate) {
           return;
         }
-        const connection = callPeerConnectionRef.current;
+        const connection = callPeerConnectionsRef.current.get(fromUserId);
         if (!connection || !connection.remoteDescription) {
-          pendingRemoteIceCandidatesRef.current = [
-            ...pendingRemoteIceCandidatesRef.current,
-            candidate,
-          ];
+          ensurePendingIceQueue(fromUserId).push(candidate);
           return;
         }
         try {
@@ -3959,27 +4444,62 @@ export function WebMessenger({
       }
 
       if (signal.type === "hangup") {
-        closeCallSession(t("callEnded"));
+        removePeerConnection(fromUserId);
+        setCallSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                participantUserIds: prev.participantUserIds.filter((id) => id !== fromUserId),
+              }
+            : prev
+        );
+        if (!currentSession.isGroup) {
+          closeCallSession(t("callEnded"));
+          return;
+        }
+        if (callPeerConnectionsRef.current.size === 0 && incomingOffersRef.current.size === 0) {
+          closeCallSession(t("callEnded"));
+        }
         return;
       }
 
       if (signal.type === "reject") {
         const reason = parseSignalReason(signal.data);
-        if (reason === "busy") {
-          closeCallSession(t("callBusy"));
+        removePeerConnection(fromUserId);
+        setCallSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                participantUserIds: prev.participantUserIds.filter((id) => id !== fromUserId),
+              }
+            : prev
+        );
+
+        if (!currentSession.isGroup) {
+          closeCallSession(reason === "busy" ? t("callBusy") : t("callDeclined"));
           return;
         }
-        closeCallSession(t("callDeclined"));
+
+        if (reason === "busy") {
+          setCallNotice(`${fromUserName}: ${t("callBusy")}`);
+        }
+        if (callPeerConnectionsRef.current.size === 0 && incomingOffersRef.current.size === 0) {
+          closeCallSession(t("callEnded"));
+        }
       }
     },
     [
-      callSession,
+      attachLocalStreamToConnection,
       closeCallSession,
       currentUser.id,
+      ensureCallPeerConnection,
+      ensurePendingIceQueue,
       flushPendingRemoteIceCandidates,
-      knownUsers,
+      removePeerConnection,
+      resolveCallPeerName,
       sendCallSignal,
       t,
+      threads,
     ]
   );
 
@@ -4019,6 +4539,27 @@ export function WebMessenger({
       callSignalPollInFlightRef.current = false;
     }
   }, [currentUser.id, handleCallSignal]);
+
+  useEffect(() => {
+    for (const mediaElement of callRemoteMediaElementsRef.current.values()) {
+      mediaElement.muted = isCallSoundMuted;
+      if (!isCallSoundMuted) {
+        void mediaElement.play().catch(() => undefined);
+      }
+    }
+  }, [isCallSoundMuted]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsCallFullscreen(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
 
   useRealtimeSync({
     userId: currentUser.id,
@@ -5673,7 +6214,8 @@ export function WebMessenger({
   const isProfileCallActiveWithViewedUser =
     viewedUserId !== null &&
     callSession !== null &&
-    callSession.peerUserId === viewedUserId;
+    !callSession.isGroup &&
+    callSession.participantUserIds.includes(viewedUserId);
   const isProfileCallButtonDisabled =
     !viewedUserId ||
     isViewedUserBlocked ||
@@ -7297,7 +7839,7 @@ export function WebMessenger({
                         className={`border border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 ${
                           uiDensity === "compact" ? "h-8 w-8" : ""
                         }`}
-                        title={t("audioCallOnly")}
+                        title={t("call")}
                       >
                         {callChatMatchesActive ? (
                           <PhoneOff className="size-4" />
@@ -8027,32 +8569,15 @@ export function WebMessenger({
                       </h2>
                       <p className="mt-1 text-sm text-zinc-400">{t("aiAssistantSubtitle")}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
-                      <div className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5">
-                        <div className="text-right">
-                          <p className="text-xs font-medium text-zinc-100">
-                            {t("aiAssistantSearchMode")}
-                          </p>
-                          <p className="hidden text-[11px] text-zinc-500 sm:block">
-                            {t("aiAssistantSearchHint")}
-                          </p>
-                        </div>
-                        <Switch
-                          checked={aiSearchEnabled}
-                          onCheckedChange={setAiSearchEnabled}
-                          aria-label={t("aiAssistantSearchMode")}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={clearAiConversation}
-                        disabled={isAiSubmitting || (aiMessages.length === 0 && !aiError)}
-                        className="h-9 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {t("aiAssistantClear")}
-                      </Button>
-                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={clearAiConversation}
+                      disabled={isAiSubmitting || (aiMessages.length === 0 && !aiError)}
+                      className="h-9 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {t("aiAssistantClear")}
+                    </Button>
                   </div>
                 </div>
                 <div
@@ -8117,10 +8642,22 @@ export function WebMessenger({
                             : "min-h-[88px] py-2.5"
                         }`}
                       />
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <p className="text-xs text-zinc-500">
-                          {aiError || t("formattingHotkeyHint")}
-                        </p>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-900/70 px-2.5 py-1.5">
+                            <p className="text-xs text-zinc-300">
+                              {t("aiAssistantSearchMode")}
+                            </p>
+                            <Switch
+                              checked={aiSearchEnabled}
+                              onCheckedChange={setAiSearchEnabled}
+                              aria-label={t("aiAssistantSearchMode")}
+                            />
+                          </div>
+                          <p className="hidden text-[11px] text-zinc-500 sm:block">
+                            {t("aiAssistantSearchHint")}
+                          </p>
+                        </div>
                         <Button
                           type="submit"
                           disabled={isAiSubmitting || aiDraft.trim().length === 0}
@@ -8129,6 +8666,9 @@ export function WebMessenger({
                           {isAiSubmitting ? t("aiAssistantThinking") : t("send")}
                         </Button>
                       </div>
+                      <p className="mt-2 text-xs text-zinc-500">
+                        {aiError || t("formattingHotkeyHint")}
+                      </p>
                     </div>
                   </div>
                 </form>
@@ -8461,7 +9001,7 @@ export function WebMessenger({
                                   !isProfileCallActiveWithViewedUser
                                 }
                                 className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                title={t("audioCallOnly")}
+                                title={t("call")}
                               >
                                 {isProfileCallActiveWithViewedUser ? (
                                   <PhoneOff className="size-4" />
@@ -9865,7 +10405,6 @@ export function WebMessenger({
         </AlertDialogContent>
       </AlertDialog>
       </main>
-      <audio ref={remoteCallAudioRef} autoPlay playsInline className="hidden" />
       {callNotice ? (
         <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[120] -translate-x-1/2 rounded-lg border border-zinc-800/90 bg-zinc-950/85 px-4 py-2 text-sm text-zinc-100 shadow-xl ring-1 ring-white/5 backdrop-blur-xl">
           {callNotice}
@@ -9907,37 +10446,189 @@ export function WebMessenger({
         </div>
       ) : null}
       {callSession ? (
-        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-[120] w-[min(92vw,360px)] rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4 text-zinc-100 shadow-2xl backdrop-blur">
-          <p className="text-sm font-semibold">{callSession.peerName}</p>
-          <p className="mt-1 text-xs text-zinc-400">{callStatusText}</p>
-          <div className="mt-3 flex items-center gap-2">
-            {callSession.phase === "incoming" ? (
-              <>
-                <Button
-                  type="button"
-                  onClick={() => void declineIncomingCall()}
-                  className="h-10 flex-1 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
-                >
-                  {t("declineCall")}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => void acceptIncomingCall()}
-                  className="h-10 flex-1 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
-                >
-                  {t("acceptCall")}
-                </Button>
-              </>
-            ) : (
+        <div
+          ref={callOverlayRef}
+          className={
+            isCallFullscreen
+              ? "fixed inset-0 z-[130] bg-zinc-950/95 p-4 sm:p-6"
+              : "fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-[120] w-[min(96vw,460px)] rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4 text-zinc-100 shadow-2xl backdrop-blur"
+          }
+        >
+          <div
+            className={isCallFullscreen ? "mx-auto flex h-full w-full max-w-6xl flex-col gap-4" : ""}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{callTitle}</p>
+                <p className="mt-1 text-xs text-zinc-400">{callStatusText}</p>
+                {callParticipantsSummary ? (
+                  <p className="mt-1 truncate text-[11px] text-zinc-500">
+                    {callParticipantsSummary}
+                  </p>
+                ) : null}
+              </div>
               <Button
                 type="button"
-                onClick={() => void hangupCurrentCall()}
-                className="h-10 w-full rounded-lg border border-red-500/70 bg-red-500/20 text-red-100 hover:bg-red-500/30"
+                variant="ghost"
+                size="icon"
+                onClick={() => void toggleCallFullscreen()}
+                aria-label={isCallFullscreen ? t("closeFullscreenCall") : t("openFullscreenCall")}
+                className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
               >
-                <PhoneOff className="size-4" />
-                {t("endCall")}
+                {isCallFullscreen ? (
+                  <Minimize2 className="size-4" />
+                ) : (
+                  <Maximize2 className="size-4" />
+                )}
               </Button>
-            )}
+            </div>
+
+            {isCallFullscreen || callSession.isGroup || isScreenSharing || callRemoteUserIds.length > 0 ? (
+              <div
+                className={`mt-3 grid gap-2 ${
+                  isCallFullscreen ? "flex-1 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-2"
+                }`}
+              >
+                {isScreenSharing ? (
+                  <div className="relative overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950/70">
+                    <video
+                      autoPlay
+                      playsInline
+                      muted
+                      ref={(element) => {
+                        if (!element) {
+                          return;
+                        }
+                        const stream = localCallStreamRef.current;
+                        if (!stream || stream.getVideoTracks().length === 0) {
+                          element.srcObject = null;
+                          return;
+                        }
+                        element.srcObject = stream;
+                        void element.play().catch(() => undefined);
+                      }}
+                      className="h-full min-h-[110px] w-full object-cover"
+                    />
+                    <p className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-1 text-[11px] text-zinc-100">
+                      {t("you")}
+                    </p>
+                  </div>
+                ) : null}
+                {callRemoteUserIds.map((peerUserId) => {
+                  const remoteStream = callRemoteStreamsRef.current.get(peerUserId) ?? null;
+                  const hasVideo = Boolean(remoteStream && remoteStream.getVideoTracks().length > 0);
+                  return (
+                    <div
+                      key={`call-peer-${peerUserId}`}
+                      className="relative overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950/70"
+                    >
+                      <video
+                        autoPlay
+                        playsInline
+                        ref={(element) => registerRemoteMediaElement(peerUserId, element)}
+                        className={hasVideo ? "h-full min-h-[110px] w-full object-cover" : "hidden"}
+                      />
+                      {!hasVideo ? (
+                        <div className="flex min-h-[110px] items-center justify-center px-3 text-center text-xs text-zinc-400">
+                          {resolveCallPeerName(peerUserId)}
+                        </div>
+                      ) : null}
+                      <p className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-1 text-[11px] text-zinc-100">
+                        {resolveCallPeerName(peerUserId)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {callSession.phase === "incoming" ? (
+                <>
+                  <Button
+                    type="button"
+                    onClick={() => void declineIncomingCall()}
+                    className="h-10 flex-1 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+                  >
+                    {t("declineCall")}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void acceptIncomingCall()}
+                    className="h-10 flex-1 rounded-lg bg-violet-500 text-zinc-50 hover:bg-violet-400"
+                  >
+                    {t("acceptCall")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={isCallSoundMuted ? t("unmuteSound") : t("muteSound")}
+                    onClick={toggleCallSoundMute}
+                    className={`h-10 w-10 rounded-lg border ${
+                      isCallSoundMuted
+                        ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
+                        : "border-zinc-600 bg-zinc-800 text-zinc-100"
+                    }`}
+                  >
+                    {isCallSoundMuted ? (
+                      <VolumeX className="size-4" />
+                    ) : (
+                      <Volume2 className="size-4" />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={isCallMicMuted ? t("unmuteMic") : t("muteMic")}
+                    onClick={toggleCallMicMute}
+                    className={`h-10 w-10 rounded-lg border ${
+                      isCallMicMuted
+                        ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
+                        : "border-zinc-600 bg-zinc-800 text-zinc-100"
+                    }`}
+                  >
+                    {isCallMicMuted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={isScreenSharing ? t("stopShareScreen") : t("shareScreen")}
+                    onClick={() => {
+                      if (isScreenSharing) {
+                        void stopScreenShare();
+                        return;
+                      }
+                      void startScreenShare();
+                    }}
+                    className={`h-10 w-10 rounded-lg border ${
+                      isScreenSharing
+                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                        : "border-zinc-600 bg-zinc-800 text-zinc-100"
+                    }`}
+                  >
+                    {isScreenSharing ? (
+                      <ScreenShareOff className="size-4" />
+                    ) : (
+                      <ScreenShare className="size-4" />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void hangupCurrentCall()}
+                    className="h-10 min-w-[132px] rounded-lg border border-red-500/70 bg-red-500/20 text-red-100 hover:bg-red-500/30"
+                  >
+                    <PhoneOff className="size-4" />
+                    {t("endCall")}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       ) : null}

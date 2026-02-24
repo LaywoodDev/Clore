@@ -79,12 +79,11 @@ export async function POST(request: Request) {
       const thread = store.threads.find(
         (candidate) =>
           candidate.id === chatId &&
-          candidate.threadType === "direct" &&
           candidate.memberIds.includes(userId) &&
           candidate.memberIds.includes(toUserId)
       );
       if (!thread) {
-        throw new Error("Direct chat not found.");
+        throw new Error("Chat not found.");
       }
 
       store.callSignals.push({
@@ -105,7 +104,7 @@ export async function POST(request: Request) {
     const status =
       message === "User not found."
         ? 404
-        : message === "Direct chat not found."
+        : message === "Chat not found."
           ? 404
           : 400;
     return NextResponse.json({ error: message }, { status });
