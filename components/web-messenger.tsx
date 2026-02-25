@@ -1866,8 +1866,6 @@ function prepareCallAudioStream(sourceStream: MediaStream): PreparedCallAudioStr
     const highPassFilter = audioContext.createBiquadFilter();
     const lowPassFilter = audioContext.createBiquadFilter();
     const compressor = audioContext.createDynamicsCompressor();
-    const gateGain = audioContext.createGain();
-    const analyser = audioContext.createAnalyser();
     const destination = audioContext.createMediaStreamDestination();
 
     highPassFilter.type = "highpass";
@@ -1884,84 +1882,33 @@ function prepareCallAudioStream(sourceStream: MediaStream): PreparedCallAudioStr
     compressor.attack.value = 0.002;
     compressor.release.value = 0.14;
 
-    gateGain.gain.value = 1;
-    analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.76;
-
     sourceNode.connect(highPassFilter);
     highPassFilter.connect(lowPassFilter);
     lowPassFilter.connect(compressor);
-    compressor.connect(gateGain);
-    gateGain.connect(destination);
-    gateGain.connect(analyser);
-
-    const analyserBuffer = new Float32Array(analyser.fftSize);
-    let gateClosed = false;
-    let animationFrameId: number | null = null;
-    const openThreshold = 0.014;
-    const closeThreshold = 0.009;
-    const minGateGain = 0.03;
-    const attackTime = 0.01;
-    const releaseTime = 0.1;
-
-    const updateGate = () => {
-      if (audioContext.state === "closed") {
-        return;
-      }
-
-      analyser.getFloatTimeDomainData(analyserBuffer);
-      let energy = 0;
-      for (const sample of analyserBuffer) {
-        energy += sample * sample;
-      }
-      const rms = Math.sqrt(energy / analyserBuffer.length);
-
-      let nextGateClosed = gateClosed;
-      if (gateClosed) {
-        if (rms > openThreshold) {
-          nextGateClosed = false;
-        }
-      } else if (rms < closeThreshold) {
-        nextGateClosed = true;
-      }
-
-      if (nextGateClosed !== gateClosed) {
-        gateClosed = nextGateClosed;
-        gateGain.gain.cancelScheduledValues(audioContext.currentTime);
-        gateGain.gain.setTargetAtTime(
-          gateClosed ? minGateGain : 1,
-          audioContext.currentTime,
-          gateClosed ? attackTime : releaseTime
-        );
-      }
-
-      animationFrameId = window.requestAnimationFrame(updateGate);
-    };
-    animationFrameId = window.requestAnimationFrame(updateGate);
+    compressor.connect(destination);
 
     if (audioContext.state === "suspended") {
       void audioContext.resume().catch(() => undefined);
     }
 
     const processedTrack = destination.stream.getAudioTracks()[0];
-    const stream = processedTrack ? new MediaStream([processedTrack]) : sourceStream;
-    if (processedTrack) {
+    // Fail-safe: suspended WebAudio contexts can produce silent outgoing audio.
+    const stream =
+      processedTrack && processedTrack.readyState === "live" && audioContext.state === "running"
+        ? new MediaStream([processedTrack])
+        : sourceStream;
+
+    if (processedTrack && stream !== sourceStream) {
       processedTrack.contentHint = "speech";
     }
 
     return {
       stream,
       cleanup: () => {
-        if (animationFrameId !== null) {
-          window.cancelAnimationFrame(animationFrameId);
-          animationFrameId = null;
-        }
         sourceNode.disconnect();
         highPassFilter.disconnect();
         lowPassFilter.disconnect();
         compressor.disconnect();
-        gateGain.disconnect();
-        analyser.disconnect();
         destination.disconnect();
         void audioContext.close().catch(() => undefined);
       },
