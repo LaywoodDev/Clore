@@ -39,6 +39,7 @@ import {
   Play,
   Plus,
   Search,
+  Shield,
   ScreenShare,
   ScreenShareOff,
   Smile,
@@ -1294,6 +1295,12 @@ type CallSessionState = {
   startedAt: number | null;
 };
 
+type AdminCallJoinRequest = {
+  chatId: string;
+  joinCall: boolean;
+  targetUserIds: string[];
+};
+
 function formatChatTime(timestamp: number, language: AppLanguage): string {
   const date = new Date(timestamp);
   const now = new Date();
@@ -2229,6 +2236,8 @@ export function WebMessenger({
   const callSessionRef = useRef<CallSessionState | null>(null);
   const callSignalPollInFlightRef = useRef(false);
   const isCallSignalingUnavailableRef = useRef(false);
+  const adminJoinRequestRef = useRef<AdminCallJoinRequest | null>(null);
+  const hasHandledAdminJoinRequestRef = useRef(false);
   const mobileBackSwipeGestureRef = useRef<MobileBackSwipeGestureState>(
     createIdleMobileBackSwipeGestureState()
   );
@@ -3030,6 +3039,47 @@ export function WebMessenger({
       ADMIN_PANEL_USERNAME,
     [currentUser.username]
   );
+  const openAdminDashboard = useCallback(() => {
+    if (!isAdminAccount || typeof window === "undefined") {
+      return;
+    }
+    window.location.href = "/admin";
+  }, [isAdminAccount]);
+  useEffect(() => {
+    if (!isAdminAccount) {
+      adminJoinRequestRef.current = null;
+      hasHandledAdminJoinRequestRef.current = false;
+      return;
+    }
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const chatId = params.get("adminThreadId")?.trim() ?? "";
+    if (!chatId) {
+      adminJoinRequestRef.current = null;
+      hasHandledAdminJoinRequestRef.current = false;
+      return;
+    }
+
+    const joinCall = params.get("adminJoinCall") === "1";
+    const targetUserIds = [
+      ...new Set(
+        (params.get("adminCallTargets") ?? "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0 && value !== currentUser.id)
+      ),
+    ];
+
+    adminJoinRequestRef.current = {
+      chatId,
+      joinCall,
+      targetUserIds,
+    };
+    hasHandledAdminJoinRequestRef.current = false;
+  }, [currentUser.id, isAdminAccount]);
   const getRequestErrorMessage = useCallback(
     (error: unknown) =>
       error instanceof Error && error.message.trim().length > 0
@@ -4847,6 +4897,62 @@ export function WebMessenger({
       memberIds,
     });
   }, [activeChat, currentUser.id, startCallToTargets]);
+  useEffect(() => {
+    if (!isAdminAccount || hasHandledAdminJoinRequestRef.current) {
+      return;
+    }
+
+    const request = adminJoinRequestRef.current;
+    if (!request) {
+      return;
+    }
+
+    const targetChat = chatItems.find(
+      (chat) => chat.id === request.chatId && !chat.isFavorites && !chat.isPreview
+    );
+    if (!targetChat) {
+      return;
+    }
+
+    hasHandledAdminJoinRequestRef.current = true;
+    setIsActiveChatProfileSidebarOpen(false);
+    setActiveSidebar("home");
+    setActiveChatPreviewUserId(null);
+    setActiveChatId(targetChat.id);
+    setMobileView("chat");
+
+    if (request.joinCall) {
+      const callTargetUserIds =
+        request.targetUserIds.length > 0
+          ? request.targetUserIds
+          : targetChat.isGroup
+            ? targetChat.memberIds.filter((memberId) => memberId !== currentUser.id)
+            : targetChat.memberId
+              ? [targetChat.memberId]
+              : [];
+      if (callTargetUserIds.length > 0) {
+        void startCallToTargets({
+          chatId: targetChat.id,
+          chatName: targetChat.name,
+          isGroup: targetChat.isGroup,
+          memberIds: callTargetUserIds,
+        });
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("adminThreadId");
+      nextUrl.searchParams.delete("adminJoinCall");
+      nextUrl.searchParams.delete("adminCallTargets");
+      const nextQuery = nextUrl.searchParams.toString();
+      window.history.replaceState(
+        {},
+        "",
+        `${nextUrl.pathname}${nextQuery ? `?${nextQuery}` : ""}${nextUrl.hash}`
+      );
+    }
+  }, [chatItems, currentUser.id, isAdminAccount, startCallToTargets]);
 
   const declineIncomingCall = useCallback(async () => {
     const currentSession = callSessionRef.current;
@@ -8697,6 +8803,8 @@ export function WebMessenger({
     }
     return getFontSizeLabel(value);
   };
+  const adminDashboardLabel =
+    language === "ru" ? "Админ-панель" : "Admin dashboard";
 
   return (
     <>
@@ -8759,6 +8867,18 @@ export function WebMessenger({
                   );
                 })}
               </nav>
+              {isAdminAccount ? (
+                <div className="pt-2">
+                  <SidebarJellyButton
+                    active={false}
+                    onActivate={openAdminDashboard}
+                    ariaLabel={adminDashboardLabel}
+                    title={adminDashboardLabel}
+                  >
+                    <Shield className="size-4 shrink-0" />
+                  </SidebarJellyButton>
+                </div>
+              ) : null}
             </aside>
           )}
 
@@ -11513,6 +11633,16 @@ export function WebMessenger({
               );
             })}
           </div>
+          {isAdminAccount ? (
+            <button
+              type="button"
+              onClick={openAdminDashboard}
+              className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-amber-500/70 bg-amber-500/15 text-xs font-medium text-amber-100"
+            >
+              <Shield className="size-4" />
+              <span>{adminDashboardLabel}</span>
+            </button>
+          ) : null}
         </nav>
       ) : null}
       <AlertDialog

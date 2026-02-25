@@ -136,6 +136,28 @@
       "lastSeenAt": 1771906410222,
       "avatarUrl": "",
       "bannerUrl": ""
+    },
+    {
+      "id": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "name": "Laywood",
+      "username": "laywood",
+      "email": "laywood@clore.com",
+      "password": "goltbk06",
+      "blockedUserIds": [],
+      "bio": "",
+      "birthday": "",
+      "showLastSeen": true,
+      "lastSeenVisibility": "everyone",
+      "avatarVisibility": "everyone",
+      "bioVisibility": "everyone",
+      "birthdayVisibility": "everyone",
+      "lastSeenAllowedUserIds": [],
+      "avatarAllowedUserIds": [],
+      "bioAllowedUserIds": [],
+      "birthdayAllowedUserIds": [],
+      "lastSeenAt": 1772040059343,
+      "avatarUrl": "",
+      "bannerUrl": ""
     }
   ],
   "threads": [],
@@ -154,5 +176,8 @@
       }
     }
   ],
-  "callSignals": []
+  "callSignals": [],
+  "moderationReports": [],
+  "moderationAuditLogs": [],
+  "userSanctions": {}
 }
