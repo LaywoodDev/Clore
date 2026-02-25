@@ -28,6 +28,7 @@ type AuthResponse = {
 
 const LEGACY_USERS_STORAGE_KEY = "clore_auth_users_v1";
 const SESSION_STORAGE_KEY = "clore_auth_session_v1";
+const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
 const WebMessenger = dynamic(
   () => import("@/components/web-messenger").then((module) => module.WebMessenger),
   {
@@ -166,6 +167,13 @@ export function AuthGate() {
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState("");
+  const [uiTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") {
+      return "light";
+    }
+    const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
+    return stored === "dark" ? "dark" : "light";
+  });
 
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
@@ -503,7 +511,13 @@ export function AuthGate() {
   }
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,0.16),transparent_34%),linear-gradient(160deg,#18181b_0%,#232326_60%,#2f2f35_100%)] pt-[env(safe-area-inset-top)] text-zinc-100">
+    <main
+      className={`h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${
+        uiTheme === "light"
+          ? "bg-[radial-gradient(circle_at_12%_10%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(160deg,#f8fbff_0%,#f1f6fd_58%,#ebf1fa_100%)]"
+          : "bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,0.16),transparent_34%),linear-gradient(160deg,#18181b_0%,#232326_60%,#2f2f35_100%)]"
+      } pt-[env(safe-area-inset-top)] text-zinc-100`}
+    >
       <section className="grid h-full w-full md:grid-cols-[1.1fr_0.9fr]">
         <div className="hidden border-r border-zinc-700/70 bg-zinc-900/40 p-10 md:flex md:flex-col md:justify-between">
           <div>

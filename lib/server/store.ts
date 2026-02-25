@@ -95,7 +95,7 @@ export type StoredCallSignal = {
   chatId: string;
   fromUserId: string;
   toUserId: string;
-  type: "offer" | "answer" | "ice" | "hangup" | "reject" | "music-sync";
+  type: "offer" | "answer" | "ice" | "hangup" | "reject";
   payload: string;
   createdAt: number;
 };
@@ -808,14 +808,7 @@ function sanitizeCallSignals(rawSignals: unknown): StoredCallSignal[] {
     return [];
   }
 
-  const allowedTypes = new Set([
-    "offer",
-    "answer",
-    "ice",
-    "hangup",
-    "reject",
-    "music-sync",
-  ]);
+  const allowedTypes = new Set(["offer", "answer", "ice", "hangup", "reject"]);
   const byId = new Map<string, StoredCallSignal>();
 
   for (const rawSignal of rawSignals) {

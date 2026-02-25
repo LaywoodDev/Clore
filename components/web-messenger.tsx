@@ -89,6 +89,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import ColorBends from "@/components/ui/color-bends";
+import PixelBlast from "@/components/ui/pixel-blast";
 import { requestJson } from "@/components/messenger/api";
 import { type AuthUser, type PrivacyVisibility } from "@/components/messenger/types";
 import { useRealtimeSync } from "@/components/messenger/use-realtime-sync";
@@ -330,6 +332,12 @@ type RenderMessage = {
   sourceChatName: string;
 };
 
+type ForwardMessageDraft = {
+  id: string;
+  text: string;
+  attachments: RenderAttachment[];
+};
+
 type ChatListItem = {
   id: string;
   memberId: string | null;
@@ -395,11 +403,19 @@ type InlineToast = {
 };
 
 type AppLanguage = "en" | "ru";
+type UiTheme = "dark" | "light";
 type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
 type UiRadius = "sharp" | "normal" | "rounded";
 type UiFontFamily = "default" | "modern" | "readable" | "comfortaa";
-type ChatWallpaper = "none" | "aurora" | "sunset" | "ocean" | "graphite";
+type ChatWallpaper =
+  | "none"
+  | "aurora"
+  | "sunset"
+  | "ocean"
+  | "graphite"
+  | "color-bends"
+  | "pixel-blast";
 type ChatWallpaperSetting = ChatWallpaper | "inherit";
 type ChatFontSizeSetting = UiFontSize | "inherit";
 type ChatPersonalization = {
@@ -459,6 +475,8 @@ const CHAT_WALLPAPER_OPTIONS: ChatWallpaper[] = [
   "sunset",
   "ocean",
   "graphite",
+  "color-bends",
+  "pixel-blast",
 ];
 const CHAT_WALLPAPER_BACKGROUNDS: Record<ChatWallpaper, string> = {
   none: "radial-gradient(circle at top, rgba(139,92,246,0.1), transparent 45%)",
@@ -470,6 +488,8 @@ const CHAT_WALLPAPER_BACKGROUNDS: Record<ChatWallpaper, string> = {
     "radial-gradient(circle at 18% 14%, rgba(6,182,212,0.2), transparent 42%), radial-gradient(circle at 82% 0%, rgba(14,165,233,0.2), transparent 36%), linear-gradient(180deg, #0b1b2b 0%, #0f172a 100%)",
   graphite:
     "radial-gradient(circle at 20% 18%, rgba(161,161,170,0.16), transparent 42%), radial-gradient(circle at 80% 0%, rgba(113,113,122,0.16), transparent 36%), linear-gradient(180deg, #18181b 0%, #09090b 100%)",
+  "color-bends": "none",
+  "pixel-blast": "none",
 };
 const DEFAULT_CHAT_PERSONALIZATION: ChatPersonalization = {
   wallpaper: "inherit",
@@ -498,6 +518,7 @@ const initialProfile: ProfileData = {
 const LANGUAGE_STORAGE_KEY = "clore_app_language_v1";
 const PUSH_NOTIFICATIONS_STORAGE_KEY = "clore_push_notifications_v1";
 const MESSAGE_SOUND_STORAGE_KEY = "clore_message_sound_v1";
+const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
 const UI_DENSITY_STORAGE_KEY = "clore_ui_density_v1";
 const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
 const UI_RADIUS_STORAGE_KEY = "clore_ui_radius_v1";
@@ -595,6 +616,14 @@ const translations = {
     saveEdit: "Save",
     editedLabel: "edited",
     copyAttachmentLink: "Copy attachment link",
+    forwardMessageAction: "Forward",
+    forwardMessageTitle: "Forward message",
+    selectChatsToForward: "Select chats to forward",
+    forwardingMessage: "Message to forward",
+    forwarding: "Forwarding...",
+    messageForwarded: "Message forwarded",
+    messagesForwarded: "Messages forwarded",
+    messagesForwardedPartially: "Partially forwarded",
     saveToFavorites: "Save to favorites",
     removeFromFavorites: "Remove from favorites",
     favorites: "Favorites",
@@ -741,6 +770,10 @@ const translations = {
     logOut: "Log out",
     language: "Language",
     languageHint: "Choose interface language",
+    theme: "Theme",
+    themeHint: "Switch between dark and light appearance",
+    themeDark: "Dark",
+    themeLight: "Light",
     accentColor: "Accent color",
     accentColorHint: "Choose the main color for buttons and highlights",
     accentViolet: "Violet",
@@ -796,6 +829,8 @@ const translations = {
     wallpaperSunset: "Sunset",
     wallpaperOcean: "Ocean",
     wallpaperGraphite: "Graphite",
+    wallpaperColorBends: "Color Bends",
+    wallpaperPixelBlast: "Pixel Blast",
     navigationTabs: "Navigation tabs",
     navigationTabsHint: "Choose which tabs are visible and their order",
     showTab: "Show tab",
@@ -823,17 +858,6 @@ const translations = {
     aiAssistantSearchMode: "Search mode",
     aiAssistantSearchHint: "Allow web search for up-to-date answers",
     aiAssistantThinking: "Thinking...",
-    callMusicTitle: "Music party",
-    callMusicHint: "Paste a direct audio URL and sync playback for everyone in the call.",
-    callMusicUrlPlaceholder: "https://example.com/track.mp3",
-    callMusicLoad: "Load",
-    callMusicJoin: "Join",
-    callMusicPlay: "Play for all",
-    callMusicPause: "Pause for all",
-    callMusicStop: "Stop for all",
-    callMusicNoTrack: "No track loaded yet",
-    callMusicInvalidUrl: "Enter a valid http(s) audio URL.",
-    callMusicLoadError: "Unable to play this track. Check the URL and CORS policy.",
     onboardingApply: "Apply",
   },
   ru: {
@@ -897,6 +921,14 @@ const translations = {
     saveEdit: "Сохранить",
     editedLabel: "изменено",
     copyAttachmentLink: "Скопировать ссылку вложения",
+    forwardMessageAction: "Переслать",
+    forwardMessageTitle: "Переслать сообщение",
+    selectChatsToForward: "Выберите чаты для пересылки",
+    forwardingMessage: "Пересылаемое сообщение",
+    forwarding: "Пересылка...",
+    messageForwarded: "Сообщение переслано",
+    messagesForwarded: "Сообщения пересланы",
+    messagesForwardedPartially: "Переслано частично",
     saveToFavorites: "Сохранить в избранное",
     removeFromFavorites: "Удалить из избранного",
     favorites: "Избранное",
@@ -1045,6 +1077,10 @@ const translations = {
     logOut: "Выйти",
     language: "Язык",
     languageHint: "Выберите язык интерфейса",
+    theme: "\u0422\u0435\u043c\u0430",
+    themeHint: "\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043c\u0435\u0436\u0434\u0443 \u0442\u0435\u043c\u043d\u043e\u0439 \u0438 \u0441\u0432\u0435\u0442\u043b\u043e\u0439 \u0442\u0435\u043c\u043e\u0439",
+    themeDark: "\u0422\u0435\u043c\u043d\u0430\u044f",
+    themeLight: "\u0421\u0432\u0435\u0442\u043b\u0430\u044f",
     accentColor: "Акцентный цвет",
     accentColorHint: "Выберите основной цвет кнопок и акцентов",
     accentViolet: "Фиолетовый",
@@ -1100,6 +1136,8 @@ const translations = {
     wallpaperSunset: "Закат",
     wallpaperOcean: "Океан",
     wallpaperGraphite: "Графит",
+    wallpaperColorBends: "Color Bends",
+    wallpaperPixelBlast: "Pixel Blast",
     navigationTabs: "Вкладки навигации",
     navigationTabsHint: "Выберите видимые вкладки и их порядок",
     showTab: "Показывать вкладку",
@@ -1127,17 +1165,6 @@ const translations = {
     aiAssistantSearchMode: "Режим поиска",
     aiAssistantSearchHint: "Разрешить веб-поиск для актуальных ответов",
     aiAssistantThinking: "Думаю...",
-    callMusicTitle: "Музыка в звонке",
-    callMusicHint: "Вставьте прямую ссылку на аудио и синхронизируйте воспроизведение для всех.",
-    callMusicUrlPlaceholder: "https://example.com/track.mp3",
-    callMusicLoad: "Загрузить",
-    callMusicJoin: "Подключиться",
-    callMusicPlay: "Играть всем",
-    callMusicPause: "Пауза всем",
-    callMusicStop: "Остановить всем",
-    callMusicNoTrack: "Трек еще не загружен",
-    callMusicInvalidUrl: "Введите корректный http(s) URL аудио.",
-    callMusicLoadError: "Не удалось воспроизвести трек. Проверьте ссылку и CORS.",
     onboardingApply: "Применить",
   },
 } as const;
@@ -1211,28 +1238,12 @@ type SendAttachmentPayload = {
   url: string;
 };
 
-type CallSignalType =
-  | "offer"
-  | "answer"
-  | "ice"
-  | "hangup"
-  | "reject"
-  | "music-sync";
-
-type CallMusicSyncAction = "load" | "play" | "pause" | "stop";
-
-type CallMusicSyncPayload = {
-  action: CallMusicSyncAction;
-  url?: string;
-  title?: string;
-  positionMs?: number;
-};
+type CallSignalType = "offer" | "answer" | "ice" | "hangup" | "reject";
 
 type CallSignalData = {
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   reason?: string;
-  music?: CallMusicSyncPayload;
 };
 
 type CallSignal = {
@@ -1257,11 +1268,6 @@ type CallSessionState = {
   initiatorName: string;
   participantUserIds: string[];
   startedAt: number | null;
-};
-
-type CallMusicTrack = {
-  url: string;
-  title: string;
 };
 
 function formatChatTime(timestamp: number, language: AppLanguage): string {
@@ -1824,68 +1830,125 @@ function parseSignalReason(value: unknown): string {
   return typeof value.reason === "string" ? value.reason : "";
 }
 
-function normalizeCallMusicUrl(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
+type PreparedCallAudioStream = {
+  stream: MediaStream;
+  cleanup: () => void;
+};
+
+function prepareCallAudioStream(sourceStream: MediaStream): PreparedCallAudioStream {
+  if (typeof window === "undefined" || typeof window.AudioContext === "undefined") {
+    return { stream: sourceStream, cleanup: () => undefined };
   }
 
   try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return "";
+    const audioContext = new window.AudioContext({ latencyHint: "interactive" });
+    const sourceNode = audioContext.createMediaStreamSource(sourceStream);
+    const highPassFilter = audioContext.createBiquadFilter();
+    const lowPassFilter = audioContext.createBiquadFilter();
+    const compressor = audioContext.createDynamicsCompressor();
+    const gateGain = audioContext.createGain();
+    const analyser = audioContext.createAnalyser();
+    const destination = audioContext.createMediaStreamDestination();
+
+    highPassFilter.type = "highpass";
+    highPassFilter.frequency.value = 120;
+    highPassFilter.Q.value = 0.707;
+
+    lowPassFilter.type = "lowpass";
+    lowPassFilter.frequency.value = 7600;
+    lowPassFilter.Q.value = 0.8;
+
+    compressor.threshold.value = -48;
+    compressor.knee.value = 30;
+    compressor.ratio.value = 10;
+    compressor.attack.value = 0.002;
+    compressor.release.value = 0.14;
+
+    gateGain.gain.value = 1;
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.76;
+
+    sourceNode.connect(highPassFilter);
+    highPassFilter.connect(lowPassFilter);
+    lowPassFilter.connect(compressor);
+    compressor.connect(gateGain);
+    gateGain.connect(destination);
+    gateGain.connect(analyser);
+
+    const analyserBuffer = new Float32Array(analyser.fftSize);
+    let gateClosed = false;
+    let animationFrameId: number | null = null;
+    const openThreshold = 0.014;
+    const closeThreshold = 0.009;
+    const minGateGain = 0.03;
+    const attackTime = 0.01;
+    const releaseTime = 0.1;
+
+    const updateGate = () => {
+      if (audioContext.state === "closed") {
+        return;
+      }
+
+      analyser.getFloatTimeDomainData(analyserBuffer);
+      let energy = 0;
+      for (const sample of analyserBuffer) {
+        energy += sample * sample;
+      }
+      const rms = Math.sqrt(energy / analyserBuffer.length);
+
+      let nextGateClosed = gateClosed;
+      if (gateClosed) {
+        if (rms > openThreshold) {
+          nextGateClosed = false;
+        }
+      } else if (rms < closeThreshold) {
+        nextGateClosed = true;
+      }
+
+      if (nextGateClosed !== gateClosed) {
+        gateClosed = nextGateClosed;
+        gateGain.gain.cancelScheduledValues(audioContext.currentTime);
+        gateGain.gain.setTargetAtTime(
+          gateClosed ? minGateGain : 1,
+          audioContext.currentTime,
+          gateClosed ? attackTime : releaseTime
+        );
+      }
+
+      animationFrameId = window.requestAnimationFrame(updateGate);
+    };
+    animationFrameId = window.requestAnimationFrame(updateGate);
+
+    if (audioContext.state === "suspended") {
+      void audioContext.resume().catch(() => undefined);
     }
-    return parsed.toString();
+
+    const processedTrack = destination.stream.getAudioTracks()[0];
+    const stream = processedTrack ? new MediaStream([processedTrack]) : sourceStream;
+    if (processedTrack) {
+      processedTrack.contentHint = "speech";
+    }
+
+    return {
+      stream,
+      cleanup: () => {
+        if (animationFrameId !== null) {
+          window.cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+        sourceNode.disconnect();
+        highPassFilter.disconnect();
+        lowPassFilter.disconnect();
+        compressor.disconnect();
+        gateGain.disconnect();
+        analyser.disconnect();
+        destination.disconnect();
+        void audioContext.close().catch(() => undefined);
+      },
+    };
   } catch {
-    return "";
+    return { stream: sourceStream, cleanup: () => undefined };
   }
-}
-
-function getCallMusicTitle(url: string): string {
-  const mediaName = getMediaNameFromUrl(url);
-  if (mediaName && mediaName !== "media") {
-    return mediaName;
-  }
-  try {
-    return new URL(url).hostname || "Track";
-  } catch {
-    return "Track";
-  }
-}
-
-function parseSignalMusicSync(value: unknown): CallMusicSyncPayload | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const musicValue = value.music;
-  if (!isRecord(musicValue)) {
-    return null;
-  }
-
-  const action = musicValue.action;
-  if (action !== "load" && action !== "play" && action !== "pause" && action !== "stop") {
-    return null;
-  }
-
-  const url = typeof musicValue.url === "string" ? normalizeCallMusicUrl(musicValue.url) : "";
-  const title =
-    typeof musicValue.title === "string" && musicValue.title.trim().length > 0
-      ? musicValue.title.trim()
-      : "";
-  const positionMsValue = musicValue.positionMs;
-  const positionMs =
-    typeof positionMsValue === "number" &&
-    Number.isFinite(positionMsValue) &&
-    positionMsValue >= 0
-      ? Math.round(positionMsValue)
-      : undefined;
-
-  return {
-    action,
-    url: url || undefined,
-    title: title || undefined,
-    positionMs,
-  };
 }
 
 function formatCallDuration(totalSeconds: number): string {
@@ -2100,6 +2163,38 @@ function AudioAttachmentPlayer({
   );
 }
 
+type SidebarJellyButtonProps = {
+  active: boolean;
+  onActivate: () => void;
+  ariaLabel: string;
+  title: string;
+  children: ReactNode;
+};
+
+function SidebarJellyButton({
+  active,
+  onActivate,
+  ariaLabel,
+  title,
+  children,
+}: SidebarJellyButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onActivate}
+      className={`relative flex touch-none select-none items-center justify-center rounded-lg border px-2 py-3 text-sm font-medium transition-[background-color,border-color,color,transform,box-shadow] duration-150 ease-out ${
+        active
+          ? "border-primary bg-primary text-zinc-50"
+          : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100"
+      }`}
+      aria-label={ariaLabel}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function WebMessenger({
   currentUser,
   onLogout,
@@ -2119,8 +2214,9 @@ export function WebMessenger({
   const emojiCloseTimerRef = useRef<number | null>(null);
   const messageSoundRef = useRef<HTMLAudioElement | null>(null);
   const callOverlayRef = useRef<HTMLDivElement | null>(null);
-  const callMusicAudioRef = useRef<HTMLAudioElement | null>(null);
   const localCallStreamRef = useRef<MediaStream | null>(null);
+  const localCallInputStreamRef = useRef<MediaStream | null>(null);
+  const localCallAudioCleanupRef = useRef<(() => void) | null>(null);
   const screenShareStreamRef = useRef<MediaStream | null>(null);
   const callPeerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const incomingOffersRef = useRef<Map<string, RTCSessionDescriptionInit>>(new Map());
@@ -2185,6 +2281,12 @@ export function WebMessenger({
   const [isShareContactDialogOpen, setIsShareContactDialogOpen] = useState(false);
   const [shareContactQuery, setShareContactQuery] = useState("");
   const [isSharingContact, setIsSharingContact] = useState(false);
+  const [forwardMessageDraft, setForwardMessageDraft] = useState<ForwardMessageDraft | null>(
+    null
+  );
+  const [forwardQuery, setForwardQuery] = useState("");
+  const [forwardTargetChatIds, setForwardTargetChatIds] = useState<string[]>([]);
+  const [isForwardingMessage, setIsForwardingMessage] = useState(false);
   const [clearedChatAtById, setClearedChatAtById] = useState<Record<string, number>>(() => {
     if (typeof window === "undefined") {
       return {};
@@ -2382,6 +2484,13 @@ export function WebMessenger({
     }
     return window.localStorage.getItem(MESSAGE_SOUND_STORAGE_KEY) !== "0";
   });
+  const [uiTheme, setUiTheme] = useState<UiTheme>(() => {
+    if (typeof window === "undefined") {
+      return "light";
+    }
+    const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
+    return stored === "dark" ? "dark" : "light";
+  });
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(() => {
     if (typeof window === "undefined") {
       return "default";
@@ -2473,7 +2582,7 @@ export function WebMessenger({
   const [manuallyLoadedMediaIds, setManuallyLoadedMediaIds] = useState<Set<string>>(
     () => new Set()
   );
-  const [sidebarItemOrder, setSidebarItemOrder] = useState<SidebarItem["id"][]>(() => {
+  const [sidebarItemOrder] = useState<SidebarItem["id"][]>(() => {
     if (typeof window === "undefined") {
       return [...SIDEBAR_ITEM_IDS];
     }
@@ -2506,7 +2615,7 @@ export function WebMessenger({
       return [...SIDEBAR_ITEM_IDS];
     }
   });
-  const [sidebarItemVisibility, setSidebarItemVisibility] = useState<
+  const [sidebarItemVisibility] = useState<
     Record<SidebarItem["id"], boolean>
   >(() => {
     if (typeof window === "undefined") {
@@ -2557,10 +2666,6 @@ export function WebMessenger({
   const [isCallSoundMuted, setIsCallSoundMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isCallFullscreen, setIsCallFullscreen] = useState(false);
-  const [callMusicUrlDraft, setCallMusicUrlDraft] = useState("");
-  const [callMusicTrack, setCallMusicTrack] = useState<CallMusicTrack | null>(null);
-  const [isCallMusicPlaying, setIsCallMusicPlaying] = useState(false);
-  const [callMusicError, setCallMusicError] = useState("");
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("privacy");
@@ -3346,6 +3451,9 @@ export function WebMessenger({
     );
   }, [messageSoundEnabled]);
   useEffect(() => {
+    window.localStorage.setItem(UI_THEME_STORAGE_KEY, uiTheme);
+  }, [uiTheme]);
+  useEffect(() => {
     window.localStorage.setItem(UI_FONT_FAMILY_STORAGE_KEY, uiFontFamily);
   }, [uiFontFamily]);
 
@@ -3388,6 +3496,11 @@ export function WebMessenger({
     const root = document.documentElement;
     root.setAttribute("data-clore-font-family", uiFontFamily);
   }, [uiFontFamily]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-clore-theme", uiTheme);
+    root.classList.toggle("dark", uiTheme === "dark");
+  }, [uiTheme]);
   useEffect(() => {
     setManuallyLoadedMediaIds(new Set());
   }, [activeChatId]);
@@ -3991,19 +4104,6 @@ export function WebMessenger({
     [isCallSoundMuted]
   );
 
-  const resetCallMusicResources = useCallback(() => {
-    const audio = callMusicAudioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-    }
-    setCallMusicTrack(null);
-    setCallMusicUrlDraft("");
-    setIsCallMusicPlaying(false);
-    setCallMusicError("");
-  }, []);
-
   const closeCallResources = useCallback(() => {
     for (const connection of callPeerConnectionsRef.current.values()) {
       connection.onicecandidate = null;
@@ -4036,6 +4136,19 @@ export function WebMessenger({
       }
       localCallStreamRef.current = null;
     }
+    const localInputStream = localCallInputStreamRef.current;
+    if (localInputStream && localInputStream !== localStream) {
+      for (const track of localInputStream.getTracks()) {
+        track.stop();
+      }
+    }
+    localCallInputStreamRef.current = null;
+
+    const callAudioCleanup = localCallAudioCleanupRef.current;
+    if (callAudioCleanup) {
+      callAudioCleanup();
+      localCallAudioCleanupRef.current = null;
+    }
 
     pendingRemoteIceCandidatesRef.current.clear();
     incomingOffersRef.current.clear();
@@ -4043,13 +4156,12 @@ export function WebMessenger({
     setIsScreenSharing(false);
     setIsCallMicMuted(false);
     setIsCallSoundMuted(false);
-    resetCallMusicResources();
 
     if (typeof document !== "undefined" && document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
     }
     setIsCallFullscreen(false);
-  }, [resetCallMusicResources]);
+  }, []);
 
   const closeCallSession = useCallback(
     (notice?: string) => {
@@ -4087,223 +4199,6 @@ export function WebMessenger({
       }
     },
     [currentUser.id]
-  );
-
-  const sendCallMusicSync = useCallback(
-    async (payload: CallMusicSyncPayload) => {
-      const currentSession = callSessionRef.current;
-      if (!currentSession) {
-        return;
-      }
-
-      const peerUserIds = [...new Set(currentSession.participantUserIds)]
-        .filter((peerUserId) => peerUserId !== currentUser.id);
-      if (peerUserIds.length === 0) {
-        return;
-      }
-
-      await Promise.all(
-        peerUserIds.map((peerUserId) =>
-          sendCallSignal(currentSession.chatId, peerUserId, "music-sync", {
-            music: payload,
-          })
-        )
-      );
-    },
-    [currentUser.id, sendCallSignal]
-  );
-
-  const loadCallMusicTrack = useCallback(
-    async (rawUrl: string, shouldSyncToPeers: boolean) => {
-      const normalizedUrl = normalizeCallMusicUrl(rawUrl);
-      if (!normalizedUrl) {
-        setCallMusicError(t("callMusicInvalidUrl"));
-        return false;
-      }
-
-      const audio = callMusicAudioRef.current;
-      if (!audio) {
-        return false;
-      }
-
-      const title = getCallMusicTitle(normalizedUrl);
-      setCallMusicTrack({ url: normalizedUrl, title });
-      setCallMusicUrlDraft(normalizedUrl);
-      setCallMusicError("");
-      setIsCallMusicPlaying(false);
-
-      if (audio.src !== normalizedUrl) {
-        audio.src = normalizedUrl;
-      }
-      audio.currentTime = 0;
-      audio.pause();
-
-      if (shouldSyncToPeers) {
-        void sendCallMusicSync({
-          action: "load",
-          url: normalizedUrl,
-          title,
-          positionMs: 0,
-        });
-      }
-
-      return true;
-    },
-    [sendCallMusicSync, t]
-  );
-
-  const joinCallMusicLocally = useCallback(async () => {
-    const audio = callMusicAudioRef.current;
-    if (!audio || !audio.src) {
-      return;
-    }
-    setCallMusicError("");
-    try {
-      await audio.play();
-    } catch {
-      setCallMusicError(t("callMusicLoadError"));
-    }
-  }, [t]);
-
-  const playCallMusicForAll = useCallback(async () => {
-    const audio = callMusicAudioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    const existingTrack = callMusicTrack;
-    const track =
-      existingTrack ??
-      (() => {
-        const normalizedUrl = normalizeCallMusicUrl(callMusicUrlDraft);
-        if (!normalizedUrl) {
-          return null;
-        }
-        return {
-          url: normalizedUrl,
-          title: getCallMusicTitle(normalizedUrl),
-        } satisfies CallMusicTrack;
-      })();
-
-    if (!track) {
-      setCallMusicError(t("callMusicInvalidUrl"));
-      return;
-    }
-
-    if (!existingTrack || existingTrack.url !== track.url) {
-      setCallMusicTrack(track);
-    }
-    setCallMusicUrlDraft(track.url);
-    setCallMusicError("");
-
-    if (audio.src !== track.url) {
-      audio.src = track.url;
-    }
-
-    try {
-      await audio.play();
-    } catch {
-      setCallMusicError(t("callMusicLoadError"));
-      return;
-    }
-
-    void sendCallMusicSync({
-      action: "play",
-      url: track.url,
-      title: track.title,
-      positionMs: Math.max(0, Math.round(audio.currentTime * 1000)),
-    });
-  }, [callMusicTrack, callMusicUrlDraft, sendCallMusicSync, t]);
-
-  const pauseCallMusicForAll = useCallback(() => {
-    const audio = callMusicAudioRef.current;
-    if (!audio || !audio.src) {
-      return;
-    }
-    audio.pause();
-
-    void sendCallMusicSync({
-      action: "pause",
-      url: callMusicTrack?.url,
-      title: callMusicTrack?.title,
-      positionMs: Math.max(0, Math.round(audio.currentTime * 1000)),
-    });
-  }, [callMusicTrack, sendCallMusicSync]);
-
-  const stopCallMusicForAll = useCallback(() => {
-    const audio = callMusicAudioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-    }
-    setIsCallMusicPlaying(false);
-    setCallMusicTrack(null);
-    setCallMusicUrlDraft("");
-    setCallMusicError("");
-
-    void sendCallMusicSync({
-      action: "stop",
-    });
-  }, [sendCallMusicSync]);
-
-  const applyRemoteCallMusicSync = useCallback(
-    async (payload: CallMusicSyncPayload) => {
-      const audio = callMusicAudioRef.current;
-      if (!audio) {
-        return;
-      }
-
-      if (payload.action === "stop") {
-        audio.pause();
-        audio.removeAttribute("src");
-        audio.load();
-        setIsCallMusicPlaying(false);
-        setCallMusicTrack(null);
-        setCallMusicUrlDraft("");
-        setCallMusicError("");
-        return;
-      }
-
-      const normalizedUrl = payload.url ? normalizeCallMusicUrl(payload.url) : "";
-      if (normalizedUrl) {
-        const title =
-          payload.title && payload.title.trim().length > 0
-            ? payload.title.trim()
-            : getCallMusicTitle(normalizedUrl);
-        setCallMusicTrack({ url: normalizedUrl, title });
-        setCallMusicUrlDraft(normalizedUrl);
-        if (audio.src !== normalizedUrl) {
-          audio.src = normalizedUrl;
-        }
-      }
-
-      if (typeof payload.positionMs === "number" && Number.isFinite(payload.positionMs)) {
-        audio.currentTime = Math.max(0, payload.positionMs / 1000);
-      }
-
-      if (payload.action === "load") {
-        audio.pause();
-        setIsCallMusicPlaying(false);
-        return;
-      }
-
-      if (payload.action === "pause") {
-        audio.pause();
-        setIsCallMusicPlaying(false);
-        return;
-      }
-
-      if (payload.action === "play") {
-        setCallMusicError("");
-        try {
-          await audio.play();
-        } catch {
-          setCallMusicError(t("callMusicLoadError"));
-        }
-      }
-    },
-    [t]
   );
 
   const isCallSupported = useCallback(() => {
@@ -4484,17 +4379,80 @@ export function WebMessenger({
       return existingStream;
     }
 
+    let inputStream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+      const callAudioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+      const supportedConstraints = navigator.mediaDevices.getSupportedConstraints?.() ?? {};
+      const extendedSupportedConstraints = supportedConstraints as MediaTrackSupportedConstraints & {
+        voiceIsolation?: boolean;
+      };
+      const supportsVoiceIsolation = Boolean(extendedSupportedConstraints.voiceIsolation);
+      if (supportedConstraints?.channelCount) {
+        callAudioConstraints.channelCount = { ideal: 1, max: 1 };
+      }
+      if (supportedConstraints?.sampleRate) {
+        callAudioConstraints.sampleRate = { ideal: 48000 };
+      }
+      if (supportedConstraints?.sampleSize) {
+        callAudioConstraints.sampleSize = { ideal: 16 };
+      }
+      const advancedConstraints: MediaTrackConstraintSet[] = [
+        {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        {
+          googEchoCancellation: true,
+          googAutoGainControl: true,
+          googNoiseSuppression: true,
+          googHighpassFilter: true,
+          googTypingNoiseDetection: true,
+        } as MediaTrackConstraintSet,
+      ];
+      if (supportsVoiceIsolation) {
+        advancedConstraints.unshift({ voiceIsolation: true } as MediaTrackConstraintSet);
+      }
+      callAudioConstraints.advanced = advancedConstraints;
+
+      inputStream = await navigator.mediaDevices.getUserMedia({
+        audio: callAudioConstraints,
         video: false,
       });
+      const preparedStream = prepareCallAudioStream(inputStream);
+      const stream = preparedStream.stream;
+
+      const trackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      } as MediaTrackConstraints & { voiceIsolation?: boolean };
+      if (supportsVoiceIsolation) {
+        trackConstraints.voiceIsolation = true;
+      }
       for (const track of stream.getAudioTracks()) {
         track.enabled = !isCallMicMuted;
+        track.contentHint = "speech";
+        void track.applyConstraints(trackConstraints).catch(() => undefined);
       }
+      for (const track of inputStream.getAudioTracks()) {
+        track.enabled = !isCallMicMuted;
+      }
+
+      localCallInputStreamRef.current = inputStream;
+      localCallAudioCleanupRef.current = preparedStream.cleanup;
       localCallStreamRef.current = stream;
       return stream;
     } catch {
+      if (inputStream) {
+        for (const track of inputStream.getTracks()) {
+          track.stop();
+        }
+      }
       throw new Error("MIC_ACCESS_DENIED");
     }
   }, [isCallMicMuted]);
@@ -4635,6 +4593,12 @@ export function WebMessenger({
       const localStream = localCallStreamRef.current;
       if (localStream) {
         for (const track of localStream.getAudioTracks()) {
+          track.enabled = !nextValue;
+        }
+      }
+      const localInputStream = localCallInputStreamRef.current;
+      if (localInputStream) {
+        for (const track of localInputStream.getAudioTracks()) {
           track.enabled = !nextValue;
         }
       }
@@ -4914,21 +4878,6 @@ export function WebMessenger({
       const isGroupChat = thread?.threadType === "group" || threadMemberIds.length > 1;
       const fromUserName = resolveCallPeerName(fromUserId);
 
-      if (signal.type === "music-sync") {
-        if (!currentSession || currentSession.chatId !== signal.chatId) {
-          return;
-        }
-        if (currentSession.phase === "incoming") {
-          return;
-        }
-        const payload = parseSignalMusicSync(signal.data);
-        if (!payload) {
-          return;
-        }
-        await applyRemoteCallMusicSync(payload);
-        return;
-      }
-
       if (signal.type === "offer") {
         const sdp = parseSignalSdp(signal.data);
         if (!sdp) {
@@ -5113,7 +5062,6 @@ export function WebMessenger({
       }
     },
     [
-      applyRemoteCallMusicSync,
       attachLocalStreamToConnection,
       closeCallSession,
       currentUser.id,
@@ -5172,45 +5120,7 @@ export function WebMessenger({
         void mediaElement.play().catch(() => undefined);
       }
     }
-    const callMusicAudio = callMusicAudioRef.current;
-    if (callMusicAudio) {
-      callMusicAudio.muted = isCallSoundMuted;
-    }
   }, [isCallSoundMuted]);
-
-  useEffect(() => {
-    const audio = callMusicAudioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    const handlePlay = () => {
-      setIsCallMusicPlaying(true);
-      setCallMusicError("");
-    };
-    const handlePause = () => {
-      setIsCallMusicPlaying(false);
-    };
-    const handleEnded = () => {
-      setIsCallMusicPlaying(false);
-    };
-    const handleError = () => {
-      setIsCallMusicPlaying(false);
-      setCallMusicError(t("callMusicLoadError"));
-    };
-
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("pause", handlePause);
-    audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("error", handleError);
-
-    return () => {
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("pause", handlePause);
-      audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("error", handleError);
-    };
-  }, [t]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -5992,6 +5902,135 @@ export function WebMessenger({
     },
     [currentUser.id, showToast, t]
   );
+
+  const openForwardMessageDialog = useCallback((message: RenderMessage) => {
+    const text = message.text.trim();
+    if (!text && message.attachments.length === 0) {
+      return;
+    }
+    setForwardMessageDraft({
+      id: message.id,
+      text,
+      attachments: message.attachments.map((attachment) => ({ ...attachment })),
+    });
+    setForwardQuery("");
+    setForwardTargetChatIds([]);
+  }, []);
+
+  const toggleForwardTargetChatSelection = useCallback((chatId: string) => {
+    if (!chatId) {
+      return;
+    }
+    setForwardTargetChatIds((prev) =>
+      prev.includes(chatId)
+        ? prev.filter((candidateId) => candidateId !== chatId)
+        : [...prev, chatId]
+    );
+  }, []);
+
+  const closeForwardMessageDialog = useCallback(() => {
+    if (isForwardingMessage) {
+      return;
+    }
+    setForwardMessageDraft(null);
+    setForwardQuery("");
+    setForwardTargetChatIds([]);
+  }, [isForwardingMessage]);
+
+  const forwardMessageToSelectedChats = useCallback(async () => {
+    if (!forwardMessageDraft || forwardTargetChatIds.length === 0 || isForwardingMessage) {
+      return;
+    }
+
+    const targetChatIds = [...new Set(forwardTargetChatIds)];
+    const text = forwardMessageDraft.text.trim();
+    const attachments = forwardMessageDraft.attachments.map(
+      (attachment): SendAttachmentPayload => ({
+        name: attachment.name,
+        type:
+          attachment.kind === "image"
+            ? "image/*"
+            : attachment.kind === "video"
+              ? "video/*"
+              : attachment.kind === "audio"
+                ? "audio/*"
+                : "application/octet-stream",
+        size: attachment.size,
+        url: attachment.url,
+      })
+    );
+
+    if (!text && attachments.length === 0) {
+      return;
+    }
+
+    setIsForwardingMessage(true);
+    try {
+      const settledResults = await Promise.allSettled(
+        targetChatIds.map((targetChatId) =>
+          requestJson<{ messageId: string; createdAt: number }>("/api/messenger/send", {
+            method: "POST",
+            body: JSON.stringify({
+              userId: currentUser.id,
+              chatId: targetChatId,
+              text,
+              attachments,
+            }),
+          })
+        )
+      );
+
+      const successfulTargetChatIds = targetChatIds.filter(
+        (_, index) => settledResults[index]?.status === "fulfilled"
+      );
+      const failedResults = settledResults.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+
+      if (successfulTargetChatIds.length === 0) {
+        showToast(
+          failedResults.length > 0
+            ? getRequestErrorMessage(failedResults[0].reason)
+            : t("actionFailed")
+        );
+        return;
+      }
+
+      await loadChatData({ forceFullSync: true });
+      const targetChatToOpen =
+        [...successfulTargetChatIds]
+          .reverse()
+          .find((targetChatId) => targetChatId !== FAVORITES_CHAT_ID) ?? FAVORITES_CHAT_ID;
+      if (targetChatToOpen === FAVORITES_CHAT_ID) {
+        setIsFavoritesChatVisible(true);
+      }
+      openChat(targetChatToOpen);
+      setActiveSidebar("home");
+      setForwardMessageDraft(null);
+      setForwardQuery("");
+      setForwardTargetChatIds([]);
+
+      if (failedResults.length > 0) {
+        showToast(t("messagesForwardedPartially"));
+      } else {
+        showToast(
+          successfulTargetChatIds.length > 1 ? t("messagesForwarded") : t("messageForwarded")
+        );
+      }
+    } finally {
+      setIsForwardingMessage(false);
+    }
+  }, [
+    currentUser.id,
+    forwardMessageDraft,
+    forwardTargetChatIds,
+    getRequestErrorMessage,
+    isForwardingMessage,
+    loadChatData,
+    openChat,
+    showToast,
+    t,
+  ]);
 
   const openFavoriteSourceMessage = useCallback(
     (sourceChatId: string, messageId: string) => {
@@ -7242,6 +7281,63 @@ export function WebMessenger({
         chat.username.toLowerCase().includes(normalized.username)
     );
   }, [chatItems, shareContactQuery]);
+  const forwardMessagePreview = useMemo(() => {
+    if (!forwardMessageDraft) {
+      return "";
+    }
+    if (forwardMessageDraft.text) {
+      return forwardMessageDraft.text;
+    }
+    if (forwardMessageDraft.attachments.length === 0) {
+      return t("noMessagesYet");
+    }
+    if (forwardMessageDraft.attachments.length === 1) {
+      return forwardMessageDraft.attachments[0]?.name || t("attachment");
+    }
+    return `${t("attachment")} x${forwardMessageDraft.attachments.length}`;
+  }, [forwardMessageDraft, t]);
+  const forwardTargetChats = useMemo(() => {
+    const normalized = normalizeSearchQuery(forwardQuery);
+    const regularChats = chatItems
+      .filter((chat) => !chat.isPreview && !chat.isFavorites)
+      .map((chat) => ({
+        id: chat.id,
+        name: chat.name,
+        username: chat.username,
+        avatarUrl: chat.avatarUrl,
+        accent: chat.accent,
+        isGroup: chat.isGroup,
+        isFavorites: false,
+      }))
+      .filter(
+        (chat) =>
+          normalized.raw.length === 0 ||
+          chat.name.toLowerCase().includes(normalized.raw) ||
+          chat.username.toLowerCase().includes(normalized.username)
+      );
+
+    const favoritesTarget = {
+      id: FAVORITES_CHAT_ID,
+      name: t("favorites"),
+      username: "",
+      avatarUrl: "",
+      accent: pickAccent(FAVORITES_CHAT_ID),
+      isGroup: false,
+      isFavorites: true,
+    };
+    const showFavoritesTarget =
+      normalized.raw.length === 0 ||
+      favoritesTarget.name.toLowerCase().includes(normalized.raw) ||
+      t("savedMessages").toLowerCase().includes(normalized.raw);
+
+    return showFavoritesTarget
+      ? [favoritesTarget, ...regularChats]
+      : regularChats;
+  }, [chatItems, forwardQuery, t]);
+  const selectedForwardTargetIds = useMemo(
+    () => new Set(forwardTargetChatIds),
+    [forwardTargetChatIds]
+  );
   const openShareContactDialog = useCallback(() => {
     if (!shareableContactText) {
       showToast(t("actionFailed"));
@@ -8247,6 +8343,16 @@ export function WebMessenger({
     : "";
   const renderableSidebarItems =
     visibleSidebarItems.length > 0 ? visibleSidebarItems : orderedSidebarItems;
+  const activateSidebarItem = useCallback(
+    (itemId: SidebarItem["id"]) => {
+      if (itemId === "profile") {
+        openOwnProfile();
+        return;
+      }
+      setActiveSidebar(itemId);
+    },
+    [openOwnProfile]
+  );
   const chatActionMenuContentClassName = `${CHAT_ACTION_MENU_CONTENT_CLASS_NAME} ${
     uiDensity === "compact" ? "!w-48" : "!w-56"
   }`;
@@ -8282,6 +8388,15 @@ export function WebMessenger({
     }
     if (value === "en") {
       return t("english");
+    }
+    return value;
+  };
+  const getThemeLabel = (value: string) => {
+    if (value === "dark") {
+      return t("themeDark");
+    }
+    if (value === "light") {
+      return t("themeLight");
     }
     return value;
   };
@@ -8352,6 +8467,12 @@ export function WebMessenger({
     if (value === "graphite") {
       return t("wallpaperGraphite");
     }
+    if (value === "color-bends") {
+      return t("wallpaperColorBends");
+    }
+    if (value === "pixel-blast") {
+      return t("wallpaperPixelBlast");
+    }
     return value;
   };
   const getChatFontSizeSettingLabel = (value: string) => {
@@ -8388,10 +8509,20 @@ export function WebMessenger({
         className="hidden"
       />
       <main
-        className={`flex h-[100dvh] min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_10%_8%,rgba(139,92,246,0.1),transparent_34%),radial-gradient(circle_at_88%_0%,rgba(139,92,246,0.06),transparent_30%),linear-gradient(160deg,#0b0b0d_0%,#101014_55%,#141419_100%)] pt-[env(safe-area-inset-top)] text-zinc-100 ${mobileMainPaddingClass}`}
+        className={`flex h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${
+          uiTheme === "light"
+            ? "bg-[radial-gradient(circle_at_10%_8%,rgba(59,130,246,0.12),transparent_36%),radial-gradient(circle_at_88%_0%,rgba(14,165,233,0.1),transparent_30%),linear-gradient(160deg,#f8fbff_0%,#f2f6fd_56%,#eef3fb_100%)]"
+            : "bg-[radial-gradient(circle_at_10%_8%,rgba(139,92,246,0.1),transparent_34%),radial-gradient(circle_at_88%_0%,rgba(139,92,246,0.06),transparent_30%),linear-gradient(160deg,#0b0b0d_0%,#101014_55%,#141419_100%)]"
+        } pt-[env(safe-area-inset-top)] text-zinc-100 ${mobileMainPaddingClass}`}
       >
       <section className="flex min-h-0 w-full flex-1">
-        <div className="relative flex h-full min-h-0 w-full overflow-hidden border border-zinc-800/90 bg-zinc-950/80 shadow-[0_28px_70px_-42px_rgba(0,0,0,0.95)] ring-1 ring-black/40 backdrop-blur-2xl">
+        <div
+          className={`relative flex h-full min-h-0 w-full overflow-hidden ${
+            uiTheme === "light"
+              ? "border-zinc-700/80 bg-zinc-900/95 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.3)] ring-1 ring-slate-300/70"
+              : "border-zinc-800/90 bg-zinc-950/80 shadow-[0_28px_70px_-42px_rgba(0,0,0,0.95)] ring-1 ring-black/40"
+          } backdrop-blur-2xl`}
+        >
           {isMainSidebarCollapsed ? null : (
             <aside className="hidden w-[82px] flex-col border-r border-zinc-800/90 bg-zinc-950/75 p-3 text-zinc-100 backdrop-blur-xl md:flex">
               <nav className="flex flex-1 flex-col gap-2">
@@ -8400,26 +8531,15 @@ export function WebMessenger({
                   const active = item.id === activeSidebar;
 
                   return (
-                    <button
+                    <SidebarJellyButton
                       key={item.id}
-                      type="button"
-                      onClick={() => {
-                        if (item.id === "profile") {
-                          openOwnProfile();
-                          return;
-                        }
-                        setActiveSidebar(item.id);
-                      }}
-                      className={`relative flex items-center justify-center rounded-lg border px-2 py-3 text-sm font-medium ${
-                        active
-                          ? "border-primary bg-primary text-zinc-100"
-                          : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600 hover:text-zinc-100"
-                      }`}
-                      aria-label={t(item.id)}
+                      active={active}
+                      onActivate={() => activateSidebarItem(item.id)}
+                      ariaLabel={t(item.id)}
                       title={t(item.id)}
                     >
                       <Icon className="size-4 shrink-0" />
-                    </button>
+                    </SidebarJellyButton>
                   );
                 })}
               </nav>
@@ -8444,7 +8564,7 @@ export function WebMessenger({
                     onClick={() => setIsGroupMenuOpen(true)}
                     aria-label={t("newGroup")}
                     title={t("newGroup")}
-                    className="h-9 w-9 rounded-lg bg-primary p-0 text-zinc-100 hover:bg-primary/90 hover:text-zinc-100"
+                    className="h-9 w-9 rounded-lg bg-primary p-0 text-zinc-50 hover:bg-primary/90 hover:text-zinc-50"
                   >
                     <Plus className="size-4" />
                   </Button>
@@ -9019,12 +9139,22 @@ export function WebMessenger({
                   ) : null}
 
                   <div
-                    className="flex min-h-0 flex-1 flex-col"
+                    className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
                     style={activeChatBackgroundStyle}
                   >
+                    {activeChatEffectiveWallpaper === "color-bends" ? (
+                      <div className="absolute inset-0 z-0">
+                        <ColorBends className="h-full w-full" />
+                      </div>
+                    ) : null}
+                    {activeChatEffectiveWallpaper === "pixel-blast" ? (
+                      <div className="absolute inset-0 z-0">
+                        <PixelBlast className="h-full w-full" />
+                      </div>
+                    ) : null}
                     <div
                       ref={activeMessagesScrollRef}
-                      className={`flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
+                      className={`relative z-10 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
                         uiDensity === "compact" ? "space-y-1.5 px-4 py-3" : "space-y-2 px-4 py-5"
                       }`}
                     >
@@ -9038,6 +9168,8 @@ export function WebMessenger({
                     {filteredActiveMessages.map((message) => {
                       const hasMessageText = message.text.trim().length > 0;
                       const firstAttachmentUrl = message.attachments[0]?.url ?? "";
+                      const canForwardMessage =
+                        hasMessageText || message.attachments.length > 0;
                       const canDeleteMessage =
                         message.author === "me" && !activeChat.isFavorites;
                       const canReplyToMessage = !activeChat.isFavorites;
@@ -9083,7 +9215,7 @@ export function WebMessenger({
                                       : ""
                                   } ${
                                     message.author === "me"
-                                      ? "bg-primary text-zinc-100"
+                                      ? "bg-primary text-zinc-50"
                                       : "border border-zinc-600 bg-zinc-700 text-zinc-100"
                                   }`}
                                 >
@@ -9095,7 +9227,7 @@ export function WebMessenger({
                                     }
                                     className={`mb-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-left text-[11px] font-medium ${
                                       message.author === "me"
-                                        ? "border-zinc-100/30 bg-zinc-100/10 text-zinc-100/90"
+                                        ? "border-white/35 bg-white/10 text-white/90"
                                         : "border-zinc-500/40 bg-zinc-800/70 text-zinc-200"
                                     }`}
                                   >
@@ -9116,7 +9248,7 @@ export function WebMessenger({
                                     }}
                                     className={`mb-2 rounded-lg border-l-2 px-2 py-1 ${
                                       message.author === "me"
-                                        ? "border-zinc-100/60 bg-zinc-100/10"
+                                        ? "border-white/60 bg-white/10"
                                         : "border-primary/70 bg-zinc-800/70"
                                     } ${
                                       reply.missing
@@ -9159,7 +9291,7 @@ export function WebMessenger({
                                               }
                                               className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${
                                                 message.author === "me"
-                                                  ? "border-zinc-100/30 bg-zinc-100/10"
+                                                  ? "border-white/35 bg-white/10"
                                                   : "border-zinc-500/40 bg-zinc-800/70"
                                               }`}
                                             >
@@ -9212,7 +9344,7 @@ export function WebMessenger({
                                           rel="noreferrer"
                                           className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
                                             message.author === "me"
-                                              ? "border-zinc-100/30 bg-zinc-100/10"
+                                              ? "border-white/35 bg-white/10"
                                               : "border-zinc-500/40 bg-zinc-800/70"
                                           }`}
                                         >
@@ -9220,7 +9352,7 @@ export function WebMessenger({
                                           <span
                                             className={`ml-3 shrink-0 text-xs ${
                                               message.author === "me"
-                                                ? "text-zinc-100/70"
+                                                ? "text-white/80"
                                                 : "text-zinc-400"
                                             }`}
                                           >
@@ -9234,7 +9366,7 @@ export function WebMessenger({
                                 <div
                                   className={`mt-1 flex items-center gap-1 text-right text-xs ${
                                     message.author === "me"
-                                      ? "justify-end text-zinc-100/70"
+                                      ? "justify-end text-white/80"
                                       : "justify-end text-zinc-500"
                                   }`}
                                 >
@@ -9245,14 +9377,14 @@ export function WebMessenger({
                                   {!activeChat.isFavorites && message.author === "me" ? (
                                     activeChat.isGroup ? (
                                       message.groupReadByCount > 0 ? (
-                                        <span className="rounded-full border border-zinc-100/25 px-1.5 py-px text-[10px] font-medium text-zinc-100/90">
+                                        <span className="rounded-full border border-white/35 px-1.5 py-px text-[10px] font-medium text-white/90">
                                           {`${t("readBy")} ${message.groupReadByCount}`}
                                         </span>
                                       ) : (
                                         <Check className="size-3" />
                                       )
                                     ) : message.isReadByPeer ? (
-                                      <CheckCheck className="size-3 text-zinc-100/90" />
+                                      <CheckCheck className="size-3 text-white/90" />
                                     ) : (
                                       <Check className="size-3" />
                                     )
@@ -9300,19 +9432,15 @@ export function WebMessenger({
                                 className={chatActionMenuSeparatorClassName}
                               />
                             ) : null}
-                            <ContextMenuItem
-                              className={chatActionMenuItemClassName}
-                              onSelect={() =>
-                                void toggleMessageFavorite(message.id, !message.isFavorite)
-                              }
-                            >
-                              <Bookmark
-                                className={`size-4 ${message.isFavorite ? "fill-current" : ""}`}
-                              />
-                              {message.isFavorite
-                                ? t("removeFromFavorites")
-                                : t("saveToFavorites")}
-                            </ContextMenuItem>
+                            {canForwardMessage ? (
+                              <ContextMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() => openForwardMessageDialog(message)}
+                              >
+                                <ArrowRight className="size-4" />
+                                {t("forwardMessageAction")}
+                              </ContextMenuItem>
+                            ) : null}
                             {(hasMessageText || firstAttachmentUrl) ? (
                               <ContextMenuSeparator
                                 className={chatActionMenuSeparatorClassName}
@@ -9371,7 +9499,7 @@ export function WebMessenger({
                   </div>
 
                   <form
-                    className={`bg-transparent ${
+                    className={`relative z-10 bg-transparent ${
                       uiDensity === "compact" ? "p-2 sm:p-3" : "p-3 sm:p-4"
                     }`}
                     onSubmit={(event) => {
@@ -9524,10 +9652,10 @@ export function WebMessenger({
                               size="icon"
                               aria-label={t("stopVoiceRecording")}
                               title={t("stopVoiceRecording")}
-                              className="h-8 w-8 rounded-md border border-zinc-600 bg-zinc-800 text-white hover:bg-zinc-700"
+                              className="h-8 w-8 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
                               onClick={() => stopVoiceRecording()}
                             >
-                              <Square className="size-3.5 text-white" />
+                              <Square className="size-3.5" />
                             </Button>
                           </div>
                         </div>
@@ -9658,7 +9786,13 @@ export function WebMessenger({
               </>
             ) : null}
             {activeSidebar === "assistant" ? (
-              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_10%_0%,rgba(139,92,246,0.14),transparent_36%),linear-gradient(180deg,#09090b_0%,#101015_100%)]">
+              <div
+                className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+                  uiTheme === "light"
+                    ? "bg-[radial-gradient(circle_at_10%_0%,rgba(59,130,246,0.12),transparent_36%),linear-gradient(180deg,#f8fbff_0%,#eef4fc_100%)]"
+                    : "bg-[radial-gradient(circle_at_10%_0%,rgba(139,92,246,0.14),transparent_36%),linear-gradient(180deg,#09090b_0%,#101015_100%)]"
+                }`}
+              >
                 <div
                   ref={aiMessagesScrollRef}
                   className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
@@ -9765,7 +9899,11 @@ export function WebMessenger({
             ) : null}
             {shouldShowProfileSidebar ? (
               <div
-                className={`min-h-0 min-w-0 flex-col bg-[linear-gradient(180deg,rgba(39,39,42,0.62)_0%,rgba(24,24,27,0.5)_100%)] backdrop-blur-xl ${
+                className={`min-h-0 min-w-0 flex-col ${
+                  uiTheme === "light"
+                    ? "bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(241,245,249,0.88)_100%)]"
+                    : "bg-[linear-gradient(180deg,rgba(39,39,42,0.62)_0%,rgba(24,24,27,0.5)_100%)]"
+                } backdrop-blur-xl ${
                   isCompactActiveChatProfileSidebar
                     ? "hidden w-[360px] max-w-[42vw] shrink-0 border-l border-zinc-800/90 lg:flex"
                     : "flex flex-1"
@@ -9842,12 +9980,18 @@ export function WebMessenger({
                   className={`h-36 w-full sm:h-44 ${
                     viewedProfile.bannerUrl
                       ? "bg-zinc-800 bg-cover bg-center"
-                      : "bg-[linear-gradient(130deg,#8b5cf6_0%,#6d28d9_45%,#27272a_100%)]"
+                      : uiTheme === "light"
+                        ? "bg-[linear-gradient(130deg,#93c5fd_0%,#60a5fa_48%,#cbd5e1_100%)]"
+                        : "bg-[linear-gradient(130deg,#8b5cf6_0%,#6d28d9_45%,#27272a_100%)]"
                   } ${canEditViewedProfileImages ? "cursor-pointer" : ""}`}
                   style={
                     viewedProfile.bannerUrl
                       ? {
-                          backgroundImage: `linear-gradient(130deg,rgba(39,39,42,0.45),rgba(24,24,27,0.55)),url(${viewedProfile.bannerUrl})`,
+                          backgroundImage: `${
+                            uiTheme === "light"
+                              ? "linear-gradient(130deg,rgba(248,250,252,0.28),rgba(226,232,240,0.45))"
+                              : "linear-gradient(130deg,rgba(39,39,42,0.45),rgba(24,24,27,0.55))"
+                          },url(${viewedProfile.bannerUrl})`,
                         }
                       : undefined
                   }
@@ -10807,6 +10951,36 @@ export function WebMessenger({
                           </div>
                           <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                             <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("theme")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("themeHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={uiTheme}
+                                onValueChange={(value) => {
+                                  if (value === "dark" || value === "light") {
+                                    setUiTheme(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className="text-zinc-100">
+                                    {(value) => getThemeLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="dark" className={unifiedSelectItemClassName}>
+                                    {t("themeDark")}
+                                  </SelectItem>
+                                  <SelectItem value="light" className={unifiedSelectItemClassName}>
+                                    {t("themeLight")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
                               <p className="text-sm font-medium text-zinc-100">{t("density")}</p>
                               <p className="mt-0.5 text-xs text-zinc-500">{t("densityHint")}</p>
                             </div>
@@ -10966,7 +11140,9 @@ export function WebMessenger({
                                     value === "aurora" ||
                                     value === "sunset" ||
                                     value === "ocean" ||
-                                    value === "graphite"
+                                    value === "graphite" ||
+                                    value === "color-bends" ||
+                                    value === "pixel-blast"
                                   ) {
                                     setGlobalChatWallpaper(value);
                                   }
@@ -10992,6 +11168,12 @@ export function WebMessenger({
                                   </SelectItem>
                                   <SelectItem value="graphite" className={unifiedSelectItemClassName}>
                                     {t("wallpaperGraphite")}
+                                  </SelectItem>
+                                  <SelectItem value="color-bends" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperColorBends")}
+                                  </SelectItem>
+                                  <SelectItem value="pixel-blast" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperPixelBlast")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -11122,7 +11304,9 @@ export function WebMessenger({
                       value === "aurora" ||
                       value === "sunset" ||
                       value === "ocean" ||
-                      value === "graphite"
+                      value === "graphite" ||
+                      value === "color-bends" ||
+                      value === "pixel-blast"
                     ) {
                       updateActiveChatPersonalization({ wallpaper: value });
                     }
@@ -11155,6 +11339,12 @@ export function WebMessenger({
                     </SelectItem>
                     <SelectItem value="graphite" className={unifiedSelectItemClassName}>
                       {t("wallpaperGraphite")}
+                    </SelectItem>
+                    <SelectItem value="color-bends" className={unifiedSelectItemClassName}>
+                      {t("wallpaperColorBends")}
+                    </SelectItem>
+                    <SelectItem value="pixel-blast" className={unifiedSelectItemClassName}>
+                      {t("wallpaperPixelBlast")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -11313,6 +11503,34 @@ export function WebMessenger({
               </div>
             </div>
             <div>
+              <p className="text-sm font-medium text-zinc-100">{t("theme")}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{t("themeHint")}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={() => setUiTheme("dark")}
+                  className={`h-10 rounded-lg border ${
+                    uiTheme === "dark"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("themeDark")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setUiTheme("light")}
+                  className={`h-10 rounded-lg border ${
+                    uiTheme === "light"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("themeLight")}
+                </Button>
+              </div>
+            </div>
+            <div>
               <p className="text-sm font-medium text-zinc-100">{t("density")}</p>
               <p className="mt-0.5 text-xs text-zinc-500">{t("densityHint")}</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -11436,6 +11654,119 @@ export function WebMessenger({
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog
+        open={forwardMessageDraft !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeForwardMessageDialog();
+          }
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {t("forwardMessageTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {t("selectChatsToForward")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                placeholder={t("searchChat")}
+                className="h-10 rounded-lg border-zinc-700 bg-zinc-800 pl-9 text-zinc-100 placeholder:text-zinc-400"
+                value={forwardQuery}
+                onChange={(event) => setForwardQuery(event.target.value)}
+                disabled={isForwardingMessage}
+              />
+            </div>
+            <div className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                {t("forwardingMessage")}
+              </p>
+              <p className="mt-1 truncate text-sm text-zinc-100">
+                {forwardMessagePreview}
+              </p>
+            </div>
+            <div className="max-h-72 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+              {forwardTargetChats.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {forwardTargetChats.map((chat) => {
+                    const selected = selectedForwardTargetIds.has(chat.id);
+                    return (
+                      <button
+                        key={`forward-message-chat-${chat.id}`}
+                        type="button"
+                        onClick={() => toggleForwardTargetChatSelection(chat.id)}
+                        disabled={isForwardingMessage}
+                        className={`relative flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-2 text-center transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          selected
+                            ? "border-primary/70 bg-zinc-700 text-zinc-100"
+                            : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:border-zinc-600 hover:bg-zinc-700"
+                        }`}
+                      >
+                        {chat.avatarUrl ? (
+                          <span
+                            className="inline-flex size-11 shrink-0 rounded-full bg-zinc-700 bg-cover bg-center"
+                            style={{ backgroundImage: `url(${chat.avatarUrl})` }}
+                            aria-label={`${chat.name} avatar`}
+                          />
+                        ) : (
+                          <span
+                            className={`inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-semibold text-white ${chat.accent}`}
+                          >
+                            {chat.isGroup ? (
+                              <Users className="size-4" />
+                            ) : chat.isFavorites ? (
+                              <Bookmark className="size-4" />
+                            ) : (
+                              chat.name.slice(0, 2).toUpperCase()
+                            )}
+                          </span>
+                        )}
+                        <span className="w-full truncate text-[11px] font-medium leading-tight">
+                          {chat.name}
+                        </span>
+                        {selected ? (
+                          <span className="absolute right-1.5 top-1.5 inline-flex size-5 items-center justify-center rounded-full bg-primary text-zinc-50">
+                            <Check className="size-3.5" />
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-400">
+                  {t("noChatsOrUsersFound")}
+                </p>
+              )}
+            </div>
+          </div>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel
+              disabled={isForwardingMessage}
+              className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+            >
+              {t("cancel")}
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={
+                isForwardingMessage ||
+                forwardMessageDraft === null ||
+                forwardTargetChatIds.length === 0
+              }
+              className="h-10 rounded-lg bg-primary px-4 text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void forwardMessageToSelectedChats()}
+            >
+              {isForwardingMessage ? t("forwarding") : t("forwardMessageAction")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
         open={privacyPickerField !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -11547,7 +11878,7 @@ export function WebMessenger({
               variant="ghost"
               size="icon"
               aria-label={t("cancel")}
-              className="h-8 w-8 rounded-md border border-zinc-600 !bg-zinc-800 text-zinc-300 hover:!border-white/70 hover:!bg-zinc-700 hover:!text-white"
+              className="h-8 w-8 rounded-md border border-zinc-600 !bg-zinc-800 text-zinc-300 hover:!border-zinc-500 hover:!bg-zinc-700 hover:!text-zinc-100"
               onClick={dismissToast}
             >
               <X className="size-4" />
@@ -11560,19 +11891,43 @@ export function WebMessenger({
           ref={callOverlayRef}
           className={
             isCallFullscreen
-              ? "fixed inset-0 z-[130] bg-zinc-950/95 p-4 sm:p-6"
+              ? uiTheme === "light"
+                ? "fixed inset-0 z-[130] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.14),rgba(241,245,249,0.95)_60%)] p-3 sm:p-5"
+                : "fixed inset-0 z-[130] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(63,63,70,0.35),rgba(9,9,11,0.98)_55%)] p-3 sm:p-5"
               : "fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-[120] w-[min(96vw,460px)] rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4 text-zinc-100 shadow-2xl backdrop-blur"
           }
         >
           <div
-            className={isCallFullscreen ? "mx-auto flex h-full w-full max-w-6xl flex-col gap-4" : ""}
+            className={
+              isCallFullscreen
+                ? "mx-auto grid h-full w-full max-w-7xl grid-rows-[auto_minmax(0,1fr)_auto] gap-3 sm:gap-4"
+                : ""
+            }
           >
-            <div className="flex items-start justify-between gap-3">
+            <div
+              className={
+                isCallFullscreen
+                  ? "flex items-start justify-between gap-3 rounded-2xl border border-zinc-700/80 bg-zinc-900/60 px-4 py-3 backdrop-blur-xl"
+                  : "flex items-start justify-between gap-3"
+              }
+            >
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{callTitle}</p>
-                <p className="mt-1 text-xs text-zinc-400">{callStatusText}</p>
+                <p
+                  className={`truncate font-semibold ${
+                    isCallFullscreen ? "text-base sm:text-lg text-zinc-50" : "text-sm"
+                  }`}
+                >
+                  {callTitle}
+                </p>
+                <p className={`mt-1 ${isCallFullscreen ? "text-sm text-zinc-300" : "text-xs text-zinc-400"}`}>
+                  {callStatusText}
+                </p>
                 {callParticipantsSummary ? (
-                  <p className="mt-1 truncate text-[11px] text-zinc-500">
+                  <p
+                    className={`mt-1 truncate ${
+                      isCallFullscreen ? "text-xs text-zinc-400" : "text-[11px] text-zinc-500"
+                    }`}
+                  >
                     {callParticipantsSummary}
                   </p>
                 ) : null}
@@ -11593,12 +11948,122 @@ export function WebMessenger({
               </Button>
             </div>
 
-            {isCallFullscreen || callSession.isGroup || isScreenSharing || callRemoteUserIds.length > 0 ? (
-              <div
-                className={`mt-3 grid gap-2 ${
-                  isCallFullscreen ? "flex-1 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-2"
-                }`}
-              >
+            {isCallFullscreen ? (
+              <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="relative min-h-[260px] overflow-hidden rounded-2xl border border-zinc-700/80 bg-zinc-950/65">
+                  {isScreenSharing ? (
+                    <>
+                      <video
+                        autoPlay
+                        playsInline
+                        muted
+                        ref={(element) => {
+                          if (!element) {
+                            return;
+                          }
+                          const stream = localCallStreamRef.current;
+                          if (!stream || stream.getVideoTracks().length === 0) {
+                            element.srcObject = null;
+                            return;
+                          }
+                          element.srcObject = stream;
+                          void element.play().catch(() => undefined);
+                        }}
+                        className="h-full w-full object-cover"
+                      />
+                      <p className="absolute bottom-3 left-3 rounded-md bg-black/60 px-2.5 py-1 text-xs text-white">
+                        {t("you")}
+                      </p>
+                    </>
+                  ) : callRemoteUserIds.length > 0 ? (
+                    (() => {
+                      const primaryPeerId = callRemoteUserIds[0];
+                      if (!primaryPeerId) {
+                        return null;
+                      }
+                      const primaryStream = callRemoteStreamsRef.current.get(primaryPeerId) ?? null;
+                      const hasPrimaryVideo = Boolean(
+                        primaryStream && primaryStream.getVideoTracks().length > 0
+                      );
+                      return (
+                        <>
+                          <video
+                            autoPlay
+                            playsInline
+                            ref={(element) => registerRemoteMediaElement(primaryPeerId, element)}
+                            className={hasPrimaryVideo ? "h-full w-full object-cover" : "hidden"}
+                          />
+                          {!hasPrimaryVideo ? (
+                            <div className="flex h-full min-h-[260px] items-center justify-center px-6 text-center text-sm text-zinc-300">
+                              {resolveCallPeerName(primaryPeerId)}
+                            </div>
+                          ) : null}
+                          <p className="absolute bottom-3 left-3 rounded-md bg-black/60 px-2.5 py-1 text-xs text-white">
+                            {resolveCallPeerName(primaryPeerId)}
+                          </p>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-3 px-6 text-center">
+                      <div className="flex size-14 items-center justify-center rounded-full border border-zinc-700/80 bg-zinc-900/80 text-zinc-200">
+                        <Phone className="size-6" />
+                      </div>
+                      <p className="text-lg font-semibold text-zinc-100">{callTitle}</p>
+                      <p className="text-sm text-zinc-400">{callStatusText}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-h-0 rounded-2xl border border-zinc-700/80 bg-zinc-900/55 p-3 backdrop-blur-xl">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.11em] text-zinc-400">
+                    {t("participants")}
+                  </p>
+                  <div className="mt-2 grid max-h-full gap-2 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                    {(() => {
+                      const sidebarPeerIds = isScreenSharing
+                        ? callRemoteUserIds
+                        : callRemoteUserIds.slice(1);
+                      if (sidebarPeerIds.length === 0) {
+                        return (
+                          <div className="flex min-h-[96px] items-center justify-center rounded-xl border border-zinc-700/70 bg-zinc-950/50 px-3 text-center text-xs text-zinc-400">
+                            {callParticipantsSummary || t("inCall")}
+                          </div>
+                        );
+                      }
+                      return sidebarPeerIds.map((peerUserId) => {
+                        const remoteStream = callRemoteStreamsRef.current.get(peerUserId) ?? null;
+                        const hasVideo = Boolean(
+                          remoteStream && remoteStream.getVideoTracks().length > 0
+                        );
+                        return (
+                          <div
+                            key={`call-fullscreen-peer-${peerUserId}`}
+                            className="relative overflow-hidden rounded-xl border border-zinc-700/80 bg-zinc-950/70"
+                          >
+                            <video
+                              autoPlay
+                              playsInline
+                              ref={(element) => registerRemoteMediaElement(peerUserId, element)}
+                              className={hasVideo ? "h-28 w-full object-cover" : "hidden"}
+                            />
+                            {!hasVideo ? (
+                              <div className="flex h-24 items-center justify-center px-3 text-center text-xs text-zinc-400">
+                                {resolveCallPeerName(peerUserId)}
+                              </div>
+                            ) : null}
+                            <p className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+                              {resolveCallPeerName(peerUserId)}
+                            </p>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              </div>
+            ) : callSession.isGroup || isScreenSharing || callRemoteUserIds.length > 0 ? (
+              <div className="mt-3 grid grid-cols-2 gap-2">
                 {isScreenSharing ? (
                   <div className="relative overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950/70">
                     <video
@@ -11619,7 +12084,7 @@ export function WebMessenger({
                       }}
                       className="h-full min-h-[110px] w-full object-cover"
                     />
-                    <p className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-1 text-[11px] text-zinc-100">
+                    <p className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-1 text-[11px] text-white">
                       {t("you")}
                     </p>
                   </div>
@@ -11643,7 +12108,7 @@ export function WebMessenger({
                           {resolveCallPeerName(peerUserId)}
                         </div>
                       ) : null}
-                      <p className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-1 text-[11px] text-zinc-100">
+                      <p className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-1 text-[11px] text-white">
                         {resolveCallPeerName(peerUserId)}
                       </p>
                     </div>
@@ -11652,101 +12117,30 @@ export function WebMessenger({
               </div>
             ) : null}
 
-            {callSession.phase !== "incoming" ? (
-              <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-950/70 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.11em] text-zinc-400">
-                    {t("callMusicTitle")}
-                  </p>
-                  <p className="max-w-[68%] truncate text-xs text-zinc-500">
-                    {callMusicTrack ? callMusicTrack.title : t("callMusicNoTrack")}
-                  </p>
-                </div>
-                <p className="mt-1 text-[11px] text-zinc-500">{t("callMusicHint")}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <Input
-                    value={callMusicUrlDraft}
-                    onChange={(event) => {
-                      setCallMusicUrlDraft(event.target.value);
-                      if (callMusicError) {
-                        setCallMusicError("");
-                      }
-                    }}
-                    placeholder={t("callMusicUrlPlaceholder")}
-                    className="h-9 rounded-lg border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => void loadCallMusicTrack(callMusicUrlDraft, true)}
-                    className="h-9 rounded-lg border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:border-primary hover:bg-zinc-700"
-                    disabled={callMusicUrlDraft.trim().length === 0}
-                  >
-                    {t("callMusicLoad")}
-                  </Button>
-                </div>
-                {callMusicError ? (
-                  <p className="mt-2 text-[11px] text-red-300">{callMusicError}</p>
-                ) : null}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => void joinCallMusicLocally()}
-                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-                    disabled={!callMusicTrack}
-                  >
-                    {t("callMusicJoin")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => void playCallMusicForAll()}
-                    className="h-8 rounded-lg border border-primary/60 bg-primary/15 px-3 text-xs text-primary hover:bg-primary/25"
-                    disabled={!callMusicTrack && callMusicUrlDraft.trim().length === 0}
-                  >
-                    <Play className="size-3.5" />
-                    {t("callMusicPlay")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={pauseCallMusicForAll}
-                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-                    disabled={!callMusicTrack || !isCallMusicPlaying}
-                  >
-                    <Pause className="size-3.5" />
-                    {t("callMusicPause")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={stopCallMusicForAll}
-                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-                    disabled={!callMusicTrack}
-                  >
-                    <Square className="size-3.5" />
-                    {t("callMusicStop")}
-                  </Button>
-                </div>
-                <audio ref={callMusicAudioRef} preload="none" className="hidden" />
-              </div>
-            ) : null}
-
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div
+              className={
+                isCallFullscreen
+                  ? "mx-auto flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 rounded-2xl border border-zinc-700/80 bg-zinc-900/70 p-3 backdrop-blur-xl"
+                  : "mt-3 flex flex-wrap items-center gap-2"
+              }
+            >
               {callSession.phase === "incoming" ? (
                 <>
                   <Button
                     type="button"
                     onClick={() => void declineIncomingCall()}
-                    className="h-10 flex-1 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+                    className={`flex-1 border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 ${
+                      isCallFullscreen ? "h-11 rounded-xl" : "h-10 rounded-lg"
+                    }`}
                   >
                     {t("declineCall")}
                   </Button>
                   <Button
                     type="button"
                     onClick={() => void acceptIncomingCall()}
-                    className="h-10 flex-1 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
+                    className={`flex-1 bg-primary text-zinc-50 hover:bg-primary/90 ${
+                      isCallFullscreen ? "h-11 rounded-xl" : "h-10 rounded-lg"
+                    }`}
                   >
                     {t("acceptCall")}
                   </Button>
@@ -11759,7 +12153,9 @@ export function WebMessenger({
                     size="icon"
                     aria-label={isCallSoundMuted ? t("unmuteSound") : t("muteSound")}
                     onClick={toggleCallSoundMute}
-                    className={`h-10 w-10 rounded-lg border ${
+                    className={`border ${
+                      isCallFullscreen ? "h-11 w-11 rounded-xl" : "h-10 w-10 rounded-lg"
+                    } ${
                       isCallSoundMuted
                         ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
                         : "border-zinc-600 bg-zinc-800 text-zinc-100"
@@ -11777,7 +12173,9 @@ export function WebMessenger({
                     size="icon"
                     aria-label={isCallMicMuted ? t("unmuteMic") : t("muteMic")}
                     onClick={toggleCallMicMute}
-                    className={`h-10 w-10 rounded-lg border ${
+                    className={`border ${
+                      isCallFullscreen ? "h-11 w-11 rounded-xl" : "h-10 w-10 rounded-lg"
+                    } ${
                       isCallMicMuted
                         ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
                         : "border-zinc-600 bg-zinc-800 text-zinc-100"
@@ -11797,7 +12195,9 @@ export function WebMessenger({
                       }
                       void startScreenShare();
                     }}
-                    className={`h-10 w-10 rounded-lg border ${
+                    className={`border ${
+                      isCallFullscreen ? "h-11 w-11 rounded-xl" : "h-10 w-10 rounded-lg"
+                    } ${
                       isScreenSharing
                         ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
                         : "border-zinc-600 bg-zinc-800 text-zinc-100"
@@ -11812,7 +12212,9 @@ export function WebMessenger({
                   <Button
                     type="button"
                     onClick={() => void hangupCurrentCall()}
-                    className="h-10 min-w-[132px] rounded-lg border border-red-500/70 bg-red-500/20 text-red-100 hover:bg-red-500/30"
+                    className={`border border-red-500/70 bg-red-500/20 text-red-100 hover:bg-red-500/30 ${
+                      isCallFullscreen ? "h-11 min-w-[148px] rounded-xl" : "h-10 min-w-[132px] rounded-lg"
+                    }`}
                   >
                     <PhoneOff className="size-4" />
                     {t("endCall")}
@@ -11967,6 +12369,7 @@ export function WebMessenger({
     </>
   );
 }
+
 
 
 

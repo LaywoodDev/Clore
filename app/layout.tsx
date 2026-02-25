@@ -37,7 +37,27 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${comfortaa.variable}`}
+      suppressHydrationWarning
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                try {
+                  var theme = localStorage.getItem("clore_ui_theme_v1");
+                  var resolved = theme === "dark" ? "dark" : "light";
+                  document.documentElement.setAttribute("data-clore-theme", resolved);
+                  document.documentElement.classList.toggle("dark", resolved === "dark");
+                } catch (error) {
+                  document.documentElement.setAttribute("data-clore-theme", "light");
+                  document.documentElement.classList.remove("dark");
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="antialiased">
         {children}
       </body>

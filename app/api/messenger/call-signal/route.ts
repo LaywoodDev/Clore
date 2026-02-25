@@ -22,7 +22,6 @@ const ALLOWED_SIGNAL_TYPES = new Set<StoredCallSignal["type"]>([
   "ice",
   "hangup",
   "reject",
-  "music-sync",
 ]);
 
 function normalizeSignalPayload(value: unknown): string {
