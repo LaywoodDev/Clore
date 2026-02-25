@@ -4,11 +4,9 @@ import {
   type StoreData,
   type StoredUser,
 } from "@/lib/server/store";
+import { ADMIN_PANEL_USERNAME } from "@/lib/shared/admin";
 
-const DEFAULT_ADMIN_USERNAME = "laywood";
-export const ADMIN_USERNAME = normalizeUsername(
-  process.env.CLORE_ADMIN_USERNAME?.trim() ?? DEFAULT_ADMIN_USERNAME
-);
+export const ADMIN_USERNAME = normalizeUsername(ADMIN_PANEL_USERNAME);
 
 function formatUntilIso(timestamp: number): string {
   return new Date(timestamp).toISOString();
