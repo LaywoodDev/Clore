@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getAiProviderConfig } from "@/lib/server/ai-provider";
+import { assertUserCanSendMessages } from "@/lib/server/admin";
 import {
   BOT_USER_ID,
   createEntityId,
@@ -216,12 +217,13 @@ export async function POST(request: Request) {
   try {
     const result = await updateStore<SendResult>(
       (store) => {
-        if (chatId === FAVORITES_CHAT_ID) {
-          const hasUser = store.users.some((candidate) => candidate.id === userId);
-          if (!hasUser) {
-            throw new Error("User not found.");
-          }
+        const senderUser = store.users.find((candidate) => candidate.id === userId);
+        if (!senderUser) {
+          throw new Error("User not found.");
+        }
+        assertUserCanSendMessages(store, userId);
 
+        if (chatId === FAVORITES_CHAT_ID) {
           const now = Date.now();
           const message: StoredChatMessage = {
             id: createEntityId("msg"),
@@ -258,9 +260,8 @@ export async function POST(request: Request) {
         if (thread.threadType === "direct") {
           const peerUserId = thread.memberIds.find((memberId) => memberId !== userId) ?? "";
           if (peerUserId) {
-            const sender = store.users.find((candidate) => candidate.id === userId);
             const peerUser = store.users.find((candidate) => candidate.id === peerUserId);
-            const senderBlockedPeer = sender?.blockedUserIds.includes(peerUserId) ?? false;
+            const senderBlockedPeer = senderUser.blockedUserIds.includes(peerUserId);
             const peerBlockedSender = peerUser?.blockedUserIds.includes(userId) ?? false;
             if (senderBlockedPeer || peerBlockedSender) {
               throw new Error("Cannot send message because one of users is blocked.");
@@ -382,7 +383,9 @@ export async function POST(request: Request) {
       message === "Reply target not found." ||
       message === "User not found."
         ? 404
-        : message === "Cannot send message because one of users is blocked."
+        : message === "Cannot send message because one of users is blocked." ||
+            message.startsWith("You are muted until") ||
+            message.startsWith("Your account is suspended until")
           ? 403
         : 400;
     return NextResponse.json({ error: message }, { status });

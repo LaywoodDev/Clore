@@ -22,8 +22,10 @@ declare module "three" {
   }
 
   export class Color {
-    constructor(color?: string | number);
-    set(color: string | number): this;
+    constructor(color?: string | number | Color);
+    constructor(r: number, g: number, b: number);
+    set(color: string | number | Color): this;
+    set(r: number, g: number, b: number): this;
   }
 
   export class Texture {
@@ -77,6 +79,18 @@ declare module "three" {
     constructor(parameters?: ShaderMaterialParameters);
     uniforms: Uniforms;
     dispose(): void;
+  }
+
+  export interface MeshBasicMaterialParameters {
+    transparent?: boolean;
+    opacity?: number;
+    [key: string]: unknown;
+  }
+
+  export class MeshBasicMaterial {
+    constructor(parameters?: MeshBasicMaterialParameters);
+    transparent: boolean;
+    opacity: number;
   }
 
   export class Mesh<TGeometry = unknown, TMaterial = unknown> {

@@ -100,11 +100,56 @@ export type StoredCallSignal = {
   createdAt: number;
 };
 
+export type StoredModerationReportStatus = "open" | "resolved";
+export type StoredModerationAuditAction =
+  | "report_resolved"
+  | "message_deleted"
+  | "user_muted"
+  | "user_unmuted"
+  | "user_banned"
+  | "user_unbanned";
+
+export type StoredModerationReport = {
+  id: string;
+  reporterUserId: string;
+  targetUserId: string;
+  chatId: string;
+  messageId: string;
+  reason: string;
+  details: string;
+  status: StoredModerationReportStatus;
+  createdAt: number;
+  resolvedAt: number;
+  resolvedByUserId: string;
+  resolutionNote: string;
+};
+
+export type StoredModerationAuditLog = {
+  id: string;
+  actorUserId: string;
+  action: StoredModerationAuditAction;
+  targetUserId: string;
+  reportId: string;
+  messageId: string;
+  reason: string;
+  createdAt: number;
+};
+
+export type StoredUserSanction = {
+  mutedUntil: number;
+  bannedUntil: number;
+  reason: string;
+  updatedAt: number;
+};
+
 export type StoreData = {
   users: StoredUser[];
   threads: StoredChatThread[];
   messages: StoredChatMessage[];
   callSignals: StoredCallSignal[];
+  moderationReports: StoredModerationReport[];
+  moderationAuditLogs: StoredModerationAuditLog[];
+  userSanctions: Record<string, StoredUserSanction>;
 };
 
 export const BOT_USER_ID = "bot-chatgpt";
@@ -213,6 +258,9 @@ const EMPTY_STORE: StoreData = {
   threads: [],
   messages: [],
   callSignals: [],
+  moderationReports: [],
+  moderationAuditLogs: [],
+  userSanctions: {},
 };
 
 let writeQueue: Promise<void> = Promise.resolve();
@@ -298,6 +346,53 @@ export function toPublicUser(user: StoredUser): PublicUser {
     avatarUrl: user.avatarUrl,
     bannerUrl: user.bannerUrl,
   };
+}
+
+export function getUserSanction(
+  store: StoreData,
+  userId: string
+): StoredUserSanction {
+  const raw = store.userSanctions[userId];
+  if (!raw) {
+    return {
+      mutedUntil: 0,
+      bannedUntil: 0,
+      reason: "",
+      updatedAt: 0,
+    };
+  }
+
+  return {
+    mutedUntil:
+      typeof raw.mutedUntil === "number" && Number.isFinite(raw.mutedUntil)
+        ? Math.max(0, Math.trunc(raw.mutedUntil))
+        : 0,
+    bannedUntil:
+      typeof raw.bannedUntil === "number" && Number.isFinite(raw.bannedUntil)
+        ? Math.max(0, Math.trunc(raw.bannedUntil))
+        : 0,
+    reason: typeof raw.reason === "string" ? raw.reason.trim().slice(0, 300) : "",
+    updatedAt:
+      typeof raw.updatedAt === "number" && Number.isFinite(raw.updatedAt)
+        ? Math.max(0, Math.trunc(raw.updatedAt))
+        : 0,
+  };
+}
+
+export function getActiveUserSanction(
+  store: StoreData,
+  userId: string,
+  now = Date.now()
+): StoredUserSanction | null {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+  const sanction = getUserSanction(store, normalizedUserId);
+  if (sanction.bannedUntil > now || sanction.mutedUntil > now) {
+    return sanction;
+  }
+  return null;
 }
 
 export function createEntityId(prefix: string): string {
@@ -430,7 +525,10 @@ function isPotentiallyDataLossStore(store: StoreData): boolean {
     !hasNonBotUsers &&
     store.threads.length === 0 &&
     store.messages.length === 0 &&
-    store.callSignals.length === 0
+    store.callSignals.length === 0 &&
+    store.moderationReports.length === 0 &&
+    store.moderationAuditLogs.length === 0 &&
+    Object.keys(store.userSanctions).length === 0
   );
 }
 
@@ -854,6 +952,162 @@ function sanitizeCallSignals(rawSignals: unknown): StoredCallSignal[] {
   return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
 }
 
+function sanitizeModerationReports(rawReports: unknown): StoredModerationReport[] {
+  if (!Array.isArray(rawReports)) {
+    return [];
+  }
+
+  const byId = new Map<string, StoredModerationReport>();
+  for (const rawReport of rawReports) {
+    const report = asRecord(rawReport);
+    if (!report) {
+      continue;
+    }
+
+    const id = typeof report.id === "string" ? report.id.trim() : "";
+    const reporterUserId =
+      typeof report.reporterUserId === "string" ? report.reporterUserId.trim() : "";
+    const targetUserId =
+      typeof report.targetUserId === "string" ? report.targetUserId.trim() : "";
+    const chatId = typeof report.chatId === "string" ? report.chatId.trim() : "";
+    const messageId =
+      typeof report.messageId === "string" ? report.messageId.trim() : "";
+    const reason =
+      typeof report.reason === "string" ? report.reason.trim().slice(0, 300) : "";
+    const details =
+      typeof report.details === "string" ? report.details.trim().slice(0, 1000) : "";
+    const status =
+      report.status === "resolved" || report.status === "open"
+        ? report.status
+        : "open";
+    const createdAt = normalizeNumber(report.createdAt, Date.now());
+    const resolvedAt = normalizeNumber(report.resolvedAt, 0);
+    const resolvedByUserId =
+      typeof report.resolvedByUserId === "string"
+        ? report.resolvedByUserId.trim()
+        : "";
+    const resolutionNote =
+      typeof report.resolutionNote === "string"
+        ? report.resolutionNote.trim().slice(0, 400)
+        : "";
+
+    if (!id || !reporterUserId || !targetUserId || !chatId || !messageId || !reason) {
+      continue;
+    }
+
+    byId.set(id, {
+      id,
+      reporterUserId,
+      targetUserId,
+      chatId,
+      messageId,
+      reason,
+      details,
+      status,
+      createdAt,
+      resolvedAt: status === "resolved" ? resolvedAt : 0,
+      resolvedByUserId: status === "resolved" ? resolvedByUserId : "",
+      resolutionNote: status === "resolved" ? resolutionNote : "",
+    });
+  }
+
+  return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function sanitizeModerationAuditLogs(rawLogs: unknown): StoredModerationAuditLog[] {
+  if (!Array.isArray(rawLogs)) {
+    return [];
+  }
+
+  const allowedActions = new Set<StoredModerationAuditAction>([
+    "report_resolved",
+    "message_deleted",
+    "user_muted",
+    "user_unmuted",
+    "user_banned",
+    "user_unbanned",
+  ]);
+  const byId = new Map<string, StoredModerationAuditLog>();
+
+  for (const rawLog of rawLogs) {
+    const log = asRecord(rawLog);
+    if (!log) {
+      continue;
+    }
+
+    const id = typeof log.id === "string" ? log.id.trim() : "";
+    const actorUserId =
+      typeof log.actorUserId === "string" ? log.actorUserId.trim() : "";
+    const action =
+      typeof log.action === "string" ? log.action.trim() : "";
+    const targetUserId =
+      typeof log.targetUserId === "string" ? log.targetUserId.trim() : "";
+    const reportId = typeof log.reportId === "string" ? log.reportId.trim() : "";
+    const messageId =
+      typeof log.messageId === "string" ? log.messageId.trim() : "";
+    const reason =
+      typeof log.reason === "string" ? log.reason.trim().slice(0, 400) : "";
+    const createdAt = normalizeNumber(log.createdAt, Date.now());
+
+    if (!id || !actorUserId || !allowedActions.has(action as StoredModerationAuditAction)) {
+      continue;
+    }
+
+    byId.set(id, {
+      id,
+      actorUserId,
+      action: action as StoredModerationAuditAction,
+      targetUserId,
+      reportId,
+      messageId,
+      reason,
+      createdAt,
+    });
+  }
+
+  return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function sanitizeUserSanctions(rawSanctions: unknown): Record<string, StoredUserSanction> {
+  const sanctions = asRecord(rawSanctions);
+  if (!sanctions) {
+    return {};
+  }
+
+  const normalized: Record<string, StoredUserSanction> = {};
+  for (const [rawUserId, rawValue] of Object.entries(sanctions)) {
+    const userId = rawUserId.trim();
+    if (!userId) {
+      continue;
+    }
+    const entry = asRecord(rawValue);
+    if (!entry) {
+      continue;
+    }
+
+    const mutedUntil = Math.max(0, Math.trunc(normalizeNumber(entry.mutedUntil, 0)));
+    const bannedUntil = Math.max(0, Math.trunc(normalizeNumber(entry.bannedUntil, 0)));
+    if (mutedUntil <= 0 && bannedUntil <= 0) {
+      continue;
+    }
+    const reason =
+      typeof entry.reason === "string" ? entry.reason.trim().slice(0, 300) : "";
+    const updatedAt = Math.max(
+      0,
+      Math.trunc(normalizeNumber(entry.updatedAt, Math.max(mutedUntil, bannedUntil)))
+    );
+
+    normalized[userId] = {
+      mutedUntil,
+      bannedUntil,
+      reason,
+      updatedAt,
+    };
+  }
+
+  return normalized;
+}
+
 function sanitizeStore(raw: unknown): StoreData {
   const parsed = asRecord(raw);
   if (!parsed) {
@@ -867,6 +1121,9 @@ function sanitizeStore(raw: unknown): StoreData {
     threads: sanitizeThreads(parsed.threads),
     messages: sanitizeMessages(parsed.messages),
     callSignals: sanitizeCallSignals(parsed.callSignals),
+    moderationReports: sanitizeModerationReports(parsed.moderationReports),
+    moderationAuditLogs: sanitizeModerationAuditLogs(parsed.moderationAuditLogs),
+    userSanctions: sanitizeUserSanctions(parsed.userSanctions),
   };
 }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { assertUserCanReadMessenger } from "@/lib/server/admin";
 import { getStore, normalizeUsername, toPublicUser } from "@/lib/server/store";
 
 type LoginPayload = {
@@ -29,6 +30,14 @@ export async function POST(request: Request) {
 
     if (!user || user.password !== password) {
       return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
+    }
+
+    try {
+      assertUserCanReadMessenger(store, user.id);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Your account is suspended.";
+      return NextResponse.json({ error: message }, { status: 403 });
     }
 
     return NextResponse.json({ user: toPublicUser(user) });

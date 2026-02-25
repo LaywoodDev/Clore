@@ -3,6 +3,7 @@
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -90,7 +91,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import ColorBends from "@/components/ui/color-bends";
+import Dither from "@/components/ui/dither";
 import PixelBlast from "@/components/ui/pixel-blast";
+import Plasma from "@/components/ui/plasma";
 import { requestJson } from "@/components/messenger/api";
 import { type AuthUser, type PrivacyVisibility } from "@/components/messenger/types";
 import { useRealtimeSync } from "@/components/messenger/use-realtime-sync";
@@ -422,20 +425,21 @@ type InlineToast = {
   action?: ToastAction;
 };
 
+type MobileBackSwipeGestureState = {
+  tracking: boolean;
+  activated: boolean;
+  axisLock: "horizontal" | "vertical" | null;
+  startX: number;
+  startY: number;
+};
+
 type AppLanguage = "en" | "ru";
 type UiTheme = "dark" | "light";
 type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
 type UiRadius = "sharp" | "normal" | "rounded";
 type UiFontFamily = "default" | "modern" | "readable" | "comfortaa";
-type ChatWallpaper =
-  | "none"
-  | "aurora"
-  | "sunset"
-  | "ocean"
-  | "graphite"
-  | "color-bends"
-  | "pixel-blast";
+type ChatWallpaper = "none" | "color-bends" | "pixel-blast" | "plasma" | "dither";
 type ChatWallpaperSetting = ChatWallpaper | "inherit";
 type ChatFontSizeSetting = UiFontSize | "inherit";
 type ChatPersonalization = {
@@ -491,31 +495,26 @@ const DEFAULT_SIDEBAR_VISIBILITY: Record<SidebarItem["id"], boolean> = {
 };
 const CHAT_WALLPAPER_OPTIONS: ChatWallpaper[] = [
   "none",
-  "aurora",
-  "sunset",
-  "ocean",
-  "graphite",
   "color-bends",
   "pixel-blast",
+  "plasma",
+  "dither",
 ];
 const CHAT_WALLPAPER_BACKGROUNDS: Record<ChatWallpaper, string> = {
   none: "radial-gradient(circle at top, rgba(139,92,246,0.1), transparent 45%)",
-  aurora:
-    "radial-gradient(circle at 15% 20%, rgba(16,185,129,0.22), transparent 45%), radial-gradient(circle at 85% 0%, rgba(59,130,246,0.2), transparent 38%), linear-gradient(180deg, #0b1220 0%, #111827 100%)",
-  sunset:
-    "radial-gradient(circle at 22% 18%, rgba(251,146,60,0.2), transparent 46%), radial-gradient(circle at 86% 9%, rgba(244,63,94,0.22), transparent 40%), linear-gradient(180deg, #2b1421 0%, #1f1125 100%)",
-  ocean:
-    "radial-gradient(circle at 18% 14%, rgba(6,182,212,0.2), transparent 42%), radial-gradient(circle at 82% 0%, rgba(14,165,233,0.2), transparent 36%), linear-gradient(180deg, #0b1b2b 0%, #0f172a 100%)",
-  graphite:
-    "radial-gradient(circle at 20% 18%, rgba(161,161,170,0.16), transparent 42%), radial-gradient(circle at 80% 0%, rgba(113,113,122,0.16), transparent 36%), linear-gradient(180deg, #18181b 0%, #09090b 100%)",
   "color-bends": "none",
   "pixel-blast": "none",
+  plasma: "none",
+  dither: "none",
 };
 const DEFAULT_CHAT_PERSONALIZATION: ChatPersonalization = {
   wallpaper: "inherit",
   fontSize: "inherit",
   autoLoadMedia: true,
 };
+const MOBILE_VIEWPORT_MEDIA_QUERY = "(max-width: 767px)";
+const MOBILE_BACK_SWIPE_EDGE_WIDTH = 28;
+const MOBILE_BACK_SWIPE_TRIGGER_DISTANCE = 72;
 
 const accentPalette = [
   "from-orange-500 to-amber-400",
@@ -572,6 +571,7 @@ const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_MAX_MEMBERS = 50;
 const MAX_AI_ASSISTANT_HISTORY_MESSAGES = 40;
 const BUILT_IN_ASSISTANT_USER_ID = "bot-chatgpt";
+const ADMIN_PANEL_USERNAME = "laywood";
 const FAVORITES_CHAT_ID = "__favorites__";
 const PREVIEW_CHAT_ID_PREFIX = "__preview__";
 const translations = {
@@ -845,12 +845,10 @@ const translations = {
     chatWallpaper: "Chat wallpaper",
     chatWallpaperHint: "Choose default wallpaper for chats",
     wallpaperNone: "None",
-    wallpaperAurora: "Aurora",
-    wallpaperSunset: "Sunset",
-    wallpaperOcean: "Ocean",
-    wallpaperGraphite: "Graphite",
     wallpaperColorBends: "Color Bends",
     wallpaperPixelBlast: "Pixel Blast",
+    wallpaperPlasma: "Plasma",
+    wallpaperDither: "Dither",
     navigationTabs: "Navigation tabs",
     navigationTabsHint: "Choose which tabs are visible and their order",
     showTab: "Show tab",
@@ -1152,12 +1150,10 @@ const translations = {
     chatWallpaper: "Обои чата",
     chatWallpaperHint: "Выберите обои по умолчанию для чатов",
     wallpaperNone: "Без обоев",
-    wallpaperAurora: "Аврора",
-    wallpaperSunset: "Закат",
-    wallpaperOcean: "Океан",
-    wallpaperGraphite: "Графит",
     wallpaperColorBends: "Color Bends",
     wallpaperPixelBlast: "Pixel Blast",
+    wallpaperPlasma: "Plasma",
+    wallpaperDither: "Dither",
     navigationTabs: "Вкладки навигации",
     navigationTabsHint: "Выберите видимые вкладки и их порядок",
     showTab: "Показывать вкладку",
@@ -1280,6 +1276,81 @@ type CallSignalPollResponse = {
   signals: CallSignal[];
 };
 
+type ModerationPanelReport = {
+  id: string;
+  status: "open" | "resolved";
+  chatId: string;
+  chatTitle: string;
+  messageId: string;
+  messagePreview: string;
+  messageCreatedAt: number;
+  reporterUserId: string;
+  reporterName: string;
+  reporterUsername: string;
+  targetUserId: string;
+  targetName: string;
+  targetUsername: string;
+  reason: string;
+  details: string;
+  createdAt: number;
+  resolvedAt: number;
+  resolvedByUserId: string;
+  resolvedByName: string;
+  resolutionNote: string;
+};
+
+type ModerationPanelSanction = {
+  userId: string;
+  name: string;
+  username: string;
+  mutedUntil: number;
+  bannedUntil: number;
+  reason: string;
+  updatedAt: number;
+};
+
+type ModerationPanelAuditLog = {
+  id: string;
+  action:
+    | "report_resolved"
+    | "message_deleted"
+    | "user_muted"
+    | "user_unmuted"
+    | "user_banned"
+    | "user_unbanned";
+  actorUserId: string;
+  actorName: string;
+  targetUserId: string;
+  targetName: string;
+  reportId: string;
+  messageId: string;
+  reason: string;
+  createdAt: number;
+};
+
+type ModerationPanelSnapshot = {
+  reports: ModerationPanelReport[];
+  sanctions: ModerationPanelSanction[];
+  auditLogs: ModerationPanelAuditLog[];
+};
+
+type ModerationActionPayload = {
+  action:
+    | "resolve_report"
+    | "delete_message"
+    | "mute_user"
+    | "unmute_user"
+    | "ban_user"
+    | "unban_user";
+  reportId?: string;
+  messageId?: string;
+  chatId?: string;
+  targetUserId?: string;
+  reason?: string;
+  resolutionNote?: string;
+  durationHours?: number;
+};
+
 type CallSessionState = {
   phase: "incoming" | "outgoing" | "connecting" | "active";
   chatId: string;
@@ -1360,6 +1431,25 @@ function formatLastSeen(timestamp: number, language: AppLanguage): string {
   }
 
   return date.toLocaleString(locale, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatAbsoluteDateTime(timestamp: number, language: AppLanguage): string {
+  if (!timestamp || timestamp <= 0) {
+    return "";
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const locale = language === "ru" ? "ru-RU" : "en-US";
+  return date.toLocaleString(locale, {
+    year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -2162,6 +2252,16 @@ function SidebarJellyButton({
   );
 }
 
+function createIdleMobileBackSwipeGestureState(): MobileBackSwipeGestureState {
+  return {
+    tracking: false,
+    activated: false,
+    axisLock: null,
+    startX: 0,
+    startY: 0,
+  };
+}
+
 export function WebMessenger({
   currentUser,
   onLogout,
@@ -2196,6 +2296,9 @@ export function WebMessenger({
   const callSessionRef = useRef<CallSessionState | null>(null);
   const callSignalPollInFlightRef = useRef(false);
   const isCallSignalingUnavailableRef = useRef(false);
+  const mobileBackSwipeGestureRef = useRef<MobileBackSwipeGestureState>(
+    createIdleMobileBackSwipeGestureState()
+  );
   const hasLoadedInitialChatDataRef = useRef(false);
   const hasNotificationBaselineRef = useRef(false);
   const seenMessageIdsRef = useRef<Set<string>>(new Set());
@@ -2238,6 +2341,12 @@ export function WebMessenger({
   const [toast, setToast] = useState<InlineToast | null>(null);
   const [toastProgress, setToastProgress] = useState(0);
   const toastCounterRef = useRef(0);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isAdminPanelLoading, setIsAdminPanelLoading] = useState(false);
+  const [isAdminActionPending, setIsAdminActionPending] = useState(false);
+  const [adminReports, setAdminReports] = useState<ModerationPanelReport[]>([]);
+  const [adminSanctions, setAdminSanctions] = useState<ModerationPanelSanction[]>([]);
+  const [adminAuditLogs, setAdminAuditLogs] = useState<ModerationPanelAuditLog[]>([]);
   const [activeChatSearchQuery, setActiveChatSearchQuery] = useState("");
   const [activeChatJumpDate, setActiveChatJumpDate] = useState("");
   const [isActiveChatSearchOpen, setIsActiveChatSearchOpen] = useState(false);
@@ -2982,6 +3091,12 @@ export function WebMessenger({
       translations[language][key],
     [language]
   );
+  const isAdminAccount = useMemo(
+    () =>
+      currentUser.username.trim().replace(/^@+/, "").toLowerCase() ===
+      ADMIN_PANEL_USERNAME,
+    [currentUser.username]
+  );
   const getRequestErrorMessage = useCallback(
     (error: unknown) =>
       error instanceof Error && error.message.trim().length > 0
@@ -3128,6 +3243,125 @@ export function WebMessenger({
       }, UNDO_WINDOW_MS);
     },
     []
+  );
+  const applyModerationSnapshot = useCallback((snapshot: ModerationPanelSnapshot) => {
+    setAdminReports(snapshot.reports);
+    setAdminSanctions(snapshot.sanctions);
+    setAdminAuditLogs(snapshot.auditLogs);
+  }, []);
+  const loadModerationPanelData = useCallback(async () => {
+    if (!isAdminAccount) {
+      return;
+    }
+    setIsAdminPanelLoading(true);
+    try {
+      const payload = await requestJson<{ snapshot: ModerationPanelSnapshot }>(
+        `/api/admin/moderation?userId=${encodeURIComponent(currentUser.id)}`
+      );
+      applyModerationSnapshot(payload.snapshot);
+    } catch (error) {
+      showToast(getRequestErrorMessage(error));
+    } finally {
+      setIsAdminPanelLoading(false);
+    }
+  }, [
+    applyModerationSnapshot,
+    currentUser.id,
+    getRequestErrorMessage,
+    isAdminAccount,
+    showToast,
+  ]);
+  const openModerationPanel = useCallback(() => {
+    if (!isAdminAccount) {
+      return;
+    }
+    setIsAdminPanelOpen(true);
+    void loadModerationPanelData();
+  }, [isAdminAccount, loadModerationPanelData]);
+  const closeModerationPanel = useCallback(() => {
+    if (isAdminActionPending) {
+      return;
+    }
+    setIsAdminPanelOpen(false);
+  }, [isAdminActionPending]);
+  const runModerationAction = useCallback(
+    async (payload: ModerationActionPayload) => {
+      if (!isAdminAccount || isAdminActionPending) {
+        return;
+      }
+      setIsAdminActionPending(true);
+      try {
+        const response = await requestJson<{ ok: boolean; snapshot: ModerationPanelSnapshot }>(
+          "/api/admin/moderation",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              userId: currentUser.id,
+              ...payload,
+            }),
+          }
+        );
+        applyModerationSnapshot(response.snapshot);
+        showToast(language === "ru" ? "Модерация обновлена." : "Moderation updated.");
+      } catch (error) {
+        showToast(getRequestErrorMessage(error));
+      } finally {
+        setIsAdminActionPending(false);
+      }
+    },
+    [
+      applyModerationSnapshot,
+      currentUser.id,
+      getRequestErrorMessage,
+      isAdminAccount,
+      isAdminActionPending,
+      language,
+      showToast,
+    ]
+  );
+  const getModerationActionLabel = useCallback(
+    (action: ModerationPanelAuditLog["action"]) => {
+      if (language === "ru") {
+        if (action === "report_resolved") {
+          return "Жалоба закрыта";
+        }
+        if (action === "message_deleted") {
+          return "Сообщение удалено";
+        }
+        if (action === "user_muted") {
+          return "Пользователь заглушен";
+        }
+        if (action === "user_unmuted") {
+          return "Сняли mute";
+        }
+        if (action === "user_banned") {
+          return "Пользователь забанен";
+        }
+        return "Сняли бан";
+      }
+
+      if (action === "report_resolved") {
+        return "Report resolved";
+      }
+      if (action === "message_deleted") {
+        return "Message deleted";
+      }
+      if (action === "user_muted") {
+        return "User muted";
+      }
+      if (action === "user_unmuted") {
+        return "User unmuted";
+      }
+      if (action === "user_banned") {
+        return "User banned";
+      }
+      return "User unbanned";
+    },
+    [language]
+  );
+  const openModerationReports = useMemo(
+    () => adminReports.filter((report) => report.status === "open"),
+    [adminReports]
   );
   const getPrivacyVisibilityLabel = useCallback(
     (value: unknown) => {
@@ -5869,6 +6103,54 @@ export function WebMessenger({
     },
     [currentUser.id, showToast, t]
   );
+  const reportMessage = useCallback(
+    async (message: RenderMessage) => {
+      if (
+        !activeChat ||
+        activeChat.isFavorites ||
+        activeChat.isPreview ||
+        message.author === "me"
+      ) {
+        return;
+      }
+
+      const reasonPrompt =
+        language === "ru"
+          ? "Укажите причину жалобы на сообщение:"
+          : "Enter a reason for reporting this message:";
+      const reasonInput = window.prompt(reasonPrompt, "");
+      const reason = reasonInput?.trim() ?? "";
+      if (!reason) {
+        return;
+      }
+      if (reason.length < 3) {
+        showToast(
+          language === "ru"
+            ? "Причина должна содержать минимум 3 символа."
+            : "Reason must be at least 3 characters."
+        );
+        return;
+      }
+
+      try {
+        await requestJson<{ ok: boolean; reportId: string }>("/api/messenger/report", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            chatId: activeChat.id,
+            messageId: message.id,
+            reason,
+          }),
+        });
+        showToast(
+          language === "ru" ? "Жалоба отправлена модератору." : "Report sent to moderation."
+        );
+      } catch (error) {
+        showToast(getRequestErrorMessage(error));
+      }
+    },
+    [activeChat, currentUser.id, getRequestErrorMessage, language, showToast]
+  );
 
   const openForwardMessageDialog = useCallback((message: RenderMessage) => {
     const text = message.text.trim();
@@ -7785,6 +8067,90 @@ export function WebMessenger({
     setIsActiveChatProfileSidebarOpen(true);
   }, [isActiveChatProfileSidebarOpen, prepareActiveChatProfileTarget]);
 
+  const resetMobileBackSwipeGesture = useCallback(() => {
+    mobileBackSwipeGestureRef.current = createIdleMobileBackSwipeGestureState();
+  }, []);
+
+  const handleMobileBackSwipeStart = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      const touch = event.touches[0];
+      if (!touch) {
+        resetMobileBackSwipeGesture();
+        return;
+      }
+
+      if (
+        typeof window === "undefined" ||
+        !window.matchMedia(MOBILE_VIEWPORT_MEDIA_QUERY).matches ||
+        activeSidebar !== "home" ||
+        mobileView !== "chat" ||
+        touch.clientX > MOBILE_BACK_SWIPE_EDGE_WIDTH
+      ) {
+        resetMobileBackSwipeGesture();
+        return;
+      }
+
+      mobileBackSwipeGestureRef.current = {
+        tracking: true,
+        activated: false,
+        axisLock: null,
+        startX: touch.clientX,
+        startY: touch.clientY,
+      };
+    },
+    [activeSidebar, mobileView, resetMobileBackSwipeGesture]
+  );
+
+  const handleMobileBackSwipeMove = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      const gesture = mobileBackSwipeGestureRef.current;
+      if (!gesture.tracking || gesture.activated) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      if (!touch) {
+        return;
+      }
+
+      const deltaX = touch.clientX - gesture.startX;
+      const deltaY = touch.clientY - gesture.startY;
+
+      if (gesture.axisLock === null) {
+        if (Math.abs(deltaY) > 12 && Math.abs(deltaY) > Math.abs(deltaX)) {
+          gesture.axisLock = "vertical";
+          return;
+        }
+        if (Math.abs(deltaX) > 10 && Math.abs(deltaX) >= Math.abs(deltaY) * 1.2) {
+          gesture.axisLock = "horizontal";
+        } else {
+          return;
+        }
+      }
+
+      if (gesture.axisLock !== "horizontal") {
+        return;
+      }
+
+      if (deltaX > 10) {
+        event.preventDefault();
+      }
+
+      if (deltaX >= MOBILE_BACK_SWIPE_TRIGGER_DISTANCE && Math.abs(deltaY) < 120) {
+        gesture.activated = true;
+        setIsActiveChatSearchOpen(false);
+        setIsActiveChatProfileSidebarOpen(false);
+        setMobileView("list");
+        resetMobileBackSwipeGesture();
+      }
+    },
+    [resetMobileBackSwipeGesture]
+  );
+
+  const handleMobileBackSwipeEnd = useCallback(() => {
+    resetMobileBackSwipeGesture();
+  }, [resetMobileBackSwipeGesture]);
+
   useEffect(() => {
     const handleHotkey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
@@ -8422,23 +8788,17 @@ export function WebMessenger({
     if (value === "none") {
       return t("wallpaperNone");
     }
-    if (value === "aurora") {
-      return t("wallpaperAurora");
-    }
-    if (value === "sunset") {
-      return t("wallpaperSunset");
-    }
-    if (value === "ocean") {
-      return t("wallpaperOcean");
-    }
-    if (value === "graphite") {
-      return t("wallpaperGraphite");
-    }
     if (value === "color-bends") {
       return t("wallpaperColorBends");
     }
     if (value === "pixel-blast") {
       return t("wallpaperPixelBlast");
+    }
+    if (value === "plasma") {
+      return t("wallpaperPlasma");
+    }
+    if (value === "dither") {
+      return t("wallpaperDither");
     }
     return value;
   };
@@ -8835,10 +9195,14 @@ export function WebMessenger({
                 </aside>
 
                 <div
-              className={`${
-                mobileView === "list" ? "hidden" : "flex"
-              } min-h-0 min-w-0 flex-1 flex-col bg-transparent md:flex ${activeChatFontClassName}`}
-            >
+                  className={`${
+                    mobileView === "list" ? "hidden" : "flex"
+                  } min-h-0 min-w-0 flex-1 flex-col bg-transparent md:flex ${activeChatFontClassName}`}
+                  onTouchStart={handleMobileBackSwipeStart}
+                  onTouchMove={handleMobileBackSwipeMove}
+                  onTouchEnd={handleMobileBackSwipeEnd}
+                  onTouchCancel={handleMobileBackSwipeEnd}
+                >
               {activeChat ? (
                 <>
                   <header
@@ -8969,7 +9333,7 @@ export function WebMessenger({
                         size="icon"
                         aria-label={t("chatProfile")}
                         onClick={() => toggleActiveChatProfileSidebar()}
-                        className={`border hover:text-zinc-100 ${uiDensity === "compact" ? "h-8 w-8" : ""} ${
+                        className={`hidden border hover:text-zinc-100 md:inline-flex ${uiDensity === "compact" ? "h-8 w-8" : ""} ${
                           isCompactActiveChatProfileSidebar
                             ? "border-primary/70 bg-primary/20 text-primary/80 hover:bg-primary/25"
                             : "border-zinc-700 bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
@@ -9119,6 +9483,23 @@ export function WebMessenger({
                         <PixelBlast className="h-full w-full" />
                       </div>
                     ) : null}
+                    {activeChatEffectiveWallpaper === "plasma" ? (
+                      <div className="absolute inset-0 z-0">
+                        <Plasma
+                          className="h-full w-full"
+                          color="#8e51ff"
+                          speed={1}
+                          scale={1}
+                          opacity={1}
+                          mouseInteractive={true}
+                        />
+                      </div>
+                    ) : null}
+                    {activeChatEffectiveWallpaper === "dither" ? (
+                      <div className="absolute inset-0 z-0">
+                        <Dither />
+                      </div>
+                    ) : null}
                     <div
                       ref={activeMessagesScrollRef}
                       className={`relative z-10 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
@@ -9140,6 +9521,10 @@ export function WebMessenger({
                       const canDeleteMessage =
                         message.author === "me" && !activeChat.isFavorites;
                       const canReplyToMessage = !activeChat.isFavorites;
+                      const canReportMessage =
+                        !activeChat.isFavorites &&
+                        !activeChat.isPreview &&
+                        message.author !== "me";
                       const canOpenOriginalChat =
                         activeChat.isFavorites && Boolean(message.sourceChatId);
                       const reply = message.reply;
@@ -9430,6 +9815,20 @@ export function WebMessenger({
                                 <Copy className="size-4" />
                                 {t("copyAttachmentLink")}
                               </ContextMenuItem>
+                            ) : null}
+                            {canReportMessage ? (
+                              <>
+                                <ContextMenuSeparator
+                                  className={chatActionMenuSeparatorClassName}
+                                />
+                                <ContextMenuItem
+                                  className={chatActionMenuItemClassName}
+                                  onSelect={() => void reportMessage(message)}
+                                >
+                                  <List className="size-4" />
+                                  {language === "ru" ? "Пожаловаться" : "Report message"}
+                                </ContextMenuItem>
+                              </>
                             ) : null}
                             {canDeleteMessage ? (
                               <>
@@ -10864,6 +11263,16 @@ export function WebMessenger({
                               {currentUser.email}
                             </p>
                           </div>
+                          {isAdminAccount ? (
+                            <Button
+                              type="button"
+                              onClick={openModerationPanel}
+                              className="h-10 rounded-md border border-amber-500/70 bg-amber-500/15 px-4 text-zinc-100 hover:bg-amber-500/25"
+                            >
+                              <List className="size-4" />
+                              {language === "ru" ? "Панель модерации" : "Moderation panel"}
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             onClick={onLogout}
@@ -11104,12 +11513,10 @@ export function WebMessenger({
                                 onValueChange={(value) => {
                                   if (
                                     value === "none" ||
-                                    value === "aurora" ||
-                                    value === "sunset" ||
-                                    value === "ocean" ||
-                                    value === "graphite" ||
                                     value === "color-bends" ||
-                                    value === "pixel-blast"
+                                    value === "pixel-blast" ||
+                                    value === "plasma" ||
+                                    value === "dither"
                                   ) {
                                     setGlobalChatWallpaper(value);
                                   }
@@ -11124,23 +11531,17 @@ export function WebMessenger({
                                   <SelectItem value="none" className={unifiedSelectItemClassName}>
                                     {t("wallpaperNone")}
                                   </SelectItem>
-                                  <SelectItem value="aurora" className={unifiedSelectItemClassName}>
-                                    {t("wallpaperAurora")}
-                                  </SelectItem>
-                                  <SelectItem value="sunset" className={unifiedSelectItemClassName}>
-                                    {t("wallpaperSunset")}
-                                  </SelectItem>
-                                  <SelectItem value="ocean" className={unifiedSelectItemClassName}>
-                                    {t("wallpaperOcean")}
-                                  </SelectItem>
-                                  <SelectItem value="graphite" className={unifiedSelectItemClassName}>
-                                    {t("wallpaperGraphite")}
-                                  </SelectItem>
                                   <SelectItem value="color-bends" className={unifiedSelectItemClassName}>
                                     {t("wallpaperColorBends")}
                                   </SelectItem>
                                   <SelectItem value="pixel-blast" className={unifiedSelectItemClassName}>
                                     {t("wallpaperPixelBlast")}
+                                  </SelectItem>
+                                  <SelectItem value="plasma" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperPlasma")}
+                                  </SelectItem>
+                                  <SelectItem value="dither" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperDither")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -11268,12 +11669,10 @@ export function WebMessenger({
                     if (
                       value === "inherit" ||
                       value === "none" ||
-                      value === "aurora" ||
-                      value === "sunset" ||
-                      value === "ocean" ||
-                      value === "graphite" ||
                       value === "color-bends" ||
-                      value === "pixel-blast"
+                      value === "pixel-blast" ||
+                      value === "plasma" ||
+                      value === "dither"
                     ) {
                       updateActiveChatPersonalization({ wallpaper: value });
                     }
@@ -11295,23 +11694,17 @@ export function WebMessenger({
                     <SelectItem value="none" className={unifiedSelectItemClassName}>
                       {t("wallpaperNone")}
                     </SelectItem>
-                    <SelectItem value="aurora" className={unifiedSelectItemClassName}>
-                      {t("wallpaperAurora")}
-                    </SelectItem>
-                    <SelectItem value="sunset" className={unifiedSelectItemClassName}>
-                      {t("wallpaperSunset")}
-                    </SelectItem>
-                    <SelectItem value="ocean" className={unifiedSelectItemClassName}>
-                      {t("wallpaperOcean")}
-                    </SelectItem>
-                    <SelectItem value="graphite" className={unifiedSelectItemClassName}>
-                      {t("wallpaperGraphite")}
-                    </SelectItem>
                     <SelectItem value="color-bends" className={unifiedSelectItemClassName}>
                       {t("wallpaperColorBends")}
                     </SelectItem>
                     <SelectItem value="pixel-blast" className={unifiedSelectItemClassName}>
                       {t("wallpaperPixelBlast")}
+                    </SelectItem>
+                    <SelectItem value="plasma" className={unifiedSelectItemClassName}>
+                      {t("wallpaperPlasma")}
+                    </SelectItem>
+                    <SelectItem value="dither" className={unifiedSelectItemClassName}>
+                      {t("wallpaperDither")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -11823,6 +12216,282 @@ export function WebMessenger({
       {callNotice ? (
         <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[120] -translate-x-1/2 rounded-lg border border-zinc-800/90 bg-zinc-950/85 px-4 py-2 text-sm text-zinc-100 shadow-xl ring-1 ring-white/5 backdrop-blur-xl">
           {callNotice}
+        </div>
+      ) : null}
+      {isAdminPanelOpen && isAdminAccount ? (
+        <div className="fixed inset-0 z-[124] flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            aria-label={language === "ru" ? "Закрыть модерацию" : "Close moderation panel"}
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+            onClick={closeModerationPanel}
+          />
+          <div className="relative z-10 grid h-[min(92vh,880px)] w-[min(96vw,1180px)] grid-rows-[auto_1fr] overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950/95 shadow-2xl ring-1 ring-white/10">
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3 sm:px-6">
+              <div>
+                <p className="text-lg font-semibold text-zinc-100">
+                  {language === "ru" ? "Панель модерации" : "Moderation Panel"}
+                </p>
+                <p className="text-xs text-zinc-400">
+                  {language === "ru"
+                    ? "Только аккаунт @laywood"
+                    : "Only @laywood can access this panel"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={() => void loadModerationPanelData()}
+                  disabled={isAdminPanelLoading || isAdminActionPending}
+                  className="h-9 rounded-lg border border-zinc-600 bg-zinc-800 px-3 text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {language === "ru" ? "Обновить" : "Refresh"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("cancel")}
+                  onClick={closeModerationPanel}
+                  disabled={isAdminActionPending}
+                  className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="grid min-h-0 gap-3 overflow-hidden p-3 sm:grid-cols-[1.3fr_1fr] sm:p-4">
+              <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/70">
+                <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2.5">
+                  <p className="text-sm font-semibold text-zinc-100">
+                    {language === "ru" ? "Открытые жалобы" : "Open Reports"}
+                  </p>
+                  <span className="text-xs text-zinc-500">{openModerationReports.length}</span>
+                </div>
+                <div className="min-h-0 space-y-2 overflow-y-auto p-3 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                  {isAdminPanelLoading ? (
+                    <p className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3 text-sm text-zinc-400">
+                      {language === "ru" ? "Загрузка..." : "Loading..."}
+                    </p>
+                  ) : openModerationReports.length === 0 ? (
+                    <p className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3 text-sm text-zinc-400">
+                      {language === "ru" ? "Нет открытых жалоб." : "No open reports."}
+                    </p>
+                  ) : (
+                    openModerationReports.map((report) => (
+                      <div
+                        key={`admin-report-${report.id}`}
+                        className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-300">
+                            {report.chatTitle}
+                          </span>
+                          <span className="text-[11px] text-zinc-500">
+                            {formatAbsoluteDateTime(report.createdAt, language)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs text-zinc-400">
+                          {`@${report.reporterUsername} -> @${report.targetUsername}`}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-zinc-100">{report.reason}</p>
+                        <p className="mt-1 rounded-md border border-zinc-800 bg-zinc-900/70 px-2 py-1 text-xs text-zinc-300">
+                          {report.messagePreview}
+                        </p>
+                        {report.details ? (
+                          <p className="mt-1 text-xs text-zinc-400">{report.details}</p>
+                        ) : null}
+                        <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                          <Button
+                            type="button"
+                            disabled={isAdminActionPending}
+                            className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() =>
+                              void runModerationAction({
+                                action: "resolve_report",
+                                reportId: report.id,
+                                resolutionNote: report.reason,
+                              })
+                            }
+                          >
+                            {language === "ru" ? "Закрыть" : "Resolve"}
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={isAdminActionPending}
+                            className="h-8 rounded-md border border-red-500/60 bg-red-500/15 px-2 text-xs text-red-100 hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() =>
+                              void runModerationAction({
+                                action: "delete_message",
+                                reportId: report.id,
+                                chatId: report.chatId,
+                                messageId: report.messageId,
+                                reason: report.reason,
+                              })
+                            }
+                          >
+                            {language === "ru" ? "Удалить" : "Delete msg"}
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={isAdminActionPending}
+                            className="h-8 rounded-md border border-amber-500/60 bg-amber-500/15 px-2 text-xs text-amber-100 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() =>
+                              void runModerationAction({
+                                action: "mute_user",
+                                reportId: report.id,
+                                targetUserId: report.targetUserId,
+                                durationHours: 24,
+                                reason: report.reason,
+                              })
+                            }
+                          >
+                            {language === "ru" ? "Mute 24ч" : "Mute 24h"}
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={isAdminActionPending}
+                            className="h-8 rounded-md border border-orange-500/60 bg-orange-500/15 px-2 text-xs text-orange-100 hover:bg-orange-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() =>
+                              void runModerationAction({
+                                action: "ban_user",
+                                reportId: report.id,
+                                targetUserId: report.targetUserId,
+                                durationHours: 24 * 7,
+                                reason: report.reason,
+                              })
+                            }
+                          >
+                            {language === "ru" ? "Ban 7д" : "Ban 7d"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+              <div className="grid min-h-0 gap-3 overflow-hidden">
+                <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/70">
+                  <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2.5">
+                    <p className="text-sm font-semibold text-zinc-100">
+                      {language === "ru" ? "Активные санкции" : "Active Sanctions"}
+                    </p>
+                    <span className="text-xs text-zinc-500">{adminSanctions.length}</span>
+                  </div>
+                  <div className="min-h-0 space-y-2 overflow-y-auto p-3 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                    {adminSanctions.length === 0 ? (
+                      <p className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3 text-sm text-zinc-400">
+                        {language === "ru" ? "Нет активных санкций." : "No active sanctions."}
+                      </p>
+                    ) : (
+                      adminSanctions.map((sanction) => {
+                        const mutedActive = sanction.mutedUntil > Date.now();
+                        const bannedActive = sanction.bannedUntil > Date.now();
+                        return (
+                          <div
+                            key={`admin-sanction-${sanction.userId}`}
+                            className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"
+                          >
+                            <p className="text-sm font-medium text-zinc-100">
+                              {`${sanction.name} (@${sanction.username})`}
+                            </p>
+                            {sanction.reason ? (
+                              <p className="mt-1 text-xs text-zinc-400">{sanction.reason}</p>
+                            ) : null}
+                            {mutedActive ? (
+                              <p className="mt-1 text-xs text-amber-200">
+                                {`${language === "ru" ? "Mute до" : "Muted until"} ${formatAbsoluteDateTime(
+                                  sanction.mutedUntil,
+                                  language
+                                )}`}
+                              </p>
+                            ) : null}
+                            {bannedActive ? (
+                              <p className="mt-1 text-xs text-orange-200">
+                                {`${language === "ru" ? "Бан до" : "Banned until"} ${formatAbsoluteDateTime(
+                                  sanction.bannedUntil,
+                                  language
+                                )}`}
+                              </p>
+                            ) : null}
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {mutedActive ? (
+                                <Button
+                                  type="button"
+                                  disabled={isAdminActionPending}
+                                  className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={() =>
+                                    void runModerationAction({
+                                      action: "unmute_user",
+                                      targetUserId: sanction.userId,
+                                    })
+                                  }
+                                >
+                                  {language === "ru" ? "Снять mute" : "Unmute"}
+                                </Button>
+                              ) : null}
+                              {bannedActive ? (
+                                <Button
+                                  type="button"
+                                  disabled={isAdminActionPending}
+                                  className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={() =>
+                                    void runModerationAction({
+                                      action: "unban_user",
+                                      targetUserId: sanction.userId,
+                                    })
+                                  }
+                                >
+                                  {language === "ru" ? "Снять бан" : "Unban"}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </section>
+                <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/70">
+                  <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2.5">
+                    <p className="text-sm font-semibold text-zinc-100">
+                      {language === "ru" ? "Аудит лог" : "Audit Log"}
+                    </p>
+                    <span className="text-xs text-zinc-500">{adminAuditLogs.length}</span>
+                  </div>
+                  <div className="min-h-0 space-y-2 overflow-y-auto p-3 text-xs [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                    {adminAuditLogs.length === 0 ? (
+                      <p className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3 text-zinc-400">
+                        {language === "ru" ? "Пока пусто." : "No audit events yet."}
+                      </p>
+                    ) : (
+                      adminAuditLogs.map((log) => (
+                        <div
+                          key={`admin-audit-${log.id}`}
+                          className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2"
+                        >
+                          <p className="font-medium text-zinc-100">
+                            {getModerationActionLabel(log.action)}
+                          </p>
+                          <p className="mt-0.5 text-zinc-400">
+                            {`${log.actorName}${
+                              log.targetName ? ` -> ${log.targetName}` : ""
+                            }`}
+                          </p>
+                          <p className="mt-0.5 text-zinc-500">
+                            {formatAbsoluteDateTime(log.createdAt, language)}
+                          </p>
+                          {log.reason ? (
+                            <p className="mt-1 text-zinc-300">{log.reason}</p>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
       {toast ? (

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { assertUserCanReadMessenger } from "@/lib/server/admin";
 import {
   BOT_USER_ID,
   getBotPublicUser,
@@ -51,6 +52,13 @@ export async function GET(request: Request) {
   const requester = store.users.find((candidate) => candidate.id === userId);
   if (!requester) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+  try {
+    assertUserCanReadMessenger(store, userId, now);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Your account is suspended.";
+    return NextResponse.json({ error: message }, { status: 403 });
   }
 
   // Heartbeat writes are throttled to avoid a DB write on every poll.
