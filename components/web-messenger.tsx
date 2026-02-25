@@ -233,6 +233,26 @@ const ShareContactIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const ForwardUpIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M15 14l4 -4l-4 -4" />
+    <path d="M19 10h-11a4 4 0 1 0 0 8h1" />
+  </svg>
+);
+
 const CHAT_ACTION_MENU_CONTENT_CLASS_NAME =
   "w-56 rounded-2xl border border-zinc-700 bg-zinc-900/95 p-1 text-zinc-100 shadow-2xl ring-1 ring-foreground/5 backdrop-blur";
 const CHAT_ACTION_MENU_ITEM_CLASS_NAME =
@@ -9437,7 +9457,7 @@ export function WebMessenger({
                                 className={chatActionMenuItemClassName}
                                 onSelect={() => openForwardMessageDialog(message)}
                               >
-                                <ArrowRight className="size-4" />
+                                <ForwardUpIcon className="size-4" />
                                 {t("forwardMessageAction")}
                               </ContextMenuItem>
                             ) : null}
@@ -11758,10 +11778,17 @@ export function WebMessenger({
                 forwardMessageDraft === null ||
                 forwardTargetChatIds.length === 0
               }
-              className="h-10 rounded-lg bg-primary px-4 text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-10 gap-2 rounded-lg bg-primary px-4 text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void forwardMessageToSelectedChats()}
             >
-              {isForwardingMessage ? t("forwarding") : t("forwardMessageAction")}
+              {isForwardingMessage ? (
+                t("forwarding")
+              ) : (
+                <>
+                  <ForwardUpIcon className="size-4" />
+                  {t("forwardMessageAction")}
+                </>
+              )}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
