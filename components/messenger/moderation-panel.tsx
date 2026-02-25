@@ -31,41 +31,18 @@ function getModerationActionLabel(
   action: ModerationPanelAuditLog["action"],
   language: AppLanguage
 ): string {
-  if (language === "ru") {
-    if (action === "report_resolved") {
-      return "Жалоба закрыта";
-    }
-    if (action === "message_deleted") {
-      return "Сообщение удалено";
-    }
-    if (action === "user_muted") {
-      return "Пользователь заглушен";
-    }
-    if (action === "user_unmuted") {
-      return "Сняли mute";
-    }
-    if (action === "user_banned") {
-      return "Пользователь заблокирован";
-    }
-    return "Сняли бан";
-  }
+  const labels: Record<ModerationPanelAuditLog["action"], string> = {
+    report_resolved: language === "ru" ? "Жалоба закрыта" : "Report resolved",
+    message_deleted: language === "ru" ? "Сообщение удалено" : "Message deleted",
+    user_muted: language === "ru" ? "Пользователь заглушен" : "User muted",
+    user_unmuted: language === "ru" ? "Снят mute" : "User unmuted",
+    user_banned: language === "ru" ? "Пользователь заблокирован" : "User banned",
+    user_unbanned: language === "ru" ? "Снят бан" : "User unbanned",
+    user_profile_updated: language === "ru" ? "Профиль обновлен" : "Profile updated",
+    user_deleted: language === "ru" ? "Аккаунт удален" : "Account deleted",
+  };
 
-  if (action === "report_resolved") {
-    return "Report resolved";
-  }
-  if (action === "message_deleted") {
-    return "Message deleted";
-  }
-  if (action === "user_muted") {
-    return "User muted";
-  }
-  if (action === "user_unmuted") {
-    return "User unmuted";
-  }
-  if (action === "user_banned") {
-    return "User banned";
-  }
-  return "User unbanned";
+  return labels[action];
 }
 
 export function ModerationPanel({

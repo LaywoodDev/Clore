@@ -19,6 +19,10 @@ type DashboardUser = {
   name: string;
   username: string;
   email: string;
+  bio: string;
+  birthday: string;
+  avatarUrl: string;
+  bannerUrl: string;
   lastSeenAt: number;
   threadsCount: number;
   messagesCount: number;
@@ -291,6 +295,10 @@ export async function GET(request: Request) {
           name: user.name,
           username: user.username,
           email: user.email,
+          bio: user.bio,
+          birthday: user.birthday,
+          avatarUrl: user.avatarUrl,
+          bannerUrl: user.bannerUrl,
           lastSeenAt: user.lastSeenAt,
           threadsCount: threadsCountByUserId.get(user.id) ?? 0,
           messagesCount: messagesCountByAuthorId.get(user.id) ?? 0,

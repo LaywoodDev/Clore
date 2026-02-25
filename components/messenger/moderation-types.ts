@@ -39,7 +39,9 @@ export type ModerationPanelAuditLog = {
     | "user_muted"
     | "user_unmuted"
     | "user_banned"
-    | "user_unbanned";
+    | "user_unbanned"
+    | "user_profile_updated"
+    | "user_deleted";
   actorUserId: string;
   actorName: string;
   targetUserId: string;

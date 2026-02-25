@@ -107,7 +107,9 @@ export type StoredModerationAuditAction =
   | "user_muted"
   | "user_unmuted"
   | "user_banned"
-  | "user_unbanned";
+  | "user_unbanned"
+  | "user_profile_updated"
+  | "user_deleted";
 
 export type StoredModerationReport = {
   id: string;
@@ -1026,6 +1028,8 @@ function sanitizeModerationAuditLogs(rawLogs: unknown): StoredModerationAuditLog
     "user_unmuted",
     "user_banned",
     "user_unbanned",
+    "user_profile_updated",
+    "user_deleted",
   ]);
   const byId = new Map<string, StoredModerationAuditLog>();
 

@@ -6,6 +6,7 @@ import { requestJson } from "@/components/messenger/api";
 import { type AuthUser } from "@/components/messenger/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ADMIN_PANEL_USERNAME } from "@/lib/shared/admin";
 
 type SessionData = {
@@ -17,6 +18,10 @@ type DashboardUser = {
   name: string;
   username: string;
   email: string;
+  bio: string;
+  birthday: string;
+  avatarUrl: string;
+  bannerUrl: string;
   lastSeenAt: number;
   threadsCount: number;
   messagesCount: number;
@@ -93,6 +98,40 @@ type AuthResponse = {
   error?: string;
 };
 
+type EditableUserForm = {
+  name: string;
+  username: string;
+  email: string;
+  bio: string;
+  birthday: string;
+  avatarUrl: string;
+  bannerUrl: string;
+};
+
+type AdminUserActionPayload =
+  | {
+      action: "update_user_profile";
+      targetUserId: string;
+      profile: EditableUserForm;
+      reason?: string;
+    }
+  | {
+      action: "set_user_blocked";
+      targetUserId: string;
+      blocked: boolean;
+      durationHours?: number;
+      reason?: string;
+    }
+  | {
+      action: "delete_user";
+      targetUserId: string;
+      reason?: string;
+    };
+
+type AdminUserActionResponse = {
+  ok: boolean;
+};
+
 const SESSION_STORAGE_KEY = "clore_auth_session_v1";
 const AUTO_REFRESH_INTERVAL_MS = 10_000;
 
@@ -107,6 +146,26 @@ function formatDateTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
 }
 
+function toEditableUserForm(user: DashboardUser): EditableUserForm {
+  return {
+    name: user.name,
+    username: user.username,
+    email: user.email,
+    bio: user.bio,
+    birthday: user.birthday,
+    avatarUrl: user.avatarUrl,
+    bannerUrl: user.bannerUrl,
+  };
+}
+
+function parseDurationHours(value: string): number | null {
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return null;
+  }
+  return parsed;
+}
+
 export function AdminDashboard() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
@@ -116,6 +175,19 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [editingUserId, setEditingUserId] = useState("");
+  const [editingUserForm, setEditingUserForm] = useState<EditableUserForm | null>(
+    null
+  );
+  const [blockDurationByUserId, setBlockDurationByUserId] = useState<
+    Record<string, string>
+  >({});
+  const [blockReasonByUserId, setBlockReasonByUserId] = useState<
+    Record<string, string>
+  >({});
+  const [activeUserActionId, setActiveUserActionId] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [actionSuccess, setActionSuccess] = useState("");
 
   const openMessenger = useCallback(
     (threadId?: string, joinCall = false, targetUserIds: string[] = []) => {
@@ -236,6 +308,208 @@ export function AdminDashboard() {
     };
   }, [currentUser, loadSnapshot, selectedThreadId]);
 
+  useEffect(() => {
+    if (!snapshot) {
+      return;
+    }
+
+    setBlockDurationByUserId((previous) => {
+      const next: Record<string, string> = {};
+      for (const user of snapshot.users) {
+        next[user.id] = previous[user.id] ?? "720";
+      }
+      return next;
+    });
+
+    setBlockReasonByUserId((previous) => {
+      const next: Record<string, string> = {};
+      for (const user of snapshot.users) {
+        next[user.id] = previous[user.id] ?? user.sanctionReason;
+      }
+      return next;
+    });
+
+    if (editingUserId) {
+      const stillExists = snapshot.users.some((user) => user.id === editingUserId);
+      if (!stillExists) {
+        setEditingUserId("");
+        setEditingUserForm(null);
+      }
+    }
+  }, [editingUserId, snapshot]);
+
+  const updateEditingUserField = useCallback(
+    (field: keyof EditableUserForm, value: string) => {
+      setEditingUserForm((previous) => {
+        if (!previous) {
+          return previous;
+        }
+        return {
+          ...previous,
+          [field]: value,
+        };
+      });
+    },
+    []
+  );
+
+  const updateBlockDuration = useCallback((targetUserId: string, value: string) => {
+    setBlockDurationByUserId((previous) => ({
+      ...previous,
+      [targetUserId]: value,
+    }));
+  }, []);
+
+  const updateBlockReason = useCallback((targetUserId: string, value: string) => {
+    setBlockReasonByUserId((previous) => ({
+      ...previous,
+      [targetUserId]: value,
+    }));
+  }, []);
+
+  const executeUserAction = useCallback(
+    async (payload: AdminUserActionPayload, successMessage: string): Promise<boolean> => {
+      if (!currentUser) {
+        return false;
+      }
+
+      setActiveUserActionId(payload.targetUserId);
+      setActionError("");
+      setActionSuccess("");
+
+      try {
+        await requestJson<AdminUserActionResponse>("/api/admin/users", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            ...payload,
+          }),
+        });
+
+        await loadSnapshot(currentUser.id, selectedThreadId, true);
+        setActionSuccess(successMessage);
+        return true;
+      } catch (caught) {
+        const message =
+          caught instanceof Error && caught.message.trim().length > 0
+            ? caught.message
+            : "Unable to apply user action.";
+        setActionError(message);
+        return false;
+      } finally {
+        setActiveUserActionId("");
+      }
+    },
+    [currentUser, loadSnapshot, selectedThreadId]
+  );
+
+  const startEditingUser = useCallback((user: DashboardUser) => {
+    setActionError("");
+    setActionSuccess("");
+    setEditingUserId(user.id);
+    setEditingUserForm(toEditableUserForm(user));
+  }, []);
+
+  const cancelEditingUser = useCallback(() => {
+    setEditingUserId("");
+    setEditingUserForm(null);
+  }, []);
+
+  const saveEditedUser = useCallback(
+    async (targetUserId: string) => {
+      if (!editingUserForm || editingUserId !== targetUserId) {
+        return;
+      }
+
+      const saved = await executeUserAction(
+        {
+          action: "update_user_profile",
+          targetUserId,
+          profile: editingUserForm,
+        },
+        "User profile updated."
+      );
+
+      if (saved) {
+        setEditingUserId("");
+        setEditingUserForm(null);
+      }
+    },
+    [editingUserForm, editingUserId, executeUserAction]
+  );
+
+  const setUserBlocked = useCallback(
+    async (user: DashboardUser, blocked: boolean) => {
+      const reason = (blockReasonByUserId[user.id] ?? "").trim();
+
+      if (blocked) {
+        const durationRaw = blockDurationByUserId[user.id] ?? "";
+        const durationHours = parseDurationHours(durationRaw);
+        if (durationHours === null) {
+          setActionError("Block duration must be a positive number of hours.");
+          return;
+        }
+        await executeUserAction(
+          {
+            action: "set_user_blocked",
+            targetUserId: user.id,
+            blocked: true,
+            durationHours,
+            reason,
+          },
+          `@${user.username} blocked.`
+        );
+        return;
+      }
+
+      await executeUserAction(
+        {
+          action: "set_user_blocked",
+          targetUserId: user.id,
+          blocked: false,
+          reason,
+        },
+        `@${user.username} unblocked.`
+      );
+    },
+    [blockDurationByUserId, blockReasonByUserId, executeUserAction]
+  );
+
+  const deleteUser = useCallback(
+    async (user: DashboardUser) => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const confirmation = window.prompt(
+        `Type "${user.username}" to confirm deleting @${user.username}:`,
+        ""
+      );
+      if (confirmation === null) {
+        return;
+      }
+      if (normalizeUsername(confirmation) !== normalizeUsername(user.username)) {
+        setActionError("Delete cancelled: username confirmation mismatch.");
+        return;
+      }
+
+      const removed = await executeUserAction(
+        {
+          action: "delete_user",
+          targetUserId: user.id,
+          reason: "User deleted from admin dashboard.",
+        },
+        `@${user.username} deleted.`
+      );
+
+      if (removed && editingUserId === user.id) {
+        setEditingUserId("");
+        setEditingUserForm(null);
+      }
+    },
+    [editingUserId, executeUserAction]
+  );
+
   const filteredUsers = useMemo(() => {
     if (!snapshot) {
       return [];
@@ -334,6 +608,17 @@ export function AdminDashboard() {
         </div>
       </header>
 
+      {actionError ? (
+        <div className="mb-4 rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+          {actionError}
+        </div>
+      ) : null}
+      {actionSuccess ? (
+        <div className="mb-4 rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+          {actionSuccess}
+        </div>
+      ) : null}
+
       <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-400">Users</p>
@@ -413,30 +698,209 @@ export function AdminDashboard() {
             className="mb-3 h-9 border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500"
           />
           <div className="min-h-0 space-y-2 overflow-y-auto">
-            {filteredUsers.map((user) => (
-              <div
-                key={`admin-user-${user.id}`}
-                className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2"
-              >
-                <p className="text-sm font-medium text-zinc-100">
-                  {user.name} (@{user.username})
-                </p>
-                <p className="text-xs text-zinc-400">{user.email}</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Threads: {user.threadsCount} | Messages: {user.messagesCount}
-                </p>
-                <p className="text-xs text-zinc-500">
-                  Last seen: {formatDateTime(user.lastSeenAt)}
-                </p>
-                {user.bannedUntil > 0 || user.mutedUntil > 0 ? (
-                  <p className="mt-1 text-xs text-amber-300">
-                    {user.bannedUntil > 0
-                      ? `Banned until ${formatDateTime(user.bannedUntil)}`
-                      : `Muted until ${formatDateTime(user.mutedUntil)}`}
+            {filteredUsers.map((user) => {
+              const isEditing = editingUserId === user.id && editingUserForm !== null;
+              const isPending = activeUserActionId === user.id;
+              const isBlocked = user.bannedUntil > 0;
+              const isMuted = user.mutedUntil > 0;
+              const isProtectedAdmin =
+                normalizeUsername(user.username) === ADMIN_PANEL_USERNAME;
+              const blockDurationValue = blockDurationByUserId[user.id] ?? "720";
+              const blockReasonValue = blockReasonByUserId[user.id] ?? "";
+              const form = isEditing ? editingUserForm : null;
+
+              return (
+                <div
+                  key={`admin-user-${user.id}`}
+                  className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-100">
+                        {user.name} (@{user.username})
+                      </p>
+                      <p className="text-xs text-zinc-400">{user.email}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      disabled={isPending || isProtectedAdmin}
+                      onClick={() =>
+                        isEditing ? cancelEditingUser() : startEditingUser(user)
+                      }
+                    >
+                      {isEditing ? "Close Edit" : "Edit"}
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Threads: {user.threadsCount} | Messages: {user.messagesCount}
                   </p>
-                ) : null}
-              </div>
-            ))}
+                  <p className="text-xs text-zinc-500">
+                    Last seen: {formatDateTime(user.lastSeenAt)}
+                  </p>
+                  {isBlocked || isMuted ? (
+                    <p className="mt-1 text-xs text-amber-300">
+                      {isBlocked
+                        ? `Blocked until ${formatDateTime(user.bannedUntil)}`
+                        : `Muted until ${formatDateTime(user.mutedUntil)}`}
+                    </p>
+                  ) : null}
+                  {user.sanctionReason ? (
+                    <p className="mt-1 text-xs text-zinc-400">{user.sanctionReason}</p>
+                  ) : null}
+
+                  {form ? (
+                    <div className="mt-2 space-y-2 rounded-md border border-zinc-700/70 bg-zinc-900/50 p-2">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                        Edit Profile
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Input
+                          value={form.name}
+                          onChange={(event) =>
+                            updateEditingUserField("name", event.target.value)
+                          }
+                          placeholder="Name"
+                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                        />
+                        <Input
+                          value={form.username}
+                          onChange={(event) =>
+                            updateEditingUserField("username", event.target.value)
+                          }
+                          placeholder="Username"
+                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                        />
+                        <Input
+                          value={form.email}
+                          onChange={(event) =>
+                            updateEditingUserField("email", event.target.value)
+                          }
+                          placeholder="Email"
+                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                        />
+                        <Input
+                          type="date"
+                          value={form.birthday}
+                          onChange={(event) =>
+                            updateEditingUserField("birthday", event.target.value)
+                          }
+                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                        />
+                        <Input
+                          value={form.avatarUrl}
+                          onChange={(event) =>
+                            updateEditingUserField("avatarUrl", event.target.value)
+                          }
+                          placeholder="Avatar URL"
+                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                        />
+                        <Input
+                          value={form.bannerUrl}
+                          onChange={(event) =>
+                            updateEditingUserField("bannerUrl", event.target.value)
+                          }
+                          placeholder="Banner URL"
+                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                        />
+                      </div>
+                      <Textarea
+                        value={form.bio}
+                        onChange={(event) =>
+                          updateEditingUserField("bio", event.target.value)
+                        }
+                        placeholder="Bio"
+                        className="min-h-20 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          disabled={isPending || isProtectedAdmin}
+                          onClick={() => void saveEditedUser(user.id)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          disabled={isPending || isProtectedAdmin}
+                          onClick={cancelEditingUser}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-2 rounded-md border border-zinc-700/70 bg-zinc-900/50 p-2">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
+                      Account Actions
+                    </p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[140px_1fr]">
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={blockDurationValue}
+                        onChange={(event) =>
+                          updateBlockDuration(user.id, event.target.value)
+                        }
+                        placeholder="Hours"
+                        className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                      />
+                      <Input
+                        value={blockReasonValue}
+                        onChange={(event) =>
+                          updateBlockReason(user.id, event.target.value)
+                        }
+                        placeholder="Reason (optional)"
+                        className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                      />
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        className="h-8 px-3 text-xs"
+                        disabled={isPending || isProtectedAdmin}
+                        onClick={() => void setUserBlocked(user, true)}
+                      >
+                        {isBlocked ? "Extend Block" : "Block Account"}
+                      </Button>
+                      {isBlocked ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          disabled={isPending || isProtectedAdmin}
+                          onClick={() => void setUserBlocked(user, false)}
+                        >
+                          Unblock
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        className="h-8 border border-red-500/70 bg-red-500/15 px-3 text-xs text-red-100 hover:bg-red-500/25"
+                        disabled={isPending || isProtectedAdmin}
+                        onClick={() => void deleteUser(user)}
+                      >
+                        Delete Account
+                      </Button>
+                    </div>
+                    {isProtectedAdmin ? (
+                      <p className="mt-2 text-xs text-zinc-500">
+                        Protected admin account.
+                      </p>
+                    ) : null}
+                    {isPending ? (
+                      <p className="mt-2 text-xs text-zinc-400">Applying action...</p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
