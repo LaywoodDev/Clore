@@ -52,9 +52,13 @@ type RecipientCandidate = {
   nameNormalized: string;
   usernameNormalized: string;
   bioNormalized: string;
+  sharedThreadTitlesNormalized: string;
+  sharedThreadDescriptionsNormalized: string;
   nameTokenStems: Set<string>;
   usernameTokenStems: Set<string>;
   bioTokenStems: Set<string>;
+  threadTitleTokenStems: Set<string>;
+  threadDescriptionTokenStems: Set<string>;
   userMessageTokenStems: Set<string>;
   peerMessageTokenStems: Set<string>;
   allMessageTokenStems: Set<string>;
@@ -250,6 +254,101 @@ const STOP_WORD_STEMS = new Set(
     (token) => token.length > 0
   )
 );
+
+const CONTEXT_QUERY_NOISE_STEMS = new Set(
+  [
+    "person",
+    "someone",
+    "somebody",
+    "who",
+    "which",
+    "that",
+    "about",
+    "regarding",
+    "topic",
+    "chat",
+    "user",
+    "\u0447\u0435\u043b\u043e\u0432\u0435\u043a",
+    "\u0447\u0435\u043b\u043e\u0432\u0435\u043a\u0443",
+    "\u043b\u044e\u0434\u0438",
+    "\u043a\u0442\u043e",
+    "\u0442\u043e\u0442",
+    "\u0442\u0430",
+    "\u044d\u0442\u043e\u0442",
+    "\u044d\u0442\u0430",
+    "\u043a\u043e\u0442\u043e\u0440\u044b\u0439",
+    "\u043a\u043e\u0442\u043e\u0440\u0430\u044f",
+    "\u043a\u043e\u0442\u043e\u0440\u044b\u0435",
+    "\u043a\u043e\u0442\u043e\u0440\u043e\u043c\u0443",
+    "\u043a\u043e\u0442\u043e\u0440\u043e\u0439",
+    "\u043f\u0440\u043e",
+    "\u0442\u0435\u043c\u0430",
+    "\u0442\u0435\u043c\u0435",
+    "\u0442\u0435\u043c\u0443",
+    "\u043d\u0430\u0441\u0447\u0435\u0442",
+  ]
+    .map((word) => stemToken(word))
+    .filter((token) => token.length > 0)
+);
+
+const QUERY_TOKEN_EXPANSION_GROUPS = [
+  [
+    "оплата",
+    "оплатить",
+    "оплатил",
+    "платеж",
+    "платёж",
+    "деньги",
+    "перевод",
+    "счет",
+    "счёт",
+    "payment",
+    "pay",
+    "paid",
+    "invoice",
+    "bill",
+    "billing",
+    "transfer",
+    "bank",
+    "wire",
+  ],
+  [
+    "дизайн",
+    "макет",
+    "баннер",
+    "интерфейс",
+    "design",
+    "ui",
+    "ux",
+    "layout",
+    "banner",
+  ],
+  [
+    "договор",
+    "контракт",
+    "соглашение",
+    "contract",
+    "agreement",
+    "terms",
+  ],
+] as const;
+
+const QUERY_TOKEN_EXPANSIONS = QUERY_TOKEN_EXPANSION_GROUPS.reduce<
+  Map<string, Set<string>>
+>((map, group) => {
+  const stems = new Set(group.map((item) => stemToken(item)).filter((item) => item.length > 1));
+  for (const stem of stems) {
+    const existing = map.get(stem);
+    if (existing) {
+      for (const value of stems) {
+        existing.add(value);
+      }
+    } else {
+      map.set(stem, new Set(stems));
+    }
+  }
+  return map;
+}, new Map<string, Set<string>>());
 
 function normalizeMessages(input: AiChatMessagePayload[]): NormalizedAiChatMessage[] {
   return input
@@ -606,7 +705,12 @@ function tokenizeForMatching(value: string): string[] {
 
   const pushToken = (token: string) => {
     const stem = stemToken(token);
-    if (stem.length < 2 || STOP_WORD_STEMS.has(stem) || seen.has(stem)) {
+    if (
+      stem.length < 2 ||
+      STOP_WORD_STEMS.has(stem) ||
+      CONTEXT_QUERY_NOISE_STEMS.has(stem) ||
+      seen.has(stem)
+    ) {
       return;
     }
     seen.add(stem);
@@ -620,10 +724,35 @@ function tokenizeForMatching(value: string): string[] {
       if (transliterated && transliterated !== token) {
         pushToken(transliterated);
       }
+      const stemmedToken = stemToken(token);
+      if (stemmedToken && stemmedToken !== token && containsCyrillic(stemmedToken)) {
+        const transliteratedStem = transliterateCyrillicToLatin(stemmedToken);
+        if (transliteratedStem && transliteratedStem !== transliterated) {
+          pushToken(transliteratedStem);
+        }
+      }
     }
   }
 
   return result;
+}
+
+function expandQueryTokens(tokens: string[]): string[] {
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const expanded = new Set(tokens);
+  for (const token of tokens) {
+    const variants = QUERY_TOKEN_EXPANSIONS.get(token);
+    if (!variants) {
+      continue;
+    }
+    for (const variant of variants) {
+      expanded.add(variant);
+    }
+  }
+  return [...expanded];
 }
 
 function toStemSet(value: string): Set<string> {
@@ -638,6 +767,28 @@ function cleanRecipientQuery(value: string): string {
     .replace(/(?:^|\s)(?:пожалуйста|please)(?=\s|$)/giu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractUsernameHints(value: string): string[] {
+  const result = new Set<string>();
+  for (const match of value.matchAll(/@([\p{L}\p{N}._-]{2,64})/gu)) {
+    const candidate = normalizeForMatching(match[1] ?? "").replace(/^@+/, "");
+    if (candidate.length < 2) {
+      continue;
+    }
+    result.add(candidate);
+  }
+  return [...result];
+}
+
+function hasMessageReferenceHint(value: string): boolean {
+  const normalized = normalizeForMatching(value);
+  if (!normalized) {
+    return false;
+  }
+  return /(?:wrote|written|said|mentioned|писал|писала|писали|написал|написала|написали|говорил|говорила|говорили|упоминал|упоминала|упоминали)/iu.test(
+    normalized
+  );
 }
 
 function capitalizeLeadingLetter(value: string): string {
@@ -1040,6 +1191,18 @@ function buildRecipientCandidates(
       .flatMap((threadId) => messagesByChatId.get(threadId) ?? [])
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, MAX_CONTEXT_MESSAGES_PER_CANDIDATE);
+    const sharedThreads = sharedThreadIds
+      .map((threadId) => threadById.get(threadId))
+      .filter((thread): thread is StoredChatThread => Boolean(thread));
+
+    const sharedThreadTitlesText = sharedThreads
+      .map((thread) => thread.title.trim())
+      .filter((title) => title.length > 0)
+      .join(" ");
+    const sharedThreadDescriptionsText = sharedThreads
+      .map((thread) => thread.description.trim())
+      .filter((description) => description.length > 0)
+      .join(" ");
 
     const allMessagesText = sharedMessages
       .map((message) => message.text.trim())
@@ -1074,9 +1237,13 @@ function buildRecipientCandidates(
       nameNormalized: normalizeForMatching(user.name),
       usernameNormalized: normalizeForMatching(user.username),
       bioNormalized: normalizeForMatching(user.bio),
+      sharedThreadTitlesNormalized: normalizeForMatching(sharedThreadTitlesText),
+      sharedThreadDescriptionsNormalized: normalizeForMatching(sharedThreadDescriptionsText),
       nameTokenStems: toStemSet(user.name),
       usernameTokenStems: toStemSet(user.username),
       bioTokenStems: toStemSet(user.bio),
+      threadTitleTokenStems: toStemSet(sharedThreadTitlesText),
+      threadDescriptionTokenStems: toStemSet(sharedThreadDescriptionsText),
       userMessageTokenStems: toStemSet(userMessagesText),
       peerMessageTokenStems: toStemSet(peerMessagesText),
       allMessageTokenStems: toStemSet(allMessagesText),
@@ -1109,21 +1276,27 @@ function hasAliasStemHit(stemSet: Set<string>, aliasStems: Set<string>): boolean
 function scoreRecipientIdentity(
   candidate: RecipientCandidate,
   queryNormalized: string,
-  queryTokens: string[]
+  queryTokens: string[],
+  usernameHints: string[]
 ): { score: number; exact: boolean; tokenHits: number } {
   let score = 0;
   let exact = false;
   let tokenHits = 0;
+  const candidateUsername = candidate.usernameNormalized.replace(/^@+/, "");
 
-  if (!queryNormalized || queryTokens.length === 0) {
+  if (!queryNormalized && queryTokens.length === 0 && usernameHints.length === 0) {
     return { score, exact, tokenHits };
   }
 
   const queryWithoutAt = queryNormalized.replace(/^@+/, "");
+  const queryWithoutAtLatin =
+    containsCyrillic(queryWithoutAt) && queryWithoutAt.length > 0
+      ? normalizeForMatching(transliterateCyrillicToLatin(queryWithoutAt)).replace(/^@+/, "")
+      : "";
 
   if (
     candidate.nameNormalized === queryNormalized ||
-    candidate.usernameNormalized === queryWithoutAt
+    candidateUsername === queryWithoutAt
   ) {
     score += 320;
     exact = true;
@@ -1134,7 +1307,7 @@ function scoreRecipientIdentity(
   }
   if (
     queryWithoutAt.length >= 2 &&
-    candidate.usernameNormalized.startsWith(queryWithoutAt)
+    candidateUsername.startsWith(queryWithoutAt)
   ) {
     score += 165;
   }
@@ -1147,10 +1320,58 @@ function scoreRecipientIdentity(
   }
   if (
     queryWithoutAt.length >= 3 &&
-    !candidate.usernameNormalized.startsWith(queryWithoutAt) &&
-    candidate.usernameNormalized.includes(queryWithoutAt)
+    !candidateUsername.startsWith(queryWithoutAt) &&
+    candidateUsername.includes(queryWithoutAt)
   ) {
     score += 65;
+  }
+
+  if (queryWithoutAtLatin && queryWithoutAtLatin !== queryWithoutAt) {
+    if (
+      candidate.nameNormalized === queryWithoutAtLatin ||
+      candidateUsername === queryWithoutAtLatin
+    ) {
+      score += 300;
+      tokenHits += 1;
+      exact = true;
+    }
+    if (queryWithoutAtLatin.length >= 3 && candidate.nameNormalized.startsWith(queryWithoutAtLatin)) {
+      score += 145;
+    }
+    if (queryWithoutAtLatin.length >= 2 && candidateUsername.startsWith(queryWithoutAtLatin)) {
+      score += 170;
+    }
+    if (
+      queryWithoutAtLatin.length >= 4 &&
+      !candidate.nameNormalized.startsWith(queryWithoutAtLatin) &&
+      candidate.nameNormalized.includes(queryWithoutAtLatin)
+    ) {
+      score += 52;
+    }
+    if (
+      queryWithoutAtLatin.length >= 3 &&
+      !candidateUsername.startsWith(queryWithoutAtLatin) &&
+      candidateUsername.includes(queryWithoutAtLatin)
+    ) {
+      score += 70;
+    }
+  }
+
+  for (const usernameHint of usernameHints) {
+    if (candidateUsername === usernameHint) {
+      score += 300;
+      tokenHits += 1;
+      exact = true;
+      continue;
+    }
+    if (candidateUsername.startsWith(usernameHint)) {
+      score += 190;
+      tokenHits += 1;
+      continue;
+    }
+    if (candidateUsername.includes(usernameHint)) {
+      score += 95;
+    }
   }
 
   for (const token of queryTokens) {
@@ -1171,34 +1392,99 @@ function scoreRecipientIdentity(
   return { score, exact, tokenHits };
 }
 
+type RecipientContextScoreData = {
+  score: number;
+  evidenceHits: number;
+  strongSignals: number;
+};
+
 function scoreRecipientContext(
   candidate: RecipientCandidate,
   queryNormalized: string,
   queryTokens: string[],
-  relationKeys: string[]
-): number {
+  relationKeys: string[],
+  usernameHints: string[],
+  hasMessageReference: boolean
+): RecipientContextScoreData {
   let score = 0;
+  let evidenceHits = 0;
+  let strongSignals = 0;
+  const candidateUsername = candidate.usernameNormalized.replace(/^@+/, "");
 
-  if (!queryNormalized || queryTokens.length === 0) {
-    return score;
+  if (!queryNormalized && queryTokens.length === 0 && usernameHints.length === 0) {
+    return { score, evidenceHits, strongSignals };
   }
 
-  if (candidate.bioNormalized.includes(queryNormalized)) {
+  if (queryNormalized.length >= 4 && candidate.bioNormalized.includes(queryNormalized)) {
     score += 70;
+    evidenceHits += 1;
+  }
+  if (
+    queryNormalized.length >= 4 &&
+    candidate.sharedThreadTitlesNormalized.includes(queryNormalized)
+  ) {
+    score += 120;
+    evidenceHits += 2;
+    strongSignals += 1;
+  }
+  if (
+    queryNormalized.length >= 4 &&
+    candidate.sharedThreadDescriptionsNormalized.includes(queryNormalized)
+  ) {
+    score += 52;
+    evidenceHits += 1;
+  }
+
+  for (const usernameHint of usernameHints) {
+    if (candidateUsername === usernameHint) {
+      score += 230;
+      evidenceHits += 3;
+      strongSignals += 1;
+      continue;
+    }
+    if (candidateUsername.startsWith(usernameHint)) {
+      score += 160;
+      evidenceHits += 2;
+      strongSignals += 1;
+      continue;
+    }
+    if (candidateUsername.includes(usernameHint)) {
+      score += 90;
+      evidenceHits += 1;
+    }
   }
 
   for (const token of queryTokens) {
     if (candidate.bioTokenStems.has(token)) {
       score += 42;
+      evidenceHits += 1;
+    }
+    if (candidate.threadTitleTokenStems.has(token)) {
+      score += 64;
+      evidenceHits += 2;
+      strongSignals += 1;
+    }
+    if (candidate.threadDescriptionTokenStems.has(token)) {
+      score += 28;
+      evidenceHits += 1;
     }
     if (candidate.userMessageTokenStems.has(token)) {
-      score += 34;
+      score += 52;
+      evidenceHits += 2;
     }
     if (candidate.peerMessageTokenStems.has(token)) {
-      score += 24;
+      if (hasMessageReference) {
+        score += 78;
+        evidenceHits += 2;
+        strongSignals += 1;
+      } else {
+        score += 30;
+        evidenceHits += 1;
+      }
     }
     if (candidate.allMessageTokenStems.has(token)) {
-      score += 10;
+      score += hasMessageReference ? 18 : 12;
+      evidenceHits += 1;
     }
   }
 
@@ -1213,15 +1499,21 @@ function scoreRecipientContext(
       hasAliasStemHit(candidate.bioTokenStems, aliasStems)
     ) {
       score += 85;
+      evidenceHits += 2;
+      strongSignals += 1;
     }
     if (hasAliasStemHit(candidate.userMessageTokenStems, aliasStems)) {
-      score += 130;
+      score += 140;
+      evidenceHits += 3;
+      strongSignals += 1;
     }
     if (hasAliasStemHit(candidate.peerMessageTokenStems, aliasStems)) {
-      score += 55;
+      score += 70;
+      evidenceHits += 2;
     }
     if (hasAliasStemHit(candidate.allMessageTokenStems, aliasStems)) {
-      score += 24;
+      score += 28;
+      evidenceHits += 1;
     }
   }
 
@@ -1230,7 +1522,7 @@ function scoreRecipientContext(
   }
   score += Math.min(candidate.sharedThreadIds.length, 3) * 3;
 
-  return score;
+  return { score, evidenceHits, strongSignals };
 }
 
 function resolveRecipient(
@@ -1238,10 +1530,16 @@ function resolveRecipient(
   rawQuery: string
 ): RecipientResolution {
   const queryNormalized = normalizeForMatching(rawQuery);
-  const queryTokens = tokenizeForMatching(rawQuery);
-  const relationKeys = detectRelationKeys(queryTokens);
+  const identityTokens = tokenizeForMatching(rawQuery);
+  const contextTokens = expandQueryTokens(identityTokens);
+  const usernameHints = extractUsernameHints(rawQuery);
+  const hasMessageReference = hasMessageReferenceHint(rawQuery);
+  const relationKeys = detectRelationKeys(identityTokens);
 
-  if (!queryNormalized || queryTokens.length === 0) {
+  if (
+    !queryNormalized ||
+    (identityTokens.length === 0 && contextTokens.length === 0 && usernameHints.length === 0)
+  ) {
     return {
       status: "not_found",
     };
@@ -1249,19 +1547,28 @@ function resolveRecipient(
 
   const scoredBase = candidates
     .map((candidate) => {
-      const identityData = scoreRecipientIdentity(candidate, queryNormalized, queryTokens);
-      const contextScore = scoreRecipientContext(
+      const identityData = scoreRecipientIdentity(
         candidate,
         queryNormalized,
-        queryTokens,
-        relationKeys
+        identityTokens,
+        usernameHints
+      );
+      const contextData = scoreRecipientContext(
+        candidate,
+        queryNormalized,
+        contextTokens,
+        relationKeys,
+        usernameHints,
+        hasMessageReference
       );
       return {
         candidate,
         identityScore: identityData.score,
         identityExact: identityData.exact,
         identityTokenHits: identityData.tokenHits,
-        contextScore,
+        contextScore: contextData.score,
+        contextEvidenceHits: contextData.evidenceHits,
+        contextStrongSignals: contextData.strongSignals,
       };
     });
 
@@ -1271,9 +1578,28 @@ function resolveRecipient(
       item.identityTokenHits > 0 ||
       item.identityScore >= 170
   );
+  const strongestContextScore = scoredBase.reduce(
+    (max, item) => Math.max(max, item.contextScore),
+    0
+  );
+  const strongestContextEvidence = scoredBase.reduce(
+    (max, item) => Math.max(max, item.contextEvidenceHits),
+    0
+  );
+  const strongestContextSignals = scoredBase.reduce(
+    (max, item) => Math.max(max, item.contextStrongSignals),
+    0
+  );
   const allowPureContextMode =
     !hasIdentityCandidates &&
-    (relationKeys.length > 0 || queryTokens.length >= 2);
+    (relationKeys.length > 0 ||
+      hasMessageReference ||
+      contextTokens.length >= 2 ||
+      usernameHints.length > 0 ||
+      strongestContextSignals > 0 ||
+      (contextTokens.length === 1 &&
+        strongestContextEvidence >= 2 &&
+        strongestContextScore >= 85));
 
   if (!hasIdentityCandidates && !allowPureContextMode) {
     return {
@@ -1288,7 +1614,7 @@ function resolveRecipient(
           return null;
         }
         const allowContextTieBreaker =
-          relationKeys.length > 0 || queryTokens.length > 1;
+          relationKeys.length > 0 || contextTokens.length > 1;
         const contextBonus = allowContextTieBreaker
           ? Math.min(item.contextScore, 45)
           : 0;
@@ -1320,7 +1646,13 @@ function resolveRecipient(
     ? 78
     : relationKeys.length > 0
       ? 72
-      : 95;
+      : hasMessageReference
+        ? 68
+      : usernameHints.length > 0
+        ? 80
+        : contextTokens.length >= 2
+          ? 95
+          : 88;
   const top = scored[0];
   const second = scored[1];
 
@@ -1341,6 +1673,16 @@ function resolveRecipient(
     };
   }
 
+  if (
+    !hasIdentityCandidates &&
+    top.contextEvidenceHits === 0 &&
+    top.contextStrongSignals === 0
+  ) {
+    return {
+      status: "not_found",
+    };
+  }
+
   const hasClearlyExactTop =
     top.identityExact &&
     top.identityScore >= 250 &&
@@ -1352,7 +1694,11 @@ function resolveRecipient(
       second &&
         second.totalScore >= minimumScore &&
         (top.totalScore - second.totalScore <
-          (hasIdentityCandidates ? 28 : 20) ||
+          (hasIdentityCandidates
+            ? 28
+            : contextTokens.length === 1 && usernameHints.length === 0
+              ? 26
+              : 20) ||
           second.totalScore >= Math.floor(top.totalScore * 0.88))
     );
 
@@ -2004,3 +2350,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status });
   }
 }
+

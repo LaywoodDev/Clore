@@ -133,7 +133,7 @@
       "avatarAllowedUserIds": [],
       "bioAllowedUserIds": [],
       "birthdayAllowedUserIds": [],
-      "lastSeenAt": 1771906410222,
+      "lastSeenAt": 1772104408901,
       "avatarUrl": "",
       "bannerUrl": ""
     },
@@ -155,7 +155,7 @@
       "avatarAllowedUserIds": [],
       "bioAllowedUserIds": [],
       "birthdayAllowedUserIds": [],
-      "lastSeenAt": 1772100960298,
+      "lastSeenAt": 1772104408874,
       "avatarUrl": "",
       "bannerUrl": ""
     }
@@ -177,7 +177,7 @@
       "createdAt": 1772092968882,
       "updatedAt": 1772092968882,
       "readBy": {
-        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772099294809,
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772102910832,
         "u-69e38a42-7c7c-42c8-a75f-469a164b64d6": 0,
         "u-51e71bfe-35bf-4bca-9dcf-048bb28bfc11": 0
       },
@@ -205,10 +205,56 @@
       "bannerUrl": "",
       "createdById": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
       "createdAt": 1772099312874,
-      "updatedAt": 1772099393151,
+      "updatedAt": 1772103470657,
       "readBy": {
-        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772100086789,
-        "u-69e38a42-7c7c-42c8-a75f-469a164b64d6": 0
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772103470907,
+        "u-69e38a42-7c7c-42c8-a75f-469a164b64d6": 1772103470657
+      },
+      "pinnedBy": {},
+      "mutedBy": {},
+      "typingBy": {},
+      "groupRoles": {}
+    },
+    {
+      "id": "chat-0888703b-84e4-4f22-a0aa-308425671113",
+      "memberIds": [
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+        "u-e95fb0a8-ab8c-4e72-874b-f59fba0fb90e"
+      ],
+      "threadType": "direct",
+      "title": "",
+      "description": "",
+      "avatarUrl": "",
+      "bannerUrl": "",
+      "createdById": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "createdAt": 1772102894168,
+      "updatedAt": 1772102904792,
+      "readBy": {
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772103433490,
+        "u-e95fb0a8-ab8c-4e72-874b-f59fba0fb90e": 0
+      },
+      "pinnedBy": {},
+      "mutedBy": {},
+      "typingBy": {},
+      "groupRoles": {}
+    },
+    {
+      "id": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "memberIds": [
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+        "f8df4529-1344-48c8-b34c-c735aec80568"
+      ],
+      "threadType": "direct",
+      "title": "",
+      "description": "",
+      "avatarUrl": "",
+      "bannerUrl": "",
+      "createdById": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "createdAt": 1772104404203,
+      "updatedAt": 1772104404679,
+      "readBy": {
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772104404679,
+        "f8df4529-1344-48c8-b34c-c735aec80568": 0
       },
       "pinnedBy": {},
       "mutedBy": {},
@@ -262,6 +308,94 @@
       "attachments": [],
       "replyToMessageId": "",
       "createdAt": 1772099393151,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-a4038ff9-e753-48ae-a52c-3749932be216",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772102875222,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-a79ed879-ada1-42b9-8a16-60a445688379",
+      "chatId": "chat-0888703b-84e4-4f22-a0aa-308425671113",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "d",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772102894600,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-e9b8cff0-10b5-40a2-a8c3-9891087b8046",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772102904791,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-2741975c-75de-4b88-87ea-8e4074cfb03c",
+      "chatId": "chat-0888703b-84e4-4f22-a0aa-308425671113",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Пока!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772102904792,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-b45ff660-8b90-474e-a3d9-2b02063d2b50",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-69e38a42-7c7c-42c8-a75f-469a164b64d6",
+      "text": "диайн готов",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772103457745,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-52dc9932-187c-4ab3-a7b6-270305bf46f3",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-69e38a42-7c7c-42c8-a75f-469a164b64d6",
+      "text": "а у тебя как?",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772103467254,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-745f39d8-e825-458b-b544-8d0bdbdf78d2",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-69e38a42-7c7c-42c8-a75f-469a164b64d6",
+      "text": "с разработкой?",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772103470657,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-994b03d3-8bfa-4ef9-b849-81c3754d8d8b",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "d",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772104404679,
       "editedAt": 0,
       "savedBy": {}
     }
