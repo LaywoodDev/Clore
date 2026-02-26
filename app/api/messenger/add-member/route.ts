@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { canModerateGroup, updateStore } from "@/lib/server/store";
+import {
+  canModerateGroup,
+  canUserBeAddedToGroupBy,
+  updateStore,
+} from "@/lib/server/store";
 
 type AddMemberPayload = {
   userId?: string;
@@ -40,8 +44,12 @@ export async function POST(request: Request) {
       if (thread.memberIds.includes(memberId)) {
         throw new Error("User is already in the group.");
       }
-      if (!store.users.some((user) => user.id === memberId)) {
+      const member = store.users.find((user) => user.id === memberId);
+      if (!member) {
         throw new Error("User not found.");
+      }
+      if (!canUserBeAddedToGroupBy(member, userId)) {
+        throw new Error("User does not allow adding to groups.");
       }
       if (thread.memberIds.length + 1 > GROUP_MAX_MEMBERS) {
         throw new Error(`Group cannot have more than ${GROUP_MAX_MEMBERS} members.`);
@@ -68,6 +76,8 @@ export async function POST(request: Request) {
         ? 404
         : message === "Only group owner or admin can add members."
           ? 403
+          : message === "User does not allow adding to groups."
+            ? 403
           : message === "User is already in the group."
             ? 409
             : 400;

@@ -20,10 +20,16 @@ export type StoredUser = {
   avatarVisibility: "everyone" | "selected" | "nobody";
   bioVisibility: "everyone" | "selected" | "nobody";
   birthdayVisibility: "everyone" | "selected" | "nobody";
+  callVisibility: "everyone" | "selected" | "nobody";
+  forwardVisibility: "everyone" | "selected" | "nobody";
+  groupAddVisibility: "everyone" | "selected" | "nobody";
   lastSeenAllowedUserIds: string[];
   avatarAllowedUserIds: string[];
   bioAllowedUserIds: string[];
   birthdayAllowedUserIds: string[];
+  callAllowedUserIds: string[];
+  forwardAllowedUserIds: string[];
+  groupAddAllowedUserIds: string[];
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
@@ -42,10 +48,16 @@ export type PublicUser = {
   avatarVisibility: "everyone" | "selected" | "nobody";
   bioVisibility: "everyone" | "selected" | "nobody";
   birthdayVisibility: "everyone" | "selected" | "nobody";
+  callVisibility: "everyone" | "selected" | "nobody";
+  forwardVisibility: "everyone" | "selected" | "nobody";
+  groupAddVisibility: "everyone" | "selected" | "nobody";
   lastSeenAllowedUserIds: string[];
   avatarAllowedUserIds: string[];
   bioAllowedUserIds: string[];
   birthdayAllowedUserIds: string[];
+  callAllowedUserIds: string[];
+  forwardAllowedUserIds: string[];
+  groupAddAllowedUserIds: string[];
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
@@ -174,10 +186,16 @@ function createBotStoredUser(): StoredUser {
     avatarVisibility: "everyone",
     bioVisibility: "everyone",
     birthdayVisibility: "everyone",
+    callVisibility: "everyone",
+    forwardVisibility: "everyone",
+    groupAddVisibility: "everyone",
     lastSeenAllowedUserIds: [],
     avatarAllowedUserIds: [],
     bioAllowedUserIds: [],
     birthdayAllowedUserIds: [],
+    callAllowedUserIds: [],
+    forwardAllowedUserIds: [],
+    groupAddAllowedUserIds: [],
     lastSeenAt: now,
     avatarUrl: "",
     bannerUrl: "",
@@ -341,10 +359,16 @@ export function toPublicUser(user: StoredUser): PublicUser {
     avatarVisibility: user.avatarVisibility,
     bioVisibility: user.bioVisibility,
     birthdayVisibility: user.birthdayVisibility,
+    callVisibility: user.callVisibility,
+    forwardVisibility: user.forwardVisibility,
+    groupAddVisibility: user.groupAddVisibility,
     lastSeenAllowedUserIds: user.lastSeenAllowedUserIds,
     avatarAllowedUserIds: user.avatarAllowedUserIds,
     bioAllowedUserIds: user.bioAllowedUserIds,
     birthdayAllowedUserIds: user.birthdayAllowedUserIds,
+    callAllowedUserIds: user.callAllowedUserIds,
+    forwardAllowedUserIds: user.forwardAllowedUserIds,
+    groupAddAllowedUserIds: user.groupAddAllowedUserIds,
     lastSeenAt: user.lastSeenAt,
     avatarUrl: user.avatarUrl,
     bannerUrl: user.bannerUrl,
@@ -400,6 +424,66 @@ export function getActiveUserSanction(
 
 export function createEntityId(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
+}
+
+export function canUserBeAddedToGroupBy(
+  user: Pick<StoredUser, "id" | "groupAddVisibility" | "groupAddAllowedUserIds">,
+  actorUserId: string
+): boolean {
+  const normalizedActorId = actorUserId.trim();
+  if (!normalizedActorId) {
+    return false;
+  }
+  if (user.id === normalizedActorId) {
+    return true;
+  }
+  if (user.groupAddVisibility === "everyone") {
+    return true;
+  }
+  if (user.groupAddVisibility === "selected") {
+    return user.groupAddAllowedUserIds.includes(normalizedActorId);
+  }
+  return false;
+}
+
+export function canUserBeCalledBy(
+  user: Pick<StoredUser, "id" | "callVisibility" | "callAllowedUserIds">,
+  actorUserId: string
+): boolean {
+  const normalizedActorId = actorUserId.trim();
+  if (!normalizedActorId) {
+    return false;
+  }
+  if (user.id === normalizedActorId) {
+    return true;
+  }
+  if (user.callVisibility === "everyone") {
+    return true;
+  }
+  if (user.callVisibility === "selected") {
+    return user.callAllowedUserIds.includes(normalizedActorId);
+  }
+  return false;
+}
+
+export function canUserMessagesBeForwardedBy(
+  user: Pick<StoredUser, "id" | "forwardVisibility" | "forwardAllowedUserIds">,
+  actorUserId: string
+): boolean {
+  const normalizedActorId = actorUserId.trim();
+  if (!normalizedActorId) {
+    return false;
+  }
+  if (user.id === normalizedActorId) {
+    return true;
+  }
+  if (user.forwardVisibility === "everyone") {
+    return true;
+  }
+  if (user.forwardVisibility === "selected") {
+    return user.forwardAllowedUserIds.includes(normalizedActorId);
+  }
+  return false;
 }
 
 function isGroupRole(value: unknown): value is GroupRole {
@@ -601,6 +685,14 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       typeof user.birthdayVisibility === "string"
         ? user.birthdayVisibility.trim()
         : "";
+    const rawCallVisibility =
+      typeof user.callVisibility === "string" ? user.callVisibility.trim() : "";
+    const rawForwardVisibility =
+      typeof user.forwardVisibility === "string" ? user.forwardVisibility.trim() : "";
+    const rawGroupAddVisibility =
+      typeof user.groupAddVisibility === "string"
+        ? user.groupAddVisibility.trim()
+        : "";
     const lastSeenVisibility =
       rawLastSeenVisibility === "everyone" ||
       rawLastSeenVisibility === "selected" ||
@@ -634,7 +726,31 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
         ? rawBirthdayVisibility
         : rawBirthdayVisibility === "contacts"
           ? "selected"
-        : "everyone";
+          : "everyone";
+    const callVisibility =
+      rawCallVisibility === "everyone" ||
+      rawCallVisibility === "selected" ||
+      rawCallVisibility === "nobody"
+        ? rawCallVisibility
+        : rawCallVisibility === "contacts"
+          ? "selected"
+          : "everyone";
+    const forwardVisibility =
+      rawForwardVisibility === "everyone" ||
+      rawForwardVisibility === "selected" ||
+      rawForwardVisibility === "nobody"
+        ? rawForwardVisibility
+        : rawForwardVisibility === "contacts"
+          ? "selected"
+          : "everyone";
+    const groupAddVisibility =
+      rawGroupAddVisibility === "everyone" ||
+      rawGroupAddVisibility === "selected" ||
+      rawGroupAddVisibility === "nobody"
+        ? rawGroupAddVisibility
+        : rawGroupAddVisibility === "contacts"
+          ? "selected"
+          : "everyone";
     const lastSeenAllowedUserIds = sanitizeAllowedUserIds(
       user.lastSeenAllowedUserIds
     );
@@ -642,6 +758,13 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
     const bioAllowedUserIds = sanitizeAllowedUserIds(user.bioAllowedUserIds);
     const birthdayAllowedUserIds = sanitizeAllowedUserIds(
       user.birthdayAllowedUserIds
+    );
+    const callAllowedUserIds = sanitizeAllowedUserIds(user.callAllowedUserIds);
+    const forwardAllowedUserIds = sanitizeAllowedUserIds(
+      user.forwardAllowedUserIds
+    );
+    const groupAddAllowedUserIds = sanitizeAllowedUserIds(
+      user.groupAddAllowedUserIds
     );
     const showLastSeen = lastSeenVisibility !== "nobody";
     const lastSeenAt = normalizeNumber(user.lastSeenAt, 0);
@@ -668,10 +791,16 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       avatarVisibility,
       bioVisibility,
       birthdayVisibility,
+      callVisibility,
+      forwardVisibility,
+      groupAddVisibility,
       lastSeenAllowedUserIds,
       avatarAllowedUserIds,
       bioAllowedUserIds,
       birthdayAllowedUserIds,
+      callAllowedUserIds,
+      forwardAllowedUserIds,
+      groupAddAllowedUserIds,
       lastSeenAt,
       avatarUrl,
       bannerUrl,

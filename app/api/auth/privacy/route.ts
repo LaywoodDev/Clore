@@ -10,10 +10,16 @@ type PrivacyPayload = {
   avatarVisibility?: VisibilityScope;
   bioVisibility?: VisibilityScope;
   birthdayVisibility?: VisibilityScope;
+  callVisibility?: VisibilityScope;
+  forwardVisibility?: VisibilityScope;
+  groupAddVisibility?: VisibilityScope;
   lastSeenAllowedUserIds?: string[];
   avatarAllowedUserIds?: string[];
   bioAllowedUserIds?: string[];
   birthdayAllowedUserIds?: string[];
+  callAllowedUserIds?: string[];
+  forwardAllowedUserIds?: string[];
+  groupAddAllowedUserIds?: string[];
 };
 
 export async function PATCH(request: Request) {
@@ -23,6 +29,9 @@ export async function PATCH(request: Request) {
   const avatarVisibility = body?.avatarVisibility;
   const bioVisibility = body?.bioVisibility;
   const birthdayVisibility = body?.birthdayVisibility;
+  const callVisibility = body?.callVisibility;
+  const forwardVisibility = body?.forwardVisibility;
+  const groupAddVisibility = body?.groupAddVisibility;
   const lastSeenAllowedUserIds = Array.isArray(body?.lastSeenAllowedUserIds)
     ? body.lastSeenAllowedUserIds
     : [];
@@ -34,6 +43,15 @@ export async function PATCH(request: Request) {
     : [];
   const birthdayAllowedUserIds = Array.isArray(body?.birthdayAllowedUserIds)
     ? body.birthdayAllowedUserIds
+    : [];
+  const callAllowedUserIds = Array.isArray(body?.callAllowedUserIds)
+    ? body.callAllowedUserIds
+    : [];
+  const forwardAllowedUserIds = Array.isArray(body?.forwardAllowedUserIds)
+    ? body.forwardAllowedUserIds
+    : [];
+  const groupAddAllowedUserIds = Array.isArray(body?.groupAddAllowedUserIds)
+    ? body.groupAddAllowedUserIds
     : [];
   const isValidVisibility = (value: unknown): value is VisibilityScope =>
     value === "everyone" || value === "selected" || value === "nobody";
@@ -57,7 +75,10 @@ export async function PATCH(request: Request) {
     !isValidVisibility(lastSeenVisibility) ||
     !isValidVisibility(avatarVisibility) ||
     !isValidVisibility(bioVisibility) ||
-    !isValidVisibility(birthdayVisibility)
+    !isValidVisibility(birthdayVisibility) ||
+    !isValidVisibility(callVisibility) ||
+    !isValidVisibility(forwardVisibility) ||
+    !isValidVisibility(groupAddVisibility)
   ) {
     return NextResponse.json({ error: "Missing privacy fields." }, { status: 400 });
   }
@@ -72,10 +93,16 @@ export async function PATCH(request: Request) {
       target.avatarVisibility = avatarVisibility;
       target.bioVisibility = bioVisibility;
       target.birthdayVisibility = birthdayVisibility;
+      target.callVisibility = callVisibility;
+      target.forwardVisibility = forwardVisibility;
+      target.groupAddVisibility = groupAddVisibility;
       target.lastSeenAllowedUserIds = sanitizeAllowedUserIds(lastSeenAllowedUserIds);
       target.avatarAllowedUserIds = sanitizeAllowedUserIds(avatarAllowedUserIds);
       target.bioAllowedUserIds = sanitizeAllowedUserIds(bioAllowedUserIds);
       target.birthdayAllowedUserIds = sanitizeAllowedUserIds(birthdayAllowedUserIds);
+      target.callAllowedUserIds = sanitizeAllowedUserIds(callAllowedUserIds);
+      target.forwardAllowedUserIds = sanitizeAllowedUserIds(forwardAllowedUserIds);
+      target.groupAddAllowedUserIds = sanitizeAllowedUserIds(groupAddAllowedUserIds);
       target.showLastSeen = lastSeenVisibility !== "nobody";
       return target;
     });

@@ -316,6 +316,15 @@ function deleteUserFromStore(store: StoreData, targetUserId: string): void {
     user.birthdayAllowedUserIds = user.birthdayAllowedUserIds.filter(
       (userId) => userId !== targetUserId
     );
+    user.callAllowedUserIds = user.callAllowedUserIds.filter(
+      (userId) => userId !== targetUserId
+    );
+    user.forwardAllowedUserIds = user.forwardAllowedUserIds.filter(
+      (userId) => userId !== targetUserId
+    );
+    user.groupAddAllowedUserIds = user.groupAddAllowedUserIds.filter(
+      (userId) => userId !== targetUserId
+    );
   }
 
   delete store.userSanctions[targetUserId];

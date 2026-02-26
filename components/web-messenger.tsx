@@ -266,6 +266,26 @@ const ForwardUpIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const ViewsEyeIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+    <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+  </svg>
+);
+
 const CHAT_ACTION_MENU_CONTENT_CLASS_NAME =
   "w-56 rounded-2xl border border-zinc-700 bg-zinc-900/95 p-1 text-zinc-100 shadow-2xl ring-1 ring-foreground/5 backdrop-blur";
 const CHAT_ACTION_MENU_ITEM_CLASS_NAME =
@@ -278,6 +298,7 @@ const PROFILE_ACTION_MENU_CONTENT_CLASS_NAME =
 const PROFILE_ACTION_MENU_ITEM_CLASS_NAME =
   "cursor-pointer gap-2.5 rounded-xl px-3 py-2 text-sm font-medium !text-zinc-100 data-[highlighted]:!text-zinc-100 [&_svg]:text-zinc-300 data-[highlighted]:[&_svg]:!text-zinc-100";
 const PROFILE_ACTION_MENU_SEPARATOR_CLASS_NAME = "mx-1 bg-zinc-700/70";
+const PROFILE_AVATAR_VIEWER_IMAGE_ID = "profile-avatar";
 const EMPTY_USER_IDS: string[] = [];
 const PRIVACY_VISIBILITY_OPTIONS: PrivacyVisibility[] = [
   "everyone",
@@ -484,10 +505,16 @@ type WebMessengerProps = {
       | "avatarVisibility"
       | "bioVisibility"
       | "birthdayVisibility"
+      | "callVisibility"
+      | "forwardVisibility"
+      | "groupAddVisibility"
       | "lastSeenAllowedUserIds"
       | "avatarAllowedUserIds"
       | "bioAllowedUserIds"
       | "birthdayAllowedUserIds"
+      | "callAllowedUserIds"
+      | "forwardAllowedUserIds"
+      | "groupAddAllowedUserIds"
     >
   ) => void | Promise<void>;
 };
@@ -789,6 +816,9 @@ const translations = {
     avatarVisibility: "Who can see avatar",
     bioVisibility: "Who can see bio",
     birthdayVisibility: "Who can see birthday",
+    callVisibility: "Who can call you",
+    forwardVisibility: "Who can forward your messages",
+    groupAddVisibility: "Who can add you to groups",
     privacyScopeHint: "Set who can view this profile data",
     everyone: "Everyone",
     selected: "Selected people",
@@ -1094,6 +1124,9 @@ const translations = {
     avatarVisibility: "Кто видит аватар",
     bioVisibility: "Кто видит био",
     birthdayVisibility: "Кто видит день рождения",
+    callVisibility: "Кто может звонить вам",
+    forwardVisibility: "Кто может пересылать ваши сообщения",
+    groupAddVisibility: "Кто может добавлять вас в группы",
     privacyScopeHint: "Выберите, кто может видеть эти данные профиля",
     everyone: "Все",
     selected: "Выбранные люди",
@@ -2303,6 +2336,10 @@ export function WebMessenger({
   const [isShareContactDialogOpen, setIsShareContactDialogOpen] = useState(false);
   const [shareContactQuery, setShareContactQuery] = useState("");
   const [isSharingContact, setIsSharingContact] = useState(false);
+  const [messageViewsDialog, setMessageViewsDialog] = useState<{
+    count: number;
+    labels: string[];
+  } | null>(null);
   const [forwardMessageDraft, setForwardMessageDraft] = useState<ForwardMessageDraft | null>(
     null
   );
@@ -2466,7 +2503,9 @@ export function WebMessenger({
   const [isEmojiMenuOpen, setIsEmojiMenuOpen] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [viewerImageId, setViewerImageId] = useState<string | null>(null);
-  const [viewerSource, setViewerSource] = useState<"chat" | "profile">("chat");
+  const [viewerSource, setViewerSource] = useState<"chat" | "profile" | "profile-avatar">(
+    "chat"
+  );
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState(false);
   const [profile, setProfile] = useState<ProfileData>(() => ({
@@ -2702,7 +2741,7 @@ export function WebMessenger({
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("privacy");
   const [isChatPersonalizationOpen, setIsChatPersonalizationOpen] = useState(false);
   const [privacyPickerField, setPrivacyPickerField] = useState<
-    "lastSeen" | "avatar" | "bio" | "birthday" | null
+    "lastSeen" | "avatar" | "bio" | "birthday" | "call" | "forward" | "groupAdd" | null
   >(null);
   const [privacyPickerQuery, setPrivacyPickerQuery] = useState("");
   const orderedSidebarItems = useMemo(() => {
@@ -3345,6 +3384,18 @@ export function WebMessenger({
     currentUser.birthdayVisibility,
     "everyone"
   );
+  const currentCallVisibility = normalizePrivacyVisibility(
+    currentUser.callVisibility,
+    "everyone"
+  );
+  const currentForwardVisibility = normalizePrivacyVisibility(
+    currentUser.forwardVisibility,
+    "everyone"
+  );
+  const currentGroupAddVisibility = normalizePrivacyVisibility(
+    currentUser.groupAddVisibility,
+    "everyone"
+  );
   const currentLastSeenAllowedUserIds =
     currentUser.lastSeenAllowedUserIds ?? EMPTY_USER_IDS;
   const currentAvatarAllowedUserIds =
@@ -3352,6 +3403,11 @@ export function WebMessenger({
   const currentBioAllowedUserIds = currentUser.bioAllowedUserIds ?? EMPTY_USER_IDS;
   const currentBirthdayAllowedUserIds =
     currentUser.birthdayAllowedUserIds ?? EMPTY_USER_IDS;
+  const currentCallAllowedUserIds = currentUser.callAllowedUserIds ?? EMPTY_USER_IDS;
+  const currentForwardAllowedUserIds =
+    currentUser.forwardAllowedUserIds ?? EMPTY_USER_IDS;
+  const currentGroupAddAllowedUserIds =
+    currentUser.groupAddAllowedUserIds ?? EMPTY_USER_IDS;
   const availablePrivacyUsers = useMemo(
     () =>
       knownUsers.filter(
@@ -3379,7 +3435,10 @@ export function WebMessenger({
         | "lastSeenVisibility"
         | "avatarVisibility"
         | "bioVisibility"
-        | "birthdayVisibility",
+        | "birthdayVisibility"
+        | "callVisibility"
+        | "forwardVisibility"
+        | "groupAddVisibility",
       value: PrivacyVisibility
     ) => {
       const next = {
@@ -3387,10 +3446,16 @@ export function WebMessenger({
         avatarVisibility: currentAvatarVisibility,
         bioVisibility: currentBioVisibility,
         birthdayVisibility: currentBirthdayVisibility,
+        callVisibility: currentCallVisibility,
+        forwardVisibility: currentForwardVisibility,
+        groupAddVisibility: currentGroupAddVisibility,
         lastSeenAllowedUserIds: currentLastSeenAllowedUserIds,
         avatarAllowedUserIds: currentAvatarAllowedUserIds,
         bioAllowedUserIds: currentBioAllowedUserIds,
         birthdayAllowedUserIds: currentBirthdayAllowedUserIds,
+        callAllowedUserIds: currentCallAllowedUserIds,
+        forwardAllowedUserIds: currentForwardAllowedUserIds,
+        groupAddAllowedUserIds: currentGroupAddAllowedUserIds,
         [field]: value,
       };
       if (value !== "selected") {
@@ -3406,6 +3471,15 @@ export function WebMessenger({
         if (field === "birthdayVisibility") {
           next.birthdayAllowedUserIds = [];
         }
+        if (field === "callVisibility") {
+          next.callAllowedUserIds = [];
+        }
+        if (field === "forwardVisibility") {
+          next.forwardAllowedUserIds = [];
+        }
+        if (field === "groupAddVisibility") {
+          next.groupAddAllowedUserIds = [];
+        }
       }
       void onPrivacyUpdate?.(next);
     },
@@ -3414,6 +3488,12 @@ export function WebMessenger({
       currentAvatarAllowedUserIds,
       currentBirthdayVisibility,
       currentBirthdayAllowedUserIds,
+      currentCallVisibility,
+      currentCallAllowedUserIds,
+      currentForwardVisibility,
+      currentForwardAllowedUserIds,
+      currentGroupAddVisibility,
+      currentGroupAddAllowedUserIds,
       currentBioVisibility,
       currentBioAllowedUserIds,
       currentLastSeenVisibility,
@@ -3428,12 +3508,18 @@ export function WebMessenger({
         | "lastSeenAllowedUserIds"
         | "avatarAllowedUserIds"
         | "bioAllowedUserIds"
-        | "birthdayAllowedUserIds",
+        | "birthdayAllowedUserIds"
+        | "callAllowedUserIds"
+        | "forwardAllowedUserIds"
+        | "groupAddAllowedUserIds",
       visibilityField:
         | "lastSeenVisibility"
         | "avatarVisibility"
         | "bioVisibility"
-        | "birthdayVisibility",
+        | "birthdayVisibility"
+        | "callVisibility"
+        | "forwardVisibility"
+        | "groupAddVisibility",
       targetUserId: string
     ) => {
       const next = {
@@ -3441,10 +3527,16 @@ export function WebMessenger({
         avatarVisibility: currentAvatarVisibility,
         bioVisibility: currentBioVisibility,
         birthdayVisibility: currentBirthdayVisibility,
+        callVisibility: currentCallVisibility,
+        forwardVisibility: currentForwardVisibility,
+        groupAddVisibility: currentGroupAddVisibility,
         lastSeenAllowedUserIds: currentLastSeenAllowedUserIds,
         avatarAllowedUserIds: currentAvatarAllowedUserIds,
         bioAllowedUserIds: currentBioAllowedUserIds,
         birthdayAllowedUserIds: currentBirthdayAllowedUserIds,
+        callAllowedUserIds: currentCallAllowedUserIds,
+        forwardAllowedUserIds: currentForwardAllowedUserIds,
+        groupAddAllowedUserIds: currentGroupAddAllowedUserIds,
       };
       const currentIds = next[field];
       next[field] = currentIds.includes(targetUserId)
@@ -3458,6 +3550,12 @@ export function WebMessenger({
       currentAvatarAllowedUserIds,
       currentBirthdayVisibility,
       currentBirthdayAllowedUserIds,
+      currentCallVisibility,
+      currentCallAllowedUserIds,
+      currentForwardVisibility,
+      currentForwardAllowedUserIds,
+      currentGroupAddVisibility,
+      currentGroupAddAllowedUserIds,
       currentBioVisibility,
       currentBioAllowedUserIds,
       currentLastSeenVisibility,
@@ -3474,6 +3572,12 @@ export function WebMessenger({
           ? "bioAllowedUserIds"
       : privacyPickerField === "birthday"
           ? "birthdayAllowedUserIds"
+      : privacyPickerField === "call"
+          ? "callAllowedUserIds"
+      : privacyPickerField === "forward"
+          ? "forwardAllowedUserIds"
+      : privacyPickerField === "groupAdd"
+          ? "groupAddAllowedUserIds"
           : null;
   const pickerVisibilityField =
     privacyPickerField === "lastSeen"
@@ -3484,6 +3588,12 @@ export function WebMessenger({
           ? "bioVisibility"
       : privacyPickerField === "birthday"
           ? "birthdayVisibility"
+      : privacyPickerField === "call"
+          ? "callVisibility"
+      : privacyPickerField === "forward"
+          ? "forwardVisibility"
+      : privacyPickerField === "groupAdd"
+          ? "groupAddVisibility"
           : null;
   const pickerSelectedUserIds =
     privacyPickerField === "lastSeen"
@@ -3494,6 +3604,12 @@ export function WebMessenger({
           ? currentBioAllowedUserIds
       : privacyPickerField === "birthday"
           ? currentBirthdayAllowedUserIds
+      : privacyPickerField === "call"
+          ? currentCallAllowedUserIds
+      : privacyPickerField === "forward"
+          ? currentForwardAllowedUserIds
+      : privacyPickerField === "groupAdd"
+          ? currentGroupAddAllowedUserIds
           : [];
 
   useEffect(() => {
@@ -6294,13 +6410,15 @@ export function WebMessenger({
         targetChatIds.map((targetChatId) =>
           requestJson<{ messageId: string; createdAt: number }>("/api/messenger/send", {
             method: "POST",
-            body: JSON.stringify({
-              userId: currentUser.id,
-              chatId: targetChatId,
-              text,
-              attachments,
-            }),
-          })
+              body: JSON.stringify({
+                userId: currentUser.id,
+                chatId: targetChatId,
+                text,
+                attachments,
+                isForwarded: true,
+                forwardedMessageId: forwardMessageDraft.id,
+              }),
+            })
         )
       );
 
@@ -7952,7 +8070,23 @@ export function WebMessenger({
         })),
     [profileMediaItems]
   );
-  const viewerImages = viewerSource === "profile" ? profileMediaImages : activeChatImages;
+  const profileAvatarViewerImage = useMemo(
+    () =>
+      viewedProfile.avatarUrl
+        ? {
+            id: PROFILE_AVATAR_VIEWER_IMAGE_ID,
+            name: getMediaNameFromUrl(viewedProfile.avatarUrl),
+            url: viewedProfile.avatarUrl,
+          }
+        : null,
+    [viewedProfile.avatarUrl]
+  );
+  const viewerImages = useMemo(() => {
+    if (viewerSource === "profile-avatar") {
+      return profileAvatarViewerImage ? [profileAvatarViewerImage] : [];
+    }
+    return viewerSource === "profile" ? profileMediaImages : activeChatImages;
+  }, [activeChatImages, profileAvatarViewerImage, profileMediaImages, viewerSource]);
   const activeViewerIndex = useMemo(
     () =>
       viewerImageId
@@ -7968,7 +8102,7 @@ export function WebMessenger({
   }, []);
 
   const openImageViewer = useCallback(
-    (imageId: string, source: "chat" | "profile" = "chat") => {
+    (imageId: string, source: "chat" | "profile" | "profile-avatar" = "chat") => {
       setViewerSource(source);
       setViewerImageId(imageId);
     },
@@ -9770,6 +9904,17 @@ export function WebMessenger({
                         message.author !== "me";
                       const canOpenOriginalChat =
                         activeChat.isFavorites && Boolean(message.sourceChatId);
+                      const canShowViewsMenu =
+                        !activeChat.isFavorites &&
+                        activeChat.isGroup &&
+                        message.author === "me" &&
+                        message.groupReadByCount > 0;
+                      const viewsMenuLabel =
+                        language === "ru"
+                          ? `${message.groupReadByCount} просмотры`
+                          : `${message.groupReadByCount} ${
+                              message.groupReadByCount === 1 ? "view" : "views"
+                            }`;
                       const reply = message.reply;
                       const shouldShowUnreadDivider =
                         unreadDividerMessageId === message.id &&
@@ -9972,9 +10117,7 @@ export function WebMessenger({
                                   {!activeChat.isFavorites && message.author === "me" ? (
                                     activeChat.isGroup ? (
                                       message.groupReadByCount > 0 ? (
-                                        <span className="rounded-full border border-white/35 px-1.5 py-px text-[10px] font-medium text-white/90">
-                                          {`${t("readBy")} ${message.groupReadByCount}`}
-                                        </span>
+                                        <CheckCheck className="size-3 text-white/90" />
                                       ) : (
                                         <Check className="size-3" />
                                       )
@@ -9985,14 +10128,6 @@ export function WebMessenger({
                                     )
                                   ) : null}
                                 </div>
-                                {!activeChat.isFavorites &&
-                                message.author === "me" &&
-                                activeChat.isGroup &&
-                                message.groupReadByCount > 0 ? (
-                                  <p className="mt-1 truncate text-right text-[11px] text-zinc-100/70">
-                                    {`${t("readBy")}: ${message.groupReadByLabels.join(", ")}`}
-                                  </p>
-                                ) : null}
                                 </div>
                               </div>
                             </ContextMenuTrigger>
@@ -10022,7 +10157,27 @@ export function WebMessenger({
                                 {t("openOriginalChat")}
                               </ContextMenuItem>
                             ) : null}
-                            {canReplyToMessage || canOpenOriginalChat ? (
+                            {canShowViewsMenu &&
+                            (canReplyToMessage || canOpenOriginalChat) ? (
+                              <ContextMenuSeparator
+                                className={chatActionMenuSeparatorClassName}
+                              />
+                            ) : null}
+                            {canShowViewsMenu ? (
+                              <ContextMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() =>
+                                  setMessageViewsDialog({
+                                    count: message.groupReadByCount,
+                                    labels: message.groupReadByLabels,
+                                  })
+                                }
+                              >
+                                <ViewsEyeIcon className="size-4" />
+                                {viewsMenuLabel}
+                              </ContextMenuItem>
+                            ) : null}
+                            {canReplyToMessage || canOpenOriginalChat || canShowViewsMenu ? (
                               <ContextMenuSeparator
                                 className={chatActionMenuSeparatorClassName}
                               />
@@ -10625,18 +10780,31 @@ export function WebMessenger({
                     {viewedProfile.avatarUrl ? (
                       <span
                         className={`inline-flex size-24 shrink-0 rounded-full border-4 border-zinc-900 bg-zinc-800 bg-cover bg-center sm:size-28 ${
-                          canEditViewedProfileImages ? "cursor-pointer" : ""
+                          canEditViewedProfileImages ||
+                          (!isOwnProfile && Boolean(viewedProfile.avatarUrl))
+                            ? "cursor-pointer"
+                            : ""
                         }`}
                         style={{ backgroundImage: `url(${viewedProfile.avatarUrl})` }}
                         aria-label={`${viewedProfile.name} avatar`}
-                        onClick={() => openImagePickerDialog("avatar")}
+                        onClick={() => {
+                          if (canEditViewedProfileImages) {
+                            openImagePickerDialog("avatar");
+                            return;
+                          }
+                          openImageViewer(PROFILE_AVATAR_VIEWER_IMAGE_ID, "profile-avatar");
+                        }}
                       />
                     ) : (
                       <span
                         className={`inline-flex size-24 items-center justify-center rounded-full border-4 border-zinc-900 bg-primary text-2xl font-semibold text-zinc-50 sm:size-28 ${
                           canEditViewedProfileImages ? "cursor-pointer" : ""
                         }`}
-                        onClick={() => openImagePickerDialog("avatar")}
+                        onClick={() => {
+                          if (canEditViewedProfileImages) {
+                            openImagePickerDialog("avatar");
+                          }
+                        }}
                       >
                         {profileInitials || "LW"}
                       </span>
@@ -10965,19 +11133,6 @@ export function WebMessenger({
                                     </DropdownMenuContent>
                                   </DropdownMenu>
                                 ) : null}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200">
-                                  {`${t("yourRole")}: ${selectedGroupMyRole === "owner" ? t("owner") : selectedGroupMyRole === "admin" ? t("admin") : t("member")}`}
-                                </span>
-                                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">
-                                  {`${t("groupMembers")}: ${groupParticipants.length}`}
-                                </span>
-                                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-500">
-                                  {t("groupMembersLimitHint")}
-                                </span>
                               </div>
                             </div>
                             <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
@@ -11420,6 +11575,186 @@ export function WebMessenger({
                                 type="button"
                                 onClick={() => {
                                   setPrivacyPickerField("birthday");
+                                  setPrivacyPickerQuery("");
+                                }}
+                                className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
+                              >
+                                {t("choosePeople")}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4">
+                        <p className="text-sm font-medium text-zinc-100">
+                          {t("groupAddVisibility")}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
+                        <div className="mt-3">
+                          <Select
+                            value={currentGroupAddVisibility}
+                            onValueChange={(value) => {
+                              if (
+                                value === "everyone" ||
+                                value === "selected" ||
+                                value === "nobody"
+                              ) {
+                                updatePrivacyVisibility("groupAddVisibility", value);
+                                if (value === "selected") {
+                                  setPrivacyPickerField("groupAdd");
+                                  setPrivacyPickerQuery("");
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger className={`h-10 w-full ${unifiedSelectTriggerClassName}`}>
+                              <SelectValue className="text-zinc-100">
+                                {(value) => getPrivacyVisibilityLabel(value)}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className={unifiedSelectContentClassName}>
+                              {privacyVisibilityOptions.map((scope) => (
+                                <SelectItem
+                                  key={`group-add-${scope}`}
+                                  value={scope}
+                                  className={unifiedSelectItemClassName}
+                                >
+                                  {t(scope)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {currentGroupAddVisibility === "selected" ? (
+                          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 p-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-zinc-300">
+                                {`${t("selectedPeople")}: ${currentGroupAddAllowedUserIds.length}`}
+                              </p>
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  setPrivacyPickerField("groupAdd");
+                                  setPrivacyPickerQuery("");
+                                }}
+                                className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
+                              >
+                                {t("choosePeople")}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4">
+                        <p className="text-sm font-medium text-zinc-100">
+                          {t("callVisibility")}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
+                        <div className="mt-3">
+                          <Select
+                            value={currentCallVisibility}
+                            onValueChange={(value) => {
+                              if (
+                                value === "everyone" ||
+                                value === "selected" ||
+                                value === "nobody"
+                              ) {
+                                updatePrivacyVisibility("callVisibility", value);
+                                if (value === "selected") {
+                                  setPrivacyPickerField("call");
+                                  setPrivacyPickerQuery("");
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger className={`h-10 w-full ${unifiedSelectTriggerClassName}`}>
+                              <SelectValue className="text-zinc-100">
+                                {(value) => getPrivacyVisibilityLabel(value)}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className={unifiedSelectContentClassName}>
+                              {privacyVisibilityOptions.map((scope) => (
+                                <SelectItem
+                                  key={`call-${scope}`}
+                                  value={scope}
+                                  className={unifiedSelectItemClassName}
+                                >
+                                  {t(scope)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {currentCallVisibility === "selected" ? (
+                          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 p-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-zinc-300">
+                                {`${t("selectedPeople")}: ${currentCallAllowedUserIds.length}`}
+                              </p>
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  setPrivacyPickerField("call");
+                                  setPrivacyPickerQuery("");
+                                }}
+                                className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
+                              >
+                                {t("choosePeople")}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4">
+                        <p className="text-sm font-medium text-zinc-100">
+                          {t("forwardVisibility")}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">{t("privacyScopeHint")}</p>
+                        <div className="mt-3">
+                          <Select
+                            value={currentForwardVisibility}
+                            onValueChange={(value) => {
+                              if (
+                                value === "everyone" ||
+                                value === "selected" ||
+                                value === "nobody"
+                              ) {
+                                updatePrivacyVisibility("forwardVisibility", value);
+                                if (value === "selected") {
+                                  setPrivacyPickerField("forward");
+                                  setPrivacyPickerQuery("");
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger className={`h-10 w-full ${unifiedSelectTriggerClassName}`}>
+                              <SelectValue className="text-zinc-100">
+                                {(value) => getPrivacyVisibilityLabel(value)}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className={unifiedSelectContentClassName}>
+                              {privacyVisibilityOptions.map((scope) => (
+                                <SelectItem
+                                  key={`forward-${scope}`}
+                                  value={scope}
+                                  className={unifiedSelectItemClassName}
+                                >
+                                  {t(scope)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {currentForwardVisibility === "selected" ? (
+                          <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 p-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-zinc-300">
+                                {`${t("selectedPeople")}: ${currentForwardAllowedUserIds.length}`}
+                              </p>
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  setPrivacyPickerField("forward");
                                   setPrivacyPickerQuery("");
                                 }}
                                 className="h-8 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700"
@@ -12028,6 +12363,46 @@ export function WebMessenger({
                 ? t("deleteFavoritesAction")
                 : t("deleteChatAction")}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={messageViewsDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMessageViewsDialog(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {messageViewsDialog
+                ? language === "ru"
+                  ? `${messageViewsDialog.count} просмотры`
+                  : `${messageViewsDialog.count} ${
+                      messageViewsDialog.count === 1 ? "view" : "views"
+                    }`
+                : ""}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {language === "ru" ? "Кто прочитал это сообщение" : "Who read this message"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+            {messageViewsDialog?.labels.map((viewerName, viewerIndex) => (
+              <div
+                key={`message-viewer-dialog-${viewerIndex}`}
+                className="rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-100"
+              >
+                <span className="truncate">{viewerName}</span>
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:!text-zinc-100">
+              {t("cancel")}
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -12835,6 +13210,12 @@ export function WebMessenger({
                   ? t("avatarVisibility")
                 : privacyPickerField === "birthday"
                   ? t("birthdayVisibility")
+                : privacyPickerField === "call"
+                  ? t("callVisibility")
+                : privacyPickerField === "forward"
+                  ? t("forwardVisibility")
+                : privacyPickerField === "groupAdd"
+                  ? t("groupAddVisibility")
                   : t("bioVisibility")}
             </AlertDialogTitle>
             <AlertDialogDescription className="hidden" />

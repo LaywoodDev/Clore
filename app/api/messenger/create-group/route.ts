@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  canUserBeAddedToGroupBy,
   createEntityId,
   type StoredChatThread,
   updateStore,
@@ -74,6 +75,15 @@ export async function POST(request: Request) {
       if (!hasAllUsers) {
         throw new Error("User not found.");
       }
+      for (const memberId of memberIds) {
+        const member = store.users.find((user) => user.id === memberId);
+        if (!member) {
+          throw new Error("User not found.");
+        }
+        if (!canUserBeAddedToGroupBy(member, userId)) {
+          throw new Error("One or more users do not allow adding to groups.");
+        }
+      }
       const normalizedTitle = title.toLowerCase();
       const memberIdsSorted = [...memberSet].sort();
       const duplicateThread = store.threads.find((thread) => {
@@ -135,6 +145,8 @@ export async function POST(request: Request) {
     const status =
       message === "User not found."
         ? 404
+        : message === "One or more users do not allow adding to groups."
+          ? 403
         : message === "A group with the same title and members already exists."
           ? 409
           : message.includes("Group title") || message.includes("members")

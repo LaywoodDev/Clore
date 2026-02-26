@@ -13,10 +13,16 @@ export type AuthUser = {
   avatarVisibility: PrivacyVisibility;
   bioVisibility: PrivacyVisibility;
   birthdayVisibility: PrivacyVisibility;
+  callVisibility: PrivacyVisibility;
+  forwardVisibility: PrivacyVisibility;
+  groupAddVisibility: PrivacyVisibility;
   lastSeenAllowedUserIds: string[];
   avatarAllowedUserIds: string[];
   bioAllowedUserIds: string[];
   birthdayAllowedUserIds: string[];
+  callAllowedUserIds: string[];
+  forwardAllowedUserIds: string[];
+  groupAddAllowedUserIds: string[];
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  canUserBeCalledBy,
   createEntityId,
   getStore,
   type StoredCallSignal,
@@ -71,9 +72,13 @@ export async function POST(request: Request) {
       store.callSignals = pruneExpiredSignals(store.callSignals);
 
       const hasSender = store.users.some((user) => user.id === userId);
-      const hasTarget = store.users.some((user) => user.id === toUserId);
+      const targetUser = store.users.find((user) => user.id === toUserId);
+      const hasTarget = Boolean(targetUser);
       if (!hasSender || !hasTarget) {
         throw new Error("User not found.");
+      }
+      if (type === "offer" && targetUser && !canUserBeCalledBy(targetUser, userId)) {
+        throw new Error("User does not allow calls from you.");
       }
 
       const thread = store.threads.find(
@@ -106,6 +111,8 @@ export async function POST(request: Request) {
         ? 404
         : message === "Chat not found."
           ? 404
+          : message === "User does not allow calls from you."
+            ? 403
           : 400;
     return NextResponse.json({ error: message }, { status });
   }

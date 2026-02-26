@@ -515,10 +515,16 @@ export function AuthGate() {
       | "avatarVisibility"
       | "bioVisibility"
       | "birthdayVisibility"
+      | "callVisibility"
+      | "forwardVisibility"
+      | "groupAddVisibility"
       | "lastSeenAllowedUserIds"
       | "avatarAllowedUserIds"
       | "bioAllowedUserIds"
       | "birthdayAllowedUserIds"
+      | "callAllowedUserIds"
+      | "forwardAllowedUserIds"
+      | "groupAddAllowedUserIds"
     >
   ) => {
     const userId = currentUser?.id;

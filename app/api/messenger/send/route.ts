@@ -4,6 +4,7 @@ import { getAiProviderConfig } from "@/lib/server/ai-provider";
 import { assertUserCanSendMessages } from "@/lib/server/admin";
 import {
   BOT_USER_ID,
+  canUserMessagesBeForwardedBy,
   createEntityId,
   isBotUserId,
   type StoredChatAttachment,
@@ -24,6 +25,8 @@ type SendPayload = {
   text?: string;
   attachments?: SendAttachmentPayload[];
   replyToMessageId?: string;
+  isForwarded?: boolean;
+  forwardedMessageId?: string;
 };
 
 type BotConversationMessage = {
@@ -186,6 +189,8 @@ export async function POST(request: Request) {
   const chatId = body?.chatId?.trim() ?? "";
   const text = body?.text?.trim() ?? "";
   const replyToMessageId = body?.replyToMessageId?.trim() ?? "";
+  const isForwarded = body?.isForwarded === true;
+  const forwardedMessageId = body?.forwardedMessageId?.trim() ?? "";
   const attachmentsRaw = Array.isArray(body?.attachments) ? body.attachments : [];
   const attachments: StoredChatAttachment[] = attachmentsRaw
     .map((attachment) => {
@@ -266,6 +271,36 @@ export async function POST(request: Request) {
             if (senderBlockedPeer || peerBlockedSender) {
               throw new Error("Cannot send message because one of users is blocked.");
             }
+          }
+        }
+        if (isForwarded) {
+          if (!forwardedMessageId) {
+            throw new Error("Missing forwarded source.");
+          }
+          const sourceMessage = store.messages.find(
+            (candidate) => candidate.id === forwardedMessageId
+          );
+          if (!sourceMessage) {
+            throw new Error("Forward source not found.");
+          }
+          const sourceThread = store.threads.find(
+            (candidate) => candidate.id === sourceMessage.chatId
+          );
+          const canAccessSource =
+            sourceMessage.authorId === userId ||
+            (sourceThread?.memberIds.includes(userId) ?? false) ||
+            (sourceMessage.savedBy?.[userId] ?? 0) > 0;
+          if (!canAccessSource) {
+            throw new Error("Forward source not found.");
+          }
+          const sourceAuthor = store.users.find(
+            (candidate) => candidate.id === sourceMessage.authorId
+          );
+          if (!sourceAuthor) {
+            throw new Error("User not found.");
+          }
+          if (!canUserMessagesBeForwardedBy(sourceAuthor, userId)) {
+            throw new Error("User does not allow forwarding their messages.");
           }
         }
         if (replyToMessageId) {
@@ -381,9 +416,11 @@ export async function POST(request: Request) {
     const status =
       message === "Chat not found." ||
       message === "Reply target not found." ||
-      message === "User not found."
+      message === "User not found." ||
+      message === "Forward source not found."
         ? 404
         : message === "Cannot send message because one of users is blocked." ||
+            message === "User does not allow forwarding their messages." ||
             message.startsWith("You are muted until") ||
             message.startsWith("Your account is suspended until")
           ? 403
