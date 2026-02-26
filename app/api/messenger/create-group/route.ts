@@ -11,11 +11,11 @@ type CreateGroupPayload = {
   userId?: string;
   title?: string;
   memberIds?: string[];
+  kind?: "group" | "channel";
 };
 
 const GROUP_TITLE_MIN_LENGTH = 3;
 const GROUP_TITLE_MAX_LENGTH = 64;
-const GROUP_MIN_OTHER_MEMBERS = 2;
 const GROUP_MAX_MEMBERS = 50;
 
 function normalizeGroupTitle(value: string): string {
@@ -25,7 +25,8 @@ function normalizeGroupTitle(value: string): string {
 function getValidationError(
   userId: string,
   title: string,
-  memberIds: string[]
+  memberIds: string[],
+  kind: "group" | "channel"
 ): string | null {
   if (!userId) {
     return "Missing user ID.";
@@ -36,8 +37,8 @@ function getValidationError(
   if (title.length > GROUP_TITLE_MAX_LENGTH) {
     return `Group title must be at most ${GROUP_TITLE_MAX_LENGTH} characters.`;
   }
-  if (memberIds.length < GROUP_MIN_OTHER_MEMBERS) {
-    return `At least ${GROUP_MIN_OTHER_MEMBERS} other members are required.`;
+  if (kind === "channel" && memberIds.length > 0) {
+    return "Channels cannot include members on creation.";
   }
   if (memberIds.length + 1 > GROUP_MAX_MEMBERS) {
     return `Group cannot have more than ${GROUP_MAX_MEMBERS} members.`;
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as CreateGroupPayload | null;
   const userId = body?.userId?.trim() ?? "";
   const title = normalizeGroupTitle(body?.title ?? "");
+  const kind: "group" | "channel" = body?.kind === "channel" ? "channel" : "group";
   const memberIdsRaw = Array.isArray(body?.memberIds) ? body.memberIds : [];
   const memberIds = [
     ...new Set(
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
     ),
   ];
 
-  const validationError = getValidationError(userId, title, memberIds);
+  const validationError = getValidationError(userId, title, memberIds, kind);
   if (validationError) {
     return NextResponse.json(
       { error: validationError },
@@ -88,6 +90,9 @@ export async function POST(request: Request) {
       const memberIdsSorted = [...memberSet].sort();
       const duplicateThread = store.threads.find((thread) => {
         if (thread.threadType !== "group") {
+          return false;
+        }
+        if ((thread.groupKind ?? "group") !== kind) {
           return false;
         }
         const threadNormalizedTitle = thread.title.trim().replace(/\s+/g, " ").toLowerCase();
@@ -121,6 +126,7 @@ export async function POST(request: Request) {
         id: createEntityId("chat"),
         memberIds: [...memberSet],
         threadType: "group",
+        groupKind: kind,
         title,
         description: "",
         avatarUrl: "",
@@ -147,6 +153,8 @@ export async function POST(request: Request) {
         ? 404
         : message === "One or more users do not allow adding to groups."
           ? 403
+        : message === "Channels cannot include members on creation."
+          ? 422
         : message === "A group with the same title and members already exists."
           ? 409
           : message.includes("Group title") || message.includes("members")

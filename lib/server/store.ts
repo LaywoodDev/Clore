@@ -64,11 +64,13 @@ export type PublicUser = {
 };
 
 export type GroupRole = "owner" | "admin" | "member";
+export type GroupKind = "group" | "channel";
 
 export type StoredChatThread = {
   id: string;
   memberIds: string[];
   threadType: "direct" | "group";
+  groupKind?: GroupKind;
   title: string;
   description: string;
   avatarUrl: string;
@@ -91,6 +93,7 @@ export type StoredChatMessage = {
   attachments: StoredChatAttachment[];
   replyToMessageId: string;
   createdAt: number;
+  scheduledAt: number;
   editedAt: number;
   savedBy: Record<string, number>;
 };
@@ -831,16 +834,29 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       .filter(Boolean);
     const uniqueMemberIds = [...new Set(memberIds)];
 
-    if (!id || uniqueMemberIds.length < 2) {
+    if (!id || uniqueMemberIds.length === 0) {
       continue;
     }
 
-    const threadType =
+    const rawThreadType =
       thread.threadType === "group" || thread.threadType === "direct"
         ? thread.threadType
+        : null;
+    const threadType =
+      rawThreadType !== null
+        ? rawThreadType
         : uniqueMemberIds.length > 2
           ? "group"
           : "direct";
+    if (threadType === "direct" && uniqueMemberIds.length < 2) {
+      continue;
+    }
+    const groupKind: GroupKind | undefined =
+      threadType !== "group"
+        ? undefined
+        : thread.groupKind === "channel"
+          ? "channel"
+          : "group";
     const title = typeof thread.title === "string" ? thread.title.trim() : "";
     const description =
       typeof thread.description === "string" ? thread.description.trim() : "";
@@ -924,6 +940,7 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       id,
       memberIds: uniqueMemberIds,
       threadType,
+      groupKind,
       title,
       description,
       avatarUrl,
@@ -997,6 +1014,13 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
         ? message.replyToMessageId.trim()
         : "";
     const createdAt = normalizeNumber(message.createdAt, Date.now());
+    const scheduledAtRaw = normalizeNumber(message.scheduledAt, 0);
+    const scheduledAt =
+      Number.isFinite(scheduledAtRaw) &&
+      scheduledAtRaw > 0 &&
+      createdAt > Math.trunc(scheduledAtRaw)
+        ? Math.trunc(scheduledAtRaw)
+        : 0;
     const editedAt = normalizeNumber(message.editedAt, 0);
     const savedByRaw = asRecord(message.savedBy) ?? {};
     const savedBy: Record<string, number> = {};
@@ -1028,6 +1052,7 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
       attachments,
       replyToMessageId,
       createdAt,
+      scheduledAt,
       editedAt,
       savedBy,
     });

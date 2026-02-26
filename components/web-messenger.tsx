@@ -20,6 +20,7 @@ import {
   Bold,
   Check,
   CheckCheck,
+  Clock3,
   Copy,
   Download,
   Eraser,
@@ -81,7 +82,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -93,6 +103,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import ColorBends from "@/components/ui/color-bends";
 import Dither from "@/components/ui/dither";
+import GradientBlinds from "@/components/ui/gradient-blinds";
 import PixelBlast from "@/components/ui/pixel-blast";
 import Plasma from "@/components/ui/plasma";
 import { requestJson } from "@/components/messenger/api";
@@ -310,6 +321,7 @@ type StoredChatThread = {
   id: string;
   memberIds: string[];
   threadType: "direct" | "group";
+  groupKind?: "group" | "channel";
   title: string;
   description: string;
   avatarUrl: string;
@@ -332,6 +344,7 @@ type StoredChatMessage = {
   attachments: StoredChatAttachment[];
   replyToMessageId: string;
   createdAt: number;
+  scheduledAt: number;
   editedAt: number;
   savedBy: Record<string, number>;
 };
@@ -368,6 +381,7 @@ type RenderMessage = {
   author: "me" | "them";
   authorLabel: string;
   authorUsername: string;
+  authorAvatarUrl: string;
   text: string;
   time: string;
   createdAt: number;
@@ -385,6 +399,7 @@ type RenderMessage = {
   isFavorite: boolean;
   sourceChatId: string | null;
   sourceChatName: string;
+  isScheduledPending: boolean;
 };
 
 type ForwardMessageDraft = {
@@ -399,6 +414,7 @@ type ChatListItem = {
   memberIds: string[];
   groupRoles: Record<string, GroupRole>;
   isGroup: boolean;
+  groupKind: "group" | "channel" | null;
   isFavorites: boolean;
   isPreview: boolean;
   createdById: string;
@@ -472,7 +488,13 @@ type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
 type UiRadius = "sharp" | "normal" | "rounded";
 type UiFontFamily = "default" | "modern" | "readable" | "comfortaa";
-type ChatWallpaper = "none" | "color-bends" | "pixel-blast" | "plasma" | "dither";
+type ChatWallpaper =
+  | "none"
+  | "color-bends"
+  | "pixel-blast"
+  | "plasma"
+  | "dither"
+  | "gradient-blinds";
 type ChatWallpaperSetting = ChatWallpaper | "inherit";
 type ChatFontSizeSetting = UiFontSize | "inherit";
 type ChatPersonalization = {
@@ -490,6 +512,7 @@ type AiAssistantMessage = {
   error?: boolean;
 };
 type GroupRole = "owner" | "admin" | "member";
+type GroupKind = "group" | "channel";
 type TextFormattingAction = "bold" | "italic" | "strike" | "code" | "quote" | "list";
 
 type WebMessengerProps = {
@@ -538,6 +561,7 @@ const CHAT_WALLPAPER_OPTIONS: ChatWallpaper[] = [
   "pixel-blast",
   "plasma",
   "dither",
+  "gradient-blinds",
 ];
 const CHAT_WALLPAPER_BACKGROUNDS: Record<ChatWallpaper, string> = {
   none: "radial-gradient(circle at top, rgba(139,92,246,0.1), transparent 45%)",
@@ -545,6 +569,7 @@ const CHAT_WALLPAPER_BACKGROUNDS: Record<ChatWallpaper, string> = {
   "pixel-blast": "none",
   plasma: "none",
   dither: "none",
+  "gradient-blinds": "none",
 };
 const DEFAULT_CHAT_PERSONALIZATION: ChatPersonalization = {
   wallpaper: "inherit",
@@ -576,6 +601,7 @@ const initialProfile: ProfileData = {
 const LANGUAGE_STORAGE_KEY = "clore_app_language_v1";
 const PUSH_NOTIFICATIONS_STORAGE_KEY = "clore_push_notifications_v1";
 const MESSAGE_SOUND_STORAGE_KEY = "clore_message_sound_v1";
+const SEND_MESSAGE_SOUND_STORAGE_KEY = "clore_send_message_sound_v1";
 const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
 const UI_DENSITY_STORAGE_KEY = "clore_ui_density_v1";
 const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
@@ -598,6 +624,10 @@ const AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX =
 const AI_ASSISTANT_AGENT_MODE_STORAGE_KEY_PREFIX =
   "clore_ai_assistant_agent_mode_v1_";
 const INCOMING_MESSAGE_SOUND_PATH = "/sounds/meet-message-sound-1.mp3";
+const INCOMING_CALL_RINGTONE_PATH =
+  "/sounds/zapsplat_multimedia_ringtone_smartphone_mallet_musical_001_79295.mp3";
+const OUTGOING_MESSAGE_SOUND_PATH =
+  "/sounds/zapsplat_multimedia_button_click_003_78080.mp3";
 const MAX_PINNED_CHATS = 5;
 const MIN_BIRTH_YEAR = 1900;
 const ONLINE_STATUS_WINDOW_MS = 20_000;
@@ -607,6 +637,15 @@ const TYPING_PING_INTERVAL_MS = 2_500;
 const MESSAGE_APPEAR_ANIMATION_MS = 220;
 const MESSAGE_TARGET_HIGHLIGHT_MS = 1_200;
 const UNDO_WINDOW_MS = 5_000;
+const APP_VERSION = "beta 1.1.1";
+const SCHEDULE_MIN_LEAD_MS = 60_000;
+const SCHEDULE_DEFAULT_LEAD_MS = 60 * 60 * 1000;
+const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) =>
+  String(index).padStart(2, "0")
+);
+const SCHEDULE_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) =>
+  String(index).padStart(2, "0")
+);
 const GROUP_TITLE_MIN_LENGTH = 3;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_DESCRIPTION_MAX_LENGTH = 280;
@@ -641,6 +680,7 @@ const translations = {
     groupNameMinError: `Group name must be at least ${GROUP_TITLE_MIN_LENGTH} characters`,
     groupNameMaxError: `Group name must be at most ${GROUP_TITLE_MAX_LENGTH} characters`,
     groupMembersMinError: "Select at least 2 members",
+    groupMembersOptionalHint: "Adding members is optional",
     groupMembersLimitHint: `Up to ${GROUP_MAX_MEMBERS} members`,
     addMembers: "Add members",
     addMember: "Add",
@@ -812,6 +852,8 @@ const translations = {
     pushNotificationsHint: "Get notified about new messages",
     messageSound: "Message sound",
     messageSoundHint: "Play sound for incoming messages",
+    sendMessageSound: "Send sound",
+    sendMessageSoundHint: "Play sound when you send messages",
     hideLastSeen: "Hide last seen",
     hideLastSeenHint: "Others won't see when you were last online",
     lastSeenVisibility: "Who can see last seen",
@@ -849,7 +891,7 @@ const translations = {
     sidebarVisibilityHint: "Show or hide the main left sidebar",
     hideSidebar: "Hide sidebar",
     showSidebar: "Show sidebar",
-    russian: "Русский",
+    russian: "Р СѓСЃСЃРєРёР№",
     english: "English",
     you: "You",
     youLabel: "(you)",
@@ -893,6 +935,7 @@ const translations = {
     wallpaperPixelBlast: "Pixel Blast",
     wallpaperPlasma: "Plasma",
     wallpaperDither: "Dither",
+    wallpaperGradientBlinds: "Gradient Blinds",
     navigationTabs: "Navigation tabs",
     navigationTabsHint: "Choose which tabs are visible and their order",
     showTab: "Show tab",
@@ -930,319 +973,324 @@ const translations = {
     onboardingApply: "Apply",
   },
   ru: {
-    home: "Главная",
+    home: "Р“Р»Р°РІРЅР°СЏ",
     assistant: "AI",
-    profile: "Профиль",
-    settings: "Настройки",
-    chats: "Чаты",
-    searchChat: "Поиск чата",
-    searchAll: "Поиск по всему мессенджеру",
-    users: "Пользователи",
-    newGroup: "Новая группа",
-    groupName: "Название группы",
-    createGroup: "создать",
-    groupMembers: "Участники группы",
-    groupChat: "Групповой чат",
-    members: "участников",
-    participants: "Участники",
-    creator: "Создатель",
-    owner: "Владелец",
-    admin: "Админ",
-    member: "Участник",
-    yourRole: "Ваша роль",
-    renameGroup: "Переименовать группу",
-    groupNameMinError: `Название группы минимум ${GROUP_TITLE_MIN_LENGTH} символа`,
-    groupNameMaxError: `Название группы максимум ${GROUP_TITLE_MAX_LENGTH} символа`,
-    groupMembersMinError: "Выберите минимум 2 участников",
-    groupMembersLimitHint: `До ${GROUP_MAX_MEMBERS} участников`,
-    addMembers: "Добавить участников",
-    addMember: "Добавить",
-    removeMember: "Удалить участника",
-    promoteToAdmin: "Сделать админом",
-    demoteToMember: "Снять админа",
-    transferOwnership: "Передать владение",
-    openGroupSettings: "Открыть настройки",
-    hideGroupSettings: "Скрыть настройки",
-    groupRenamedToast: "Группа переименована",
-    memberAddedToast: "Участник добавлен",
-    memberRemovedToast: "Участник удален",
-    roleUpdatedToast: "Роль обновлена",
-    ownershipTransferredToast: "Владелец изменен",
-    readBy: "Прочитали",
-    noChatsOrUsersFound: "Чаты или пользователи не найдены",
-    noChatsYet: "Чатов пока нет. Зарегистрируйте другой аккаунт, чтобы начать переписку.",
-    yesterday: "Вчера",
-    unknownUser: "Неизвестный пользователь",
-    online: "Онлайн",
-    offline: "Не в сети",
-    lastSeenAt: "Был(а) в",
-    lastSeenHidden: "Последний вход скрыт",
-    typingNow: "Печатает...",
-    noMessagesYet: "Сообщений пока нет",
-    copyText: "Скопировать",
-    replyToMessage: "Ответить",
-    replyingTo: "Ответ на",
-    cancelReply: "Отменить ответ",
-    originalMessageUnavailable: "Исходное сообщение не найдено",
-    editMessage: "Редактировать",
-    editingMessage: "Редактирование сообщения",
-    cancelEdit: "Отменить редактирование",
-    saveEdit: "Сохранить",
-    editedLabel: "изменено",
-    copyAttachmentLink: "Скопировать ссылку вложения",
-    forwardMessageAction: "Переслать",
-    forwardMessageTitle: "Переслать сообщение",
-    selectChatsToForward: "Выберите чаты для пересылки",
-    forwardingMessage: "Пересылаемое сообщение",
-    forwarding: "Пересылка...",
-    messageForwarded: "Сообщение переслано",
-    messagesForwarded: "Сообщения пересланы",
-    messagesForwardedPartially: "Переслано частично",
-    saveToFavorites: "Сохранить в избранное",
-    removeFromFavorites: "Удалить из избранного",
-    favorites: "Избранное",
-    openFavorites: "Открыть избранное",
-    deleteFavoritesAction: "Удалить избранное",
-    favoritesDeleted: "Избранное удалено",
-    savedMessages: "Сохраненные сообщения",
-    fromChat: "Из чата",
-    openOriginalChat: "Открыть исходный чат",
-    deleteMessage: "Удалить сообщение",
-    pinChat: "Закрепить чат",
-    unpinChat: "Открепить чат",
-    muteChat: "Выключить уведомления",
-    unmuteChat: "Включить уведомления",
-    deleteForBoth: "Удалить у обоих",
-    deleteGroup: "Удалить группу",
-    leaveGroup: "Выйти из группы",
-    call: "Звонок",
-    videoCall: "Видеозвонок",
-    audioCallOnly: "Только аудио",
-    incomingCall: "Входящий звонок",
-    callingNow: "Звоним...",
-    connectingCall: "Соединение...",
-    inCall: "В звонке",
-    acceptCall: "Принять",
-    declineCall: "Отклонить",
-    endCall: "Завершить",
-    muteMic: "Выключить микрофон",
-    unmuteMic: "Включить микрофон",
-    muteSound: "Выключить звук",
-    unmuteSound: "Включить звук",
-    shareScreen: "Поделиться экраном",
-    stopShareScreen: "Остановить показ",
-    openFullscreenCall: "Открыть на весь экран",
-    closeFullscreenCall: "Выйти из полноэкранного",
-    callEnded: "Звонок завершен",
-    callDeclined: "Звонок отклонен",
-    callBusy: "Пользователь уже в другом звонке",
-    callFailed: "Не удалось начать звонок",
-    micAccessDenied: "Нет доступа к микрофону",
-    callBrowserNotSupported: "Браузер не поддерживает звонки",
-    screenShareNotSupported: "Браузер не поддерживает демонстрацию экрана",
-    screenShareFailed: "Не удалось начать демонстрацию экрана",
-    callDirectOnly: "Аудиозвонки доступны только в личных чатах",
-    menu: "Меню",
-    collapseSidebar: "Свернуть боковую панель",
-    expandSidebar: "Развернуть боковую панель",
-    searchInChat: "Поиск в чате",
-    deleteOptions: "Удаление",
-    clearHistoryForMe: "Очистить историю у меня",
-    historyClearedForMe: "История очищена только у вас",
-    noMessagesFound: "Сообщения не найдены",
-    unreadMessages: "Непрочитанные сообщения",
-    draftLabel: "Черновик",
+    profile: "РџСЂРѕС„РёР»СЊ",
+    settings: "РќР°СЃС‚СЂРѕР№РєРё",
+    chats: "Р§Р°С‚С‹",
+    searchChat: "РџРѕРёСЃРє С‡Р°С‚Р°",
+    searchAll: "РџРѕРёСЃРє РїРѕ РІСЃРµРјСѓ РјРµСЃСЃРµРЅРґР¶РµСЂСѓ",
+    users: "РџРѕР»СЊР·РѕРІР°С‚РµР»Рё",
+    newGroup: "РќРѕРІР°СЏ РіСЂСѓРїРїР°",
+    groupName: "РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹",
+    createGroup: "СЃРѕР·РґР°С‚СЊ",
+    groupMembers: "РЈС‡Р°СЃС‚РЅРёРєРё РіСЂСѓРїРїС‹",
+    groupChat: "Р“СЂСѓРїРїРѕРІРѕР№ С‡Р°С‚",
+    members: "СѓС‡Р°СЃС‚РЅРёРєРѕРІ",
+    participants: "РЈС‡Р°СЃС‚РЅРёРєРё",
+    creator: "РЎРѕР·РґР°С‚РµР»СЊ",
+    owner: "Р’Р»Р°РґРµР»РµС†",
+    admin: "РђРґРјРёРЅ",
+    member: "РЈС‡Р°СЃС‚РЅРёРє",
+    yourRole: "Р’Р°С€Р° СЂРѕР»СЊ",
+    renameGroup: "РџРµСЂРµРёРјРµРЅРѕРІР°С‚СЊ РіСЂСѓРїРїСѓ",
+    groupNameMinError: `РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹ РјРёРЅРёРјСѓРј ${GROUP_TITLE_MIN_LENGTH} СЃРёРјРІРѕР»Р°`,
+    groupNameMaxError: `РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹ РјР°РєСЃРёРјСѓРј ${GROUP_TITLE_MAX_LENGTH} СЃРёРјРІРѕР»Р°`,
+    groupMembersMinError: "Р’С‹Р±РµСЂРёС‚Рµ РјРёРЅРёРјСѓРј 2 СѓС‡Р°СЃС‚РЅРёРєРѕРІ",
+    groupMembersOptionalHint:
+      "\u0414\u043e\u0431\u0430\u0432\u043b\u044f\u0442\u044c \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u043e\u0432 \u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e",
+    groupMembersLimitHint: `Р”Рѕ ${GROUP_MAX_MEMBERS} СѓС‡Р°СЃС‚РЅРёРєРѕРІ`,
+    addMembers: "Р”РѕР±Р°РІРёС‚СЊ СѓС‡Р°СЃС‚РЅРёРєРѕРІ",
+    addMember: "Р”РѕР±Р°РІРёС‚СЊ",
+    removeMember: "РЈРґР°Р»РёС‚СЊ СѓС‡Р°СЃС‚РЅРёРєР°",
+    promoteToAdmin: "РЎРґРµР»Р°С‚СЊ Р°РґРјРёРЅРѕРј",
+    demoteToMember: "РЎРЅСЏС‚СЊ Р°РґРјРёРЅР°",
+    transferOwnership: "РџРµСЂРµРґР°С‚СЊ РІР»Р°РґРµРЅРёРµ",
+    openGroupSettings: "РћС‚РєСЂС‹С‚СЊ РЅР°СЃС‚СЂРѕР№РєРё",
+    hideGroupSettings: "РЎРєСЂС‹С‚СЊ РЅР°СЃС‚СЂРѕР№РєРё",
+    groupRenamedToast: "Р“СЂСѓРїРїР° РїРµСЂРµРёРјРµРЅРѕРІР°РЅР°",
+    memberAddedToast: "РЈС‡Р°СЃС‚РЅРёРє РґРѕР±Р°РІР»РµРЅ",
+    memberRemovedToast: "РЈС‡Р°СЃС‚РЅРёРє СѓРґР°Р»РµРЅ",
+    roleUpdatedToast: "Р РѕР»СЊ РѕР±РЅРѕРІР»РµРЅР°",
+    ownershipTransferredToast: "Р’Р»Р°РґРµР»РµС† РёР·РјРµРЅРµРЅ",
+    readBy: "РџСЂРѕС‡РёС‚Р°Р»Рё",
+    noChatsOrUsersFound: "Р§Р°С‚С‹ РёР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»Рё РЅРµ РЅР°Р№РґРµРЅС‹",
+    noChatsYet: "Р§Р°С‚РѕРІ РїРѕРєР° РЅРµС‚. Р—Р°СЂРµРіРёСЃС‚СЂРёСЂСѓР№С‚Рµ РґСЂСѓРіРѕР№ Р°РєРєР°СѓРЅС‚, С‡С‚РѕР±С‹ РЅР°С‡Р°С‚СЊ РїРµСЂРµРїРёСЃРєСѓ.",
+    yesterday: "Р’С‡РµСЂР°",
+    unknownUser: "РќРµРёР·РІРµСЃС‚РЅС‹Р№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ",
+    online: "РћРЅР»Р°Р№РЅ",
+    offline: "РќРµ РІ СЃРµС‚Рё",
+    lastSeenAt: "Р‘С‹Р»(Р°) РІ",
+    lastSeenHidden: "РџРѕСЃР»РµРґРЅРёР№ РІС…РѕРґ СЃРєСЂС‹С‚",
+    typingNow: "РџРµС‡Р°С‚Р°РµС‚...",
+    noMessagesYet: "РЎРѕРѕР±С‰РµРЅРёР№ РїРѕРєР° РЅРµС‚",
+    copyText: "РЎРєРѕРїРёСЂРѕРІР°С‚СЊ",
+    replyToMessage: "РћС‚РІРµС‚РёС‚СЊ",
+    replyingTo: "РћС‚РІРµС‚ РЅР°",
+    cancelReply: "РћС‚РјРµРЅРёС‚СЊ РѕС‚РІРµС‚",
+    originalMessageUnavailable: "РСЃС…РѕРґРЅРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ",
+    editMessage: "Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ",
+    editingMessage: "Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ СЃРѕРѕР±С‰РµРЅРёСЏ",
+    cancelEdit: "РћС‚РјРµРЅРёС‚СЊ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ",
+    saveEdit: "РЎРѕС…СЂР°РЅРёС‚СЊ",
+    editedLabel: "РёР·РјРµРЅРµРЅРѕ",
+    copyAttachmentLink: "РЎРєРѕРїРёСЂРѕРІР°С‚СЊ СЃСЃС‹Р»РєСѓ РІР»РѕР¶РµРЅРёСЏ",
+    forwardMessageAction: "РџРµСЂРµСЃР»Р°С‚СЊ",
+    forwardMessageTitle: "РџРµСЂРµСЃР»Р°С‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ",
+    selectChatsToForward: "Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚С‹ РґР»СЏ РїРµСЂРµСЃС‹Р»РєРё",
+    forwardingMessage: "РџРµСЂРµСЃС‹Р»Р°РµРјРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ",
+    forwarding: "РџРµСЂРµСЃС‹Р»РєР°...",
+    messageForwarded: "РЎРѕРѕР±С‰РµРЅРёРµ РїРµСЂРµСЃР»Р°РЅРѕ",
+    messagesForwarded: "РЎРѕРѕР±С‰РµРЅРёСЏ РїРµСЂРµСЃР»Р°РЅС‹",
+    messagesForwardedPartially: "РџРµСЂРµСЃР»Р°РЅРѕ С‡Р°СЃС‚РёС‡РЅРѕ",
+    saveToFavorites: "РЎРѕС…СЂР°РЅРёС‚СЊ РІ РёР·Р±СЂР°РЅРЅРѕРµ",
+    removeFromFavorites: "РЈРґР°Р»РёС‚СЊ РёР· РёР·Р±СЂР°РЅРЅРѕРіРѕ",
+    favorites: "РР·Р±СЂР°РЅРЅРѕРµ",
+    openFavorites: "РћС‚РєСЂС‹С‚СЊ РёР·Р±СЂР°РЅРЅРѕРµ",
+    deleteFavoritesAction: "РЈРґР°Р»РёС‚СЊ РёР·Р±СЂР°РЅРЅРѕРµ",
+    favoritesDeleted: "РР·Р±СЂР°РЅРЅРѕРµ СѓРґР°Р»РµРЅРѕ",
+    savedMessages: "РЎРѕС…СЂР°РЅРµРЅРЅС‹Рµ СЃРѕРѕР±С‰РµРЅРёСЏ",
+    fromChat: "РР· С‡Р°С‚Р°",
+    openOriginalChat: "РћС‚РєСЂС‹С‚СЊ РёСЃС…РѕРґРЅС‹Р№ С‡Р°С‚",
+    deleteMessage: "РЈРґР°Р»РёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ",
+    pinChat: "Р—Р°РєСЂРµРїРёС‚СЊ С‡Р°С‚",
+    unpinChat: "РћС‚РєСЂРµРїРёС‚СЊ С‡Р°С‚",
+    muteChat: "Р’С‹РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ",
+    unmuteChat: "Р’РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ",
+    deleteForBoth: "РЈРґР°Р»РёС‚СЊ Сѓ РѕР±РѕРёС…",
+    deleteGroup: "РЈРґР°Р»РёС‚СЊ РіСЂСѓРїРїСѓ",
+    leaveGroup: "Р’С‹Р№С‚Рё РёР· РіСЂСѓРїРїС‹",
+    call: "Р—РІРѕРЅРѕРє",
+    videoCall: "Р’РёРґРµРѕР·РІРѕРЅРѕРє",
+    audioCallOnly: "РўРѕР»СЊРєРѕ Р°СѓРґРёРѕ",
+    incomingCall: "Р’С…РѕРґСЏС‰РёР№ Р·РІРѕРЅРѕРє",
+    callingNow: "Р—РІРѕРЅРёРј...",
+    connectingCall: "РЎРѕРµРґРёРЅРµРЅРёРµ...",
+    inCall: "Р’ Р·РІРѕРЅРєРµ",
+    acceptCall: "РџСЂРёРЅСЏС‚СЊ",
+    declineCall: "РћС‚РєР»РѕРЅРёС‚СЊ",
+    endCall: "Р—Р°РІРµСЂС€РёС‚СЊ",
+    muteMic: "Р’С‹РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ",
+    unmuteMic: "Р’РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ",
+    muteSound: "Р’С‹РєР»СЋС‡РёС‚СЊ Р·РІСѓРє",
+    unmuteSound: "Р’РєР»СЋС‡РёС‚СЊ Р·РІСѓРє",
+    shareScreen: "РџРѕРґРµР»РёС‚СЊСЃСЏ СЌРєСЂР°РЅРѕРј",
+    stopShareScreen: "РћСЃС‚Р°РЅРѕРІРёС‚СЊ РїРѕРєР°Р·",
+    openFullscreenCall: "РћС‚РєСЂС‹С‚СЊ РЅР° РІРµСЃСЊ СЌРєСЂР°РЅ",
+    closeFullscreenCall: "Р’С‹Р№С‚Рё РёР· РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРіРѕ",
+    callEnded: "Р—РІРѕРЅРѕРє Р·Р°РІРµСЂС€РµРЅ",
+    callDeclined: "Р—РІРѕРЅРѕРє РѕС‚РєР»РѕРЅРµРЅ",
+    callBusy: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СѓР¶Рµ РІ РґСЂСѓРіРѕРј Р·РІРѕРЅРєРµ",
+    callFailed: "РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°С‡Р°С‚СЊ Р·РІРѕРЅРѕРє",
+    micAccessDenied: "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РјРёРєСЂРѕС„РѕРЅСѓ",
+    callBrowserNotSupported: "Р‘СЂР°СѓР·РµСЂ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ Р·РІРѕРЅРєРё",
+    screenShareNotSupported: "Р‘СЂР°СѓР·РµСЂ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РґРµРјРѕРЅСЃС‚СЂР°С†РёСЋ СЌРєСЂР°РЅР°",
+    screenShareFailed: "РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°С‡Р°С‚СЊ РґРµРјРѕРЅСЃС‚СЂР°С†РёСЋ СЌРєСЂР°РЅР°",
+    callDirectOnly: "РђСѓРґРёРѕР·РІРѕРЅРєРё РґРѕСЃС‚СѓРїРЅС‹ С‚РѕР»СЊРєРѕ РІ Р»РёС‡РЅС‹С… С‡Р°С‚Р°С…",
+    menu: "РњРµРЅСЋ",
+    collapseSidebar: "РЎРІРµСЂРЅСѓС‚СЊ Р±РѕРєРѕРІСѓСЋ РїР°РЅРµР»СЊ",
+    expandSidebar: "Р Р°Р·РІРµСЂРЅСѓС‚СЊ Р±РѕРєРѕРІСѓСЋ РїР°РЅРµР»СЊ",
+    searchInChat: "РџРѕРёСЃРє РІ С‡Р°С‚Рµ",
+    deleteOptions: "РЈРґР°Р»РµРЅРёРµ",
+    clearHistoryForMe: "РћС‡РёСЃС‚РёС‚СЊ РёСЃС‚РѕСЂРёСЋ Сѓ РјРµРЅСЏ",
+    historyClearedForMe: "РСЃС‚РѕСЂРёСЏ РѕС‡РёС‰РµРЅР° С‚РѕР»СЊРєРѕ Сѓ РІР°СЃ",
+    noMessagesFound: "РЎРѕРѕР±С‰РµРЅРёСЏ РЅРµ РЅР°Р№РґРµРЅС‹",
+    unreadMessages: "РќРµРїСЂРѕС‡РёС‚Р°РЅРЅС‹Рµ СЃРѕРѕР±С‰РµРЅРёСЏ",
+    draftLabel: "Р§РµСЂРЅРѕРІРёРє",
     searchAdvancedHint:
-      "Фильтры: from:@username has:attachment|image|video|audio|file on:YYYY-MM-DD before:YYYY-MM-DD after:YYYY-MM-DD",
-    jumpToDate: "К дате",
-    date: "Дата",
-    deleteChatAction: "Удалить чат",
-    deleteChatConfirmTitle: "Удалить этот чат?",
+      "Р¤РёР»СЊС‚СЂС‹: from:@username has:attachment|image|video|audio|file on:YYYY-MM-DD before:YYYY-MM-DD after:YYYY-MM-DD",
+    jumpToDate: "Рљ РґР°С‚Рµ",
+    date: "Р”Р°С‚Р°",
+    deleteChatAction: "РЈРґР°Р»РёС‚СЊ С‡Р°С‚",
+    deleteChatConfirmTitle: "РЈРґР°Р»РёС‚СЊ СЌС‚РѕС‚ С‡Р°С‚?",
     deleteChatConfirmDescription:
-      "Это действие удалит чат у всех участников. После удаления можно отменить в течение нескольких секунд.",
-    typeMessage: "Введите сообщение...",
-    formattingHint: "Форматирование",
-    formattingHotkeyHint: "Enter отправить, Shift+Enter новая строка",
-    formatBold: "Жирный",
-    formatItalic: "Курсив",
-    formatStrike: "Зачеркнутый",
-    formatCode: "Код",
-    formatQuote: "Цитата",
-    formatList: "Список",
-    attachFiles: "Прикрепить файлы",
-    voiceMessage: "Голосовое сообщение",
-    startVoiceRecording: "Начать запись",
-    stopVoiceRecording: "Остановить запись",
-    cancelVoiceRecording: "Отменить запись",
-    recordingVoice: "Идет запись",
-    voiceBrowserNotSupported: "Голосовые сообщения не поддерживаются в этом браузере",
-    voiceMessageCaptured: "Голосовое сообщение добавлено",
-    send: "Отправить",
-    attachment: "Вложение",
-    removeAttachment: "Удалить вложение",
-    undo: "Отменить",
-    messageDeleted: "Сообщение удалено",
-    chatDeleted: "Чат удален",
-    chatMutedToast: "Чат заглушен",
-    chatUnmutedToast: "Звук чата включен",
-    actionFailed: "Не удалось выполнить действие. Попробуйте снова.",
-    previousImage: "Предыдущее изображение",
-    nextImage: "Следующее изображение",
-    closeViewer: "Закрыть просмотр",
-    download: "Скачать",
-    selectChat: "Выберите чат",
-    openChat: "Открыть чат",
-    editProfile: "Редактировать профиль",
-    shareContact: "Поделиться контактом",
-    selectChatToShareContact: "Выберите чат, куда отправить контакт",
-    contactSharedToast: "Контакт отправлен",
-    sharingContact: "Отправка...",
-    blockUser: "Заблокировать",
-    unblockUser: "Разблокировать",
-    userBlockedToast: "Пользователь заблокирован",
-    userUnblockedToast: "Пользователь разблокирован",
-    cancel: "Отмена",
-    save: "Сохранить",
-    chatProfile: "Профиль чата",
-    name: "Имя",
-    username: "Юзернейм",
-    bio: "О себе",
+      "Р­С‚Рѕ РґРµР№СЃС‚РІРёРµ СѓРґР°Р»РёС‚ С‡Р°С‚ Сѓ РІСЃРµС… СѓС‡Р°СЃС‚РЅРёРєРѕРІ. РџРѕСЃР»Рµ СѓРґР°Р»РµРЅРёСЏ РјРѕР¶РЅРѕ РѕС‚РјРµРЅРёС‚СЊ РІ С‚РµС‡РµРЅРёРµ РЅРµСЃРєРѕР»СЊРєРёС… СЃРµРєСѓРЅРґ.",
+    typeMessage: "Р’РІРµРґРёС‚Рµ СЃРѕРѕР±С‰РµРЅРёРµ...",
+    formattingHint: "Р¤РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёРµ",
+    formattingHotkeyHint: "Enter РѕС‚РїСЂР°РІРёС‚СЊ, Shift+Enter РЅРѕРІР°СЏ СЃС‚СЂРѕРєР°",
+    formatBold: "Р–РёСЂРЅС‹Р№",
+    formatItalic: "РљСѓСЂСЃРёРІ",
+    formatStrike: "Р—Р°С‡РµСЂРєРЅСѓС‚С‹Р№",
+    formatCode: "РљРѕРґ",
+    formatQuote: "Р¦РёС‚Р°С‚Р°",
+    formatList: "РЎРїРёСЃРѕРє",
+    attachFiles: "РџСЂРёРєСЂРµРїРёС‚СЊ С„Р°Р№Р»С‹",
+    voiceMessage: "Р“РѕР»РѕСЃРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ",
+    startVoiceRecording: "РќР°С‡Р°С‚СЊ Р·Р°РїРёСЃСЊ",
+    stopVoiceRecording: "РћСЃС‚Р°РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃСЊ",
+    cancelVoiceRecording: "РћС‚РјРµРЅРёС‚СЊ Р·Р°РїРёСЃСЊ",
+    recordingVoice: "РРґРµС‚ Р·Р°РїРёСЃСЊ",
+    voiceBrowserNotSupported: "Р“РѕР»РѕСЃРѕРІС‹Рµ СЃРѕРѕР±С‰РµРЅРёСЏ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°СЋС‚СЃСЏ РІ СЌС‚РѕРј Р±СЂР°СѓР·РµСЂРµ",
+    voiceMessageCaptured: "Р“РѕР»РѕСЃРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ РґРѕР±Р°РІР»РµРЅРѕ",
+    send: "РћС‚РїСЂР°РІРёС‚СЊ",
+    attachment: "Р’Р»РѕР¶РµРЅРёРµ",
+    removeAttachment: "РЈРґР°Р»РёС‚СЊ РІР»РѕР¶РµРЅРёРµ",
+    undo: "РћС‚РјРµРЅРёС‚СЊ",
+    messageDeleted: "РЎРѕРѕР±С‰РµРЅРёРµ СѓРґР°Р»РµРЅРѕ",
+    chatDeleted: "Р§Р°С‚ СѓРґР°Р»РµРЅ",
+    chatMutedToast: "Р§Р°С‚ Р·Р°РіР»СѓС€РµРЅ",
+    chatUnmutedToast: "Р—РІСѓРє С‡Р°С‚Р° РІРєР»СЋС‡РµРЅ",
+    actionFailed: "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ. РџРѕРїСЂРѕР±СѓР№С‚Рµ СЃРЅРѕРІР°.",
+    previousImage: "РџСЂРµРґС‹РґСѓС‰РµРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ",
+    nextImage: "РЎР»РµРґСѓСЋС‰РµРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ",
+    closeViewer: "Р—Р°РєСЂС‹С‚СЊ РїСЂРѕСЃРјРѕС‚СЂ",
+    download: "РЎРєР°С‡Р°С‚СЊ",
+    selectChat: "Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚",
+    openChat: "РћС‚РєСЂС‹С‚СЊ С‡Р°С‚",
+    editProfile: "Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РїСЂРѕС„РёР»СЊ",
+    shareContact: "РџРѕРґРµР»РёС‚СЊСЃСЏ РєРѕРЅС‚Р°РєС‚РѕРј",
+    selectChatToShareContact: "Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚, РєСѓРґР° РѕС‚РїСЂР°РІРёС‚СЊ РєРѕРЅС‚Р°РєС‚",
+    contactSharedToast: "РљРѕРЅС‚Р°РєС‚ РѕС‚РїСЂР°РІР»РµРЅ",
+    sharingContact: "РћС‚РїСЂР°РІРєР°...",
+    blockUser: "Р—Р°Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ",
+    unblockUser: "Р Р°Р·Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ",
+    userBlockedToast: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅ",
+    userUnblockedToast: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЂР°Р·Р±Р»РѕРєРёСЂРѕРІР°РЅ",
+    cancel: "РћС‚РјРµРЅР°",
+    save: "РЎРѕС…СЂР°РЅРёС‚СЊ",
+    chatProfile: "РџСЂРѕС„РёР»СЊ С‡Р°С‚Р°",
+    name: "РРјСЏ",
+    username: "Р®Р·РµСЂРЅРµР№Рј",
+    bio: "Рћ СЃРµР±Рµ",
     clickAvatarHint:
-      "Нажмите на аватар, чтобы изменить. Рекомендуемый размер: 512x512 px (1:1).",
+      "РќР°Р¶РјРёС‚Рµ РЅР° Р°РІР°С‚Р°СЂ, С‡С‚РѕР±С‹ РёР·РјРµРЅРёС‚СЊ. Р РµРєРѕРјРµРЅРґСѓРµРјС‹Р№ СЂР°Р·РјРµСЂ: 512x512 px (1:1).",
     clickBannerHint:
-      "Нажмите на баннер, чтобы изменить. Рекомендуемый размер: 1500x500 px (3:1).",
+      "РќР°Р¶РјРёС‚Рµ РЅР° Р±Р°РЅРЅРµСЂ, С‡С‚РѕР±С‹ РёР·РјРµРЅРёС‚СЊ. Р РµРєРѕРјРµРЅРґСѓРµРјС‹Р№ СЂР°Р·РјРµСЂ: 1500x500 px (3:1).",
     profileActivityHint:
-      "Активность профиля формируется по истории чата и отображается в профилях других пользователей.",
-    messages: "Сообщения",
-    media: "Медиа",
-    audio: "Аудио",
-    links: "Ссылки",
-    noSharedActivity: "В этом чате пока нет общей активности.",
-    privacy: "Приватность",
-    security: "Безопасность",
-    appearance: "Оформление",
-    interface: "Интерфейс",
-    account: "Аккаунт",
-    pushNotifications: "Push-уведомления",
-    pushNotificationsHint: "Получать уведомления о новых сообщениях",
-    messageSound: "Звук сообщений",
-    messageSoundHint: "Проигрывать звук входящих сообщений",
-    hideLastSeen: "Скрыть последний вход",
-    hideLastSeenHint: "Другие не будут видеть время вашего последнего входа",
-    lastSeenVisibility: "Кто видит последний вход",
-    avatarVisibility: "Кто видит аватар",
-    bioVisibility: "Кто видит био",
-    birthdayVisibility: "Кто видит день рождения",
-    callVisibility: "Кто может звонить вам",
-    forwardVisibility: "Кто может пересылать ваши сообщения",
-    groupAddVisibility: "Кто может добавлять вас в группы",
-    privacyScopeHint: "Выберите, кто может видеть эти данные профиля",
-    everyone: "Все",
-    selected: "Выбранные люди",
-    nobody: "Никто",
-    selectedPeople: "Выбраны",
-    choosePeople: "Выбрать людей",
-    noSelectedPeople: "Пока никто не выбран",
-    pickPeopleHint: "Выберите конкретных пользователей для этого поля",
-    pinnedChats: "Закрепленные чаты",
-    allChats: "Все чаты",
-    logOut: "Выйти",
-    language: "Язык",
-    languageHint: "Выберите язык интерфейса",
+      "РђРєС‚РёРІРЅРѕСЃС‚СЊ РїСЂРѕС„РёР»СЏ С„РѕСЂРјРёСЂСѓРµС‚СЃСЏ РїРѕ РёСЃС‚РѕСЂРёРё С‡Р°С‚Р° Рё РѕС‚РѕР±СЂР°Р¶Р°РµС‚СЃСЏ РІ РїСЂРѕС„РёР»СЏС… РґСЂСѓРіРёС… РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№.",
+    messages: "РЎРѕРѕР±С‰РµРЅРёСЏ",
+    media: "РњРµРґРёР°",
+    audio: "РђСѓРґРёРѕ",
+    links: "РЎСЃС‹Р»РєРё",
+    noSharedActivity: "Р’ СЌС‚РѕРј С‡Р°С‚Рµ РїРѕРєР° РЅРµС‚ РѕР±С‰РµР№ Р°РєС‚РёРІРЅРѕСЃС‚Рё.",
+    privacy: "РџСЂРёРІР°С‚РЅРѕСЃС‚СЊ",
+    security: "Р‘РµР·РѕРїР°СЃРЅРѕСЃС‚СЊ",
+    appearance: "РћС„РѕСЂРјР»РµРЅРёРµ",
+    interface: "РРЅС‚РµСЂС„РµР№СЃ",
+    account: "РђРєРєР°СѓРЅС‚",
+    pushNotifications: "Push-СѓРІРµРґРѕРјР»РµРЅРёСЏ",
+    pushNotificationsHint: "РџРѕР»СѓС‡Р°С‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ Рѕ РЅРѕРІС‹С… СЃРѕРѕР±С‰РµРЅРёСЏС…",
+    messageSound: "Р—РІСѓРє СЃРѕРѕР±С‰РµРЅРёР№",
+    messageSoundHint: "РџСЂРѕРёРіСЂС‹РІР°С‚СЊ Р·РІСѓРє РІС…РѕРґСЏС‰РёС… СЃРѕРѕР±С‰РµРЅРёР№",
+    sendMessageSound: "Р—РІСѓРє РѕС‚РїСЂР°РІРєРё",
+    sendMessageSoundHint: "РџСЂРѕРёРіСЂС‹РІР°С‚СЊ Р·РІСѓРє РїСЂРё РѕС‚РїСЂР°РІРєРµ СЃРѕРѕР±С‰РµРЅРёР№",
+    hideLastSeen: "РЎРєСЂС‹С‚СЊ РїРѕСЃР»РµРґРЅРёР№ РІС…РѕРґ",
+    hideLastSeenHint: "Р”СЂСѓРіРёРµ РЅРµ Р±СѓРґСѓС‚ РІРёРґРµС‚СЊ РІСЂРµРјСЏ РІР°С€РµРіРѕ РїРѕСЃР»РµРґРЅРµРіРѕ РІС…РѕРґР°",
+    lastSeenVisibility: "РљС‚Рѕ РІРёРґРёС‚ РїРѕСЃР»РµРґРЅРёР№ РІС…РѕРґ",
+    avatarVisibility: "РљС‚Рѕ РІРёРґРёС‚ Р°РІР°С‚Р°СЂ",
+    bioVisibility: "РљС‚Рѕ РІРёРґРёС‚ Р±РёРѕ",
+    birthdayVisibility: "РљС‚Рѕ РІРёРґРёС‚ РґРµРЅСЊ СЂРѕР¶РґРµРЅРёСЏ",
+    callVisibility: "РљС‚Рѕ РјРѕР¶РµС‚ Р·РІРѕРЅРёС‚СЊ РІР°Рј",
+    forwardVisibility: "РљС‚Рѕ РјРѕР¶РµС‚ РїРµСЂРµСЃС‹Р»Р°С‚СЊ РІР°С€Рё СЃРѕРѕР±С‰РµРЅРёСЏ",
+    groupAddVisibility: "РљС‚Рѕ РјРѕР¶РµС‚ РґРѕР±Р°РІР»СЏС‚СЊ РІР°СЃ РІ РіСЂСѓРїРїС‹",
+    privacyScopeHint: "Р’С‹Р±РµСЂРёС‚Рµ, РєС‚Рѕ РјРѕР¶РµС‚ РІРёРґРµС‚СЊ СЌС‚Рё РґР°РЅРЅС‹Рµ РїСЂРѕС„РёР»СЏ",
+    everyone: "Р’СЃРµ",
+    selected: "Р’С‹Р±СЂР°РЅРЅС‹Рµ Р»СЋРґРё",
+    nobody: "РќРёРєС‚Рѕ",
+    selectedPeople: "Р’С‹Р±СЂР°РЅС‹",
+    choosePeople: "Р’С‹Р±СЂР°С‚СЊ Р»СЋРґРµР№",
+    noSelectedPeople: "РџРѕРєР° РЅРёРєС‚Рѕ РЅРµ РІС‹Р±СЂР°РЅ",
+    pickPeopleHint: "Р’С‹Р±РµСЂРёС‚Рµ РєРѕРЅРєСЂРµС‚РЅС‹С… РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ РґР»СЏ СЌС‚РѕРіРѕ РїРѕР»СЏ",
+    pinnedChats: "Р—Р°РєСЂРµРїР»РµРЅРЅС‹Рµ С‡Р°С‚С‹",
+    allChats: "Р’СЃРµ С‡Р°С‚С‹",
+    logOut: "Р’С‹Р№С‚Рё",
+    language: "РЇР·С‹Рє",
+    languageHint: "Р’С‹Р±РµСЂРёС‚Рµ СЏР·С‹Рє РёРЅС‚РµСЂС„РµР№СЃР°",
     theme: "\u0422\u0435\u043c\u0430",
     themeHint: "\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043c\u0435\u0436\u0434\u0443 \u0442\u0435\u043c\u043d\u043e\u0439 \u0438 \u0441\u0432\u0435\u0442\u043b\u043e\u0439 \u0442\u0435\u043c\u043e\u0439",
     themeDark: "\u0422\u0435\u043c\u043d\u0430\u044f",
     themeLight: "\u0421\u0432\u0435\u0442\u043b\u0430\u044f",
-    accentColor: "Акцентный цвет",
-    accentColorHint: "Выберите основной цвет кнопок и акцентов",
-    accentViolet: "Фиолетовый",
-    accentBlue: "Синий",
-    accentEmerald: "Изумрудный",
-    accentRose: "Розовый",
-    accentAmber: "Янтарный",
-    sidebarVisibility: "Сайдбар",
-    sidebarVisibilityHint: "Показывать или скрывать левый основной сайдбар",
-    hideSidebar: "Скрыть сайдбар",
-    showSidebar: "Показать сайдбар",
-    russian: "Русский",
-    english: "Английский",
-    you: "Вы",
-    youLabel: "(вы)",
-    remove: "Удалить",
-    changeFile: "Сменить файл",
-    avatarActions: "Действия с аватаром",
-    bannerActions: "Действия с баннером",
-    avatarActionsHint: "Выберите действие для изображения аватара.",
-    bannerActionsHint: "Выберите действие для изображения баннера.",
-    avatarSizeHint: "Рекомендуемый размер аватара: 512x512 px (1:1).",
-    bannerSizeHint: "Рекомендуемый размер баннера: 1500x500 px (3:1).",
-    syncConnected: "Синхронизация подключена",
-    syncReconnecting: "Переподключение синхронизации",
-    syncFallback: "Резервная синхронизация",
-    onboardingTitle: "Персонализируйте мессенджер",
-    onboardingDescription: "Выберите параметры по умолчанию. Позже их можно изменить в настройках.",
-    density: "Плотность интерфейса",
-    densityHint: "Управляет отступами и компактностью списков",
-    densityComfortable: "Обычная",
-    densityCompact: "Компактная",
-    fontSize: "Размер шрифта",
-    fontSizeHint: "Управляет размером текста в интерфейсе чата",
-    fontSizeSmall: "Маленький",
-    fontSizeDefault: "Стандартный",
-    fontSizeLarge: "Крупный",
-    fontFamily: "Семейство шрифта",
-    fontFamilyHint: "Управляет гарнитурой интерфейса",
-    fontFamilyDefault: "По умолчанию",
-    fontFamilyModern: "Современный",
-    fontFamilyReadable: "Читабельный",
+    accentColor: "РђРєС†РµРЅС‚РЅС‹Р№ С†РІРµС‚",
+    accentColorHint: "Р’С‹Р±РµСЂРёС‚Рµ РѕСЃРЅРѕРІРЅРѕР№ С†РІРµС‚ РєРЅРѕРїРѕРє Рё Р°РєС†РµРЅС‚РѕРІ",
+    accentViolet: "Р¤РёРѕР»РµС‚РѕРІС‹Р№",
+    accentBlue: "РЎРёРЅРёР№",
+    accentEmerald: "РР·СѓРјСЂСѓРґРЅС‹Р№",
+    accentRose: "Р РѕР·РѕРІС‹Р№",
+    accentAmber: "РЇРЅС‚Р°СЂРЅС‹Р№",
+    sidebarVisibility: "РЎР°Р№РґР±Р°СЂ",
+    sidebarVisibilityHint: "РџРѕРєР°Р·С‹РІР°С‚СЊ РёР»Рё СЃРєСЂС‹РІР°С‚СЊ Р»РµРІС‹Р№ РѕСЃРЅРѕРІРЅРѕР№ СЃР°Р№РґР±Р°СЂ",
+    hideSidebar: "РЎРєСЂС‹С‚СЊ СЃР°Р№РґР±Р°СЂ",
+    showSidebar: "РџРѕРєР°Р·Р°С‚СЊ СЃР°Р№РґР±Р°СЂ",
+    russian: "Р СѓСЃСЃРєРёР№",
+    english: "РђРЅРіР»РёР№СЃРєРёР№",
+    you: "Р’С‹",
+    youLabel: "(РІС‹)",
+    remove: "РЈРґР°Р»РёС‚СЊ",
+    changeFile: "РЎРјРµРЅРёС‚СЊ С„Р°Р№Р»",
+    avatarActions: "Р”РµР№СЃС‚РІРёСЏ СЃ Р°РІР°С‚Р°СЂРѕРј",
+    bannerActions: "Р”РµР№СЃС‚РІРёСЏ СЃ Р±Р°РЅРЅРµСЂРѕРј",
+    avatarActionsHint: "Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ РґР»СЏ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ Р°РІР°С‚Р°СЂР°.",
+    bannerActionsHint: "Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ РґР»СЏ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ Р±Р°РЅРЅРµСЂР°.",
+    avatarSizeHint: "Р РµРєРѕРјРµРЅРґСѓРµРјС‹Р№ СЂР°Р·РјРµСЂ Р°РІР°С‚Р°СЂР°: 512x512 px (1:1).",
+    bannerSizeHint: "Р РµРєРѕРјРµРЅРґСѓРµРјС‹Р№ СЂР°Р·РјРµСЂ Р±Р°РЅРЅРµСЂР°: 1500x500 px (3:1).",
+    syncConnected: "РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ РїРѕРґРєР»СЋС‡РµРЅР°",
+    syncReconnecting: "РџРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё",
+    syncFallback: "Р РµР·РµСЂРІРЅР°СЏ СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ",
+    onboardingTitle: "РџРµСЂСЃРѕРЅР°Р»РёР·РёСЂСѓР№С‚Рµ РјРµСЃСЃРµРЅРґР¶РµСЂ",
+    onboardingDescription: "Р’С‹Р±РµСЂРёС‚Рµ РїР°СЂР°РјРµС‚СЂС‹ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ. РџРѕР·Р¶Рµ РёС… РјРѕР¶РЅРѕ РёР·РјРµРЅРёС‚СЊ РІ РЅР°СЃС‚СЂРѕР№РєР°С….",
+    density: "РџР»РѕС‚РЅРѕСЃС‚СЊ РёРЅС‚РµСЂС„РµР№СЃР°",
+    densityHint: "РЈРїСЂР°РІР»СЏРµС‚ РѕС‚СЃС‚СѓРїР°РјРё Рё РєРѕРјРїР°РєС‚РЅРѕСЃС‚СЊСЋ СЃРїРёСЃРєРѕРІ",
+    densityComfortable: "РћР±С‹С‡РЅР°СЏ",
+    densityCompact: "РљРѕРјРїР°РєС‚РЅР°СЏ",
+    fontSize: "Р Р°Р·РјРµСЂ С€СЂРёС„С‚Р°",
+    fontSizeHint: "РЈРїСЂР°РІР»СЏРµС‚ СЂР°Р·РјРµСЂРѕРј С‚РµРєСЃС‚Р° РІ РёРЅС‚РµСЂС„РµР№СЃРµ С‡Р°С‚Р°",
+    fontSizeSmall: "РњР°Р»РµРЅСЊРєРёР№",
+    fontSizeDefault: "РЎС‚Р°РЅРґР°СЂС‚РЅС‹Р№",
+    fontSizeLarge: "РљСЂСѓРїРЅС‹Р№",
+    fontFamily: "РЎРµРјРµР№СЃС‚РІРѕ С€СЂРёС„С‚Р°",
+    fontFamilyHint: "РЈРїСЂР°РІР»СЏРµС‚ РіР°СЂРЅРёС‚СѓСЂРѕР№ РёРЅС‚РµСЂС„РµР№СЃР°",
+    fontFamilyDefault: "РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ",
+    fontFamilyModern: "РЎРѕРІСЂРµРјРµРЅРЅС‹Р№",
+    fontFamilyReadable: "Р§РёС‚Р°Р±РµР»СЊРЅС‹Р№",
     fontFamilyComfortaa: "Comfortaa",
-    radius: "Радиус углов",
-    radiusHint: "Управляет скруглением карточек, кнопок и пузырей",
-    radiusSharp: "Острый",
-    radiusNormal: "Нормальный",
-    radiusRounded: "Скругленный",
-    chatWallpaper: "Обои чата",
-    chatWallpaperHint: "Выберите обои по умолчанию для чатов",
-    wallpaperNone: "Без обоев",
+    radius: "Р Р°РґРёСѓСЃ СѓРіР»РѕРІ",
+    radiusHint: "РЈРїСЂР°РІР»СЏРµС‚ СЃРєСЂСѓРіР»РµРЅРёРµРј РєР°СЂС‚РѕС‡РµРє, РєРЅРѕРїРѕРє Рё РїСѓР·С‹СЂРµР№",
+    radiusSharp: "РћСЃС‚СЂС‹Р№",
+    radiusNormal: "РќРѕСЂРјР°Р»СЊРЅС‹Р№",
+    radiusRounded: "РЎРєСЂСѓРіР»РµРЅРЅС‹Р№",
+    chatWallpaper: "РћР±РѕРё С‡Р°С‚Р°",
+    chatWallpaperHint: "Р’С‹Р±РµСЂРёС‚Рµ РѕР±РѕРё РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РґР»СЏ С‡Р°С‚РѕРІ",
+    wallpaperNone: "Р‘РµР· РѕР±РѕРµРІ",
     wallpaperColorBends: "Color Bends",
     wallpaperPixelBlast: "Pixel Blast",
     wallpaperPlasma: "Plasma",
     wallpaperDither: "Dither",
-    navigationTabs: "Вкладки навигации",
-    navigationTabsHint: "Выберите видимые вкладки и их порядок",
-    showTab: "Показывать вкладку",
-    moveUp: "Вверх",
-    moveDown: "Вниз",
-    keepAtLeastOneTab: "Хотя бы одна вкладка должна быть видимой",
-    chatPersonalization: "Персонализация чата",
-    chatPersonalizationHint: "Настройки только для этого чата",
-    openChatPersonalization: "Открыть персонализацию чата",
-    muteThisChat: "Выключить уведомления чата",
-    chatWallpaperPerChat: "Обои этого чата",
-    chatWallpaperPerChatHint: "Переопределяет обои только для этого чата",
-    chatFontSize: "Размер шрифта чата",
-    chatFontSizeHint: "Переопределяет размер текста только в этом чате",
-    inheritGlobal: "Наследовать глобальные",
-    autoLoadMedia: "Автозагрузка медиа",
-    autoLoadMediaHint: "Автоматически загружать изображения и видео в этом чате",
-    loadMedia: "Загрузить медиа",
+    wallpaperGradientBlinds: "Gradient Blinds",
+    navigationTabs: "Р’РєР»Р°РґРєРё РЅР°РІРёРіР°С†РёРё",
+    navigationTabsHint: "Р’С‹Р±РµСЂРёС‚Рµ РІРёРґРёРјС‹Рµ РІРєР»Р°РґРєРё Рё РёС… РїРѕСЂСЏРґРѕРє",
+    showTab: "РџРѕРєР°Р·С‹РІР°С‚СЊ РІРєР»Р°РґРєСѓ",
+    moveUp: "Р’РІРµСЂС…",
+    moveDown: "Р’РЅРёР·",
+    keepAtLeastOneTab: "РҐРѕС‚СЏ Р±С‹ РѕРґРЅР° РІРєР»Р°РґРєР° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РІРёРґРёРјРѕР№",
+    chatPersonalization: "РџРµСЂСЃРѕРЅР°Р»РёР·Р°С†РёСЏ С‡Р°С‚Р°",
+    chatPersonalizationHint: "РќР°СЃС‚СЂРѕР№РєРё С‚РѕР»СЊРєРѕ РґР»СЏ СЌС‚РѕРіРѕ С‡Р°С‚Р°",
+    openChatPersonalization: "РћС‚РєСЂС‹С‚СЊ РїРµСЂСЃРѕРЅР°Р»РёР·Р°С†РёСЋ С‡Р°С‚Р°",
+    muteThisChat: "Р’С‹РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ С‡Р°С‚Р°",
+    chatWallpaperPerChat: "РћР±РѕРё СЌС‚РѕРіРѕ С‡Р°С‚Р°",
+    chatWallpaperPerChatHint: "РџРµСЂРµРѕРїСЂРµРґРµР»СЏРµС‚ РѕР±РѕРё С‚РѕР»СЊРєРѕ РґР»СЏ СЌС‚РѕРіРѕ С‡Р°С‚Р°",
+    chatFontSize: "Р Р°Р·РјРµСЂ С€СЂРёС„С‚Р° С‡Р°С‚Р°",
+    chatFontSizeHint: "РџРµСЂРµРѕРїСЂРµРґРµР»СЏРµС‚ СЂР°Р·РјРµСЂ С‚РµРєСЃС‚Р° С‚РѕР»СЊРєРѕ РІ СЌС‚РѕРј С‡Р°С‚Рµ",
+    inheritGlobal: "РќР°СЃР»РµРґРѕРІР°С‚СЊ РіР»РѕР±Р°Р»СЊРЅС‹Рµ",
+    autoLoadMedia: "РђРІС‚РѕР·Р°РіСЂСѓР·РєР° РјРµРґРёР°",
+    autoLoadMediaHint: "РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРё Р·Р°РіСЂСѓР¶Р°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ Рё РІРёРґРµРѕ РІ СЌС‚РѕРј С‡Р°С‚Рµ",
+    loadMedia: "Р—Р°РіСЂСѓР·РёС‚СЊ РјРµРґРёР°",
     aiAssistantTitle: "ChatGPT",
-    aiAssistantSubtitle: "Встроенный AI-помощник для идей, текста и кода.",
-    aiAssistantPlaceholder: "Спросите что угодно...",
-    aiAssistantEmptyTitle: "Начните новый диалог",
-    aiAssistantEmptyHint: "Задайте вопрос, и ChatGPT ответит прямо здесь.",
-    aiAssistantClear: "Очистить чат",
-    aiAssistantSearchMode: "Поиск",
-    aiAssistantSearchHint: "Разрешить веб-поиск для актуальных ответов",
-    aiAssistantAgentMode: "Агент",
+    aiAssistantSubtitle: "Р’СЃС‚СЂРѕРµРЅРЅС‹Р№ AI-РїРѕРјРѕС‰РЅРёРє РґР»СЏ РёРґРµР№, С‚РµРєСЃС‚Р° Рё РєРѕРґР°.",
+    aiAssistantPlaceholder: "РЎРїСЂРѕСЃРёС‚Рµ С‡С‚Рѕ СѓРіРѕРґРЅРѕ...",
+    aiAssistantEmptyTitle: "РќР°С‡РЅРёС‚Рµ РЅРѕРІС‹Р№ РґРёР°Р»РѕРі",
+    aiAssistantEmptyHint: "Р—Р°РґР°Р№С‚Рµ РІРѕРїСЂРѕСЃ, Рё ChatGPT РѕС‚РІРµС‚РёС‚ РїСЂСЏРјРѕ Р·РґРµСЃСЊ.",
+    aiAssistantClear: "РћС‡РёСЃС‚РёС‚СЊ С‡Р°С‚",
+    aiAssistantSearchMode: "РџРѕРёСЃРє",
+    aiAssistantSearchHint: "Р Р°Р·СЂРµС€РёС‚СЊ РІРµР±-РїРѕРёСЃРє РґР»СЏ Р°РєС‚СѓР°Р»СЊРЅС‹С… РѕС‚РІРµС‚РѕРІ",
+    aiAssistantAgentMode: "РђРіРµРЅС‚",
     aiAssistantAgentModeHint:
-      "Разрешить AI выполнять команды мессенджера (отправка/удаление/создание групп/приглашения)",
-    aiAssistantAgentWarningTitle: "Включить агента (Beta)?",
+      "Р Р°Р·СЂРµС€РёС‚СЊ AI РІС‹РїРѕР»РЅСЏС‚СЊ РєРѕРјР°РЅРґС‹ РјРµСЃСЃРµРЅРґР¶РµСЂР° (РѕС‚РїСЂР°РІРєР°/СѓРґР°Р»РµРЅРёРµ/СЃРѕР·РґР°РЅРёРµ РіСЂСѓРїРї/РїСЂРёРіР»Р°С€РµРЅРёСЏ)",
+    aiAssistantAgentWarningTitle: "Р’РєР»СЋС‡РёС‚СЊ Р°РіРµРЅС‚Р° (Beta)?",
     aiAssistantAgentWarningDescription:
-      "Агент в бета-режиме и может выполнять действия в мессенджере (например, отправка/удаление/создание групп/приглашения). Это может изменить ваши чаты и связанные данные.",
-    aiAssistantAgentWarningConfirm: "Включить агента",
-    aiAssistantThinking: "Думаю...",
-    onboardingApply: "Применить",
+      "РђРіРµРЅС‚ РІ Р±РµС‚Р°-СЂРµР¶РёРјРµ Рё РјРѕР¶РµС‚ РІС‹РїРѕР»РЅСЏС‚СЊ РґРµР№СЃС‚РІРёСЏ РІ РјРµСЃСЃРµРЅРґР¶РµСЂРµ (РЅР°РїСЂРёРјРµСЂ, РѕС‚РїСЂР°РІРєР°/СѓРґР°Р»РµРЅРёРµ/СЃРѕР·РґР°РЅРёРµ РіСЂСѓРїРї/РїСЂРёРіР»Р°С€РµРЅРёСЏ). Р­С‚Рѕ РјРѕР¶РµС‚ РёР·РјРµРЅРёС‚СЊ РІР°С€Рё С‡Р°С‚С‹ Рё СЃРІСЏР·Р°РЅРЅС‹Рµ РґР°РЅРЅС‹Рµ.",
+    aiAssistantAgentWarningConfirm: "Р’РєР»СЋС‡РёС‚СЊ Р°РіРµРЅС‚Р°",
+    aiAssistantThinking: "Р”СѓРјР°СЋ...",
+    onboardingApply: "РџСЂРёРјРµРЅРёС‚СЊ",
   },
 } as const;
 
@@ -1386,7 +1434,7 @@ function formatChatTime(timestamp: number, language: AppLanguage): string {
     date.getDate() === yesterday.getDate();
 
   if (isYesterday) {
-    return language === "ru" ? "Р’С‡РµСЂР°" : "Yesterday";
+    return language === "ru" ? "Р вЂ™РЎвЂЎР ВµРЎР‚Р В°" : "Yesterday";
   }
 
   return date.toLocaleDateString(locale, {
@@ -1410,7 +1458,7 @@ function formatMessageTime(timestamp: number, language: AppLanguage): string {
 
 function formatLastSeen(timestamp: number, language: AppLanguage): string {
   if (!timestamp || timestamp <= 0) {
-    return language === "ru" ? "РЅРµРґР°РІРЅРѕ" : "recently";
+    return language === "ru" ? "Р Р…Р ВµР Т‘Р В°Р Р†Р Р…Р С•" : "recently";
   }
 
   const date = new Date(timestamp);
@@ -1455,6 +1503,63 @@ function formatAbsoluteDateTime(timestamp: number, language: AppLanguage): strin
     minute: "2-digit",
     hour12: false,
   });
+}
+
+function toSchedulePickerParts(timestamp: number): {
+  date: Date;
+  hour: string;
+  minute: string;
+} {
+  const source = new Date(timestamp);
+  if (Number.isNaN(source.getTime())) {
+    const fallback = new Date();
+    return {
+      date: new Date(
+        fallback.getFullYear(),
+        fallback.getMonth(),
+        fallback.getDate()
+      ),
+      hour: "00",
+      minute: "00",
+    };
+  }
+
+  return {
+    date: new Date(
+      source.getFullYear(),
+      source.getMonth(),
+      source.getDate()
+    ),
+    hour: String(source.getHours()).padStart(2, "0"),
+    minute: String(source.getMinutes()).padStart(2, "0"),
+  };
+}
+
+function buildScheduledTimestamp(
+  date: Date | undefined,
+  hour: string,
+  minute: string
+): number {
+  if (!date) {
+    return 0;
+  }
+  const parsedHour = Number.parseInt(hour, 10);
+  const parsedMinute = Number.parseInt(minute, 10);
+  if (
+    !Number.isInteger(parsedHour) ||
+    parsedHour < 0 ||
+    parsedHour > 23 ||
+    !Number.isInteger(parsedMinute) ||
+    parsedMinute < 0 ||
+    parsedMinute > 59
+  ) {
+    return 0;
+  }
+
+  const nextDate = new Date(date);
+  nextDate.setHours(parsedHour, parsedMinute, 0, 0);
+  const timestamp = nextDate.getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function formatBirthday(value: string, language: AppLanguage): string {
@@ -2366,6 +2471,8 @@ export function WebMessenger({
   const emojiMenuRef = useRef<HTMLDivElement | null>(null);
   const emojiCloseTimerRef = useRef<number | null>(null);
   const messageSoundRef = useRef<HTMLAudioElement | null>(null);
+  const incomingCallRingtoneRef = useRef<HTMLAudioElement | null>(null);
+  const sendMessageSoundRef = useRef<HTMLAudioElement | null>(null);
   const callOverlayRef = useRef<HTMLDivElement | null>(null);
   const localCallStreamRef = useRef<MediaStream | null>(null);
   const localCallInputStreamRef = useRef<MediaStream | null>(null);
@@ -2484,6 +2591,7 @@ export function WebMessenger({
   });
   const [threads, setThreads] = useState<StoredChatThread[]>([]);
   const [messages, setMessages] = useState<StoredChatMessage[]>([]);
+  const [serverTimeMs, setServerTimeMs] = useState(() => Date.now());
   const [animatingMessageIds, setAnimatingMessageIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -2561,6 +2669,10 @@ export function WebMessenger({
   const [isGroupPermissionsDialogOpen, setIsGroupPermissionsDialogOpen] = useState(false);
   const [isGroupInvitationsDialogOpen, setIsGroupInvitationsDialogOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [groupCreationKind, setGroupCreationKind] = useState<"group" | "channel">(
+    "group"
+  );
+  const [isCreateThreadTypeMenuOpen, setIsCreateThreadTypeMenuOpen] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>(() => {
@@ -2622,6 +2734,13 @@ export function WebMessenger({
   );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [replyToMessageId, setReplyToMessageId] = useState<string | null>(null);
+  const [scheduledSendAt, setScheduledSendAt] = useState<number | null>(null);
+  const [isSchedulePickerOpen, setIsSchedulePickerOpen] = useState(false);
+  const [schedulePickerDate, setSchedulePickerDate] = useState<Date | undefined>(
+    undefined
+  );
+  const [schedulePickerHour, setSchedulePickerHour] = useState("00");
+  const [schedulePickerMinute, setSchedulePickerMinute] = useState("00");
   const [formattingMenuPosition, setFormattingMenuPosition] = useState<{
     x: number;
     y: number;
@@ -2679,6 +2798,12 @@ export function WebMessenger({
       return true;
     }
     return window.localStorage.getItem(MESSAGE_SOUND_STORAGE_KEY) !== "0";
+  });
+  const [sendMessageSoundEnabled, setSendMessageSoundEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.localStorage.getItem(SEND_MESSAGE_SOUND_STORAGE_KEY) !== "0";
   });
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => {
     if (typeof window === "undefined") {
@@ -3471,13 +3596,6 @@ export function WebMessenger({
     isAdminAccount,
     showToast,
   ]);
-  const openModerationPanel = useCallback(() => {
-    if (!isAdminAccount) {
-      return;
-    }
-    setIsAdminPanelOpen(true);
-    void loadModerationPanelData();
-  }, [isAdminAccount, loadModerationPanelData]);
   const closeModerationPanel = useCallback(() => {
     if (isAdminActionPending) {
       return;
@@ -3502,7 +3620,7 @@ export function WebMessenger({
           }
         );
         applyModerationSnapshot(response.snapshot);
-        showToast(language === "ru" ? "Модерация обновлена." : "Moderation updated.");
+        showToast(language === "ru" ? "РњРѕРґРµСЂР°С†РёСЏ РѕР±РЅРѕРІР»РµРЅР°." : "Moderation updated.");
       } catch (error) {
         showToast(getRequestErrorMessage(error));
       } finally {
@@ -3860,11 +3978,24 @@ export function WebMessenger({
   }, [language]);
 
   useEffect(() => {
-    const audio = new Audio(INCOMING_MESSAGE_SOUND_PATH);
-    audio.preload = "auto";
-    messageSoundRef.current = audio;
+    const incomingAudio = new Audio(INCOMING_MESSAGE_SOUND_PATH);
+    incomingAudio.preload = "auto";
+    messageSoundRef.current = incomingAudio;
+    const incomingCallRingtone = new Audio(INCOMING_CALL_RINGTONE_PATH);
+    incomingCallRingtone.preload = "auto";
+    incomingCallRingtone.loop = true;
+    incomingCallRingtoneRef.current = incomingCallRingtone;
+    const outgoingAudio = new Audio(OUTGOING_MESSAGE_SOUND_PATH);
+    outgoingAudio.preload = "auto";
+    sendMessageSoundRef.current = outgoingAudio;
     return () => {
+      if (incomingCallRingtoneRef.current) {
+        incomingCallRingtoneRef.current.pause();
+        incomingCallRingtoneRef.current.currentTime = 0;
+      }
       messageSoundRef.current = null;
+      incomingCallRingtoneRef.current = null;
+      sendMessageSoundRef.current = null;
     };
   }, []);
 
@@ -3884,6 +4015,12 @@ export function WebMessenger({
       messageSoundEnabled ? "1" : "0"
     );
   }, [messageSoundEnabled]);
+  useEffect(() => {
+    window.localStorage.setItem(
+      SEND_MESSAGE_SOUND_STORAGE_KEY,
+      sendMessageSoundEnabled ? "1" : "0"
+    );
+  }, [sendMessageSoundEnabled]);
   useEffect(() => {
     window.localStorage.setItem(UI_THEME_STORAGE_KEY, uiTheme);
   }, [uiTheme]);
@@ -3965,7 +4102,7 @@ export function WebMessenger({
       hiddenNotificationCount > 0 &&
       document.visibilityState === "hidden"
     ) {
-      const label = language === "ru" ? "Новые сообщения" : "New messages";
+      const label = language === "ru" ? "РќРѕРІС‹Рµ СЃРѕРѕР±С‰РµРЅРёСЏ" : "New messages";
       document.title = `(${hiddenNotificationCount}) ${label}`;
       return;
     }
@@ -4049,10 +4186,12 @@ export function WebMessenger({
       if (data.fullSync) {
         lastFullSyncAtRef.current = now;
       }
-      lastDataSyncTimestampRef.current =
+      const nextServerTimeMs =
         typeof data.serverTime === "number" && Number.isFinite(data.serverTime)
           ? data.serverTime
           : now;
+      lastDataSyncTimestampRef.current = nextServerTimeMs;
+      setServerTimeMs(nextServerTimeMs);
 
       hasLoadedInitialChatDataRef.current = true;
       if (!hasNotificationBaselineRef.current) {
@@ -4084,6 +4223,9 @@ export function WebMessenger({
       window.matchMedia("(min-width: 768px)").matches;
     const isActiveChatVisible =
       activeSidebar === "home" && (isDesktopViewport || mobileView === "chat");
+    const now = serverTimeMs > 0 ? serverTimeMs : Date.now();
+    const isPendingScheduledForCurrentUser = (message: StoredChatMessage) =>
+      message.authorId === currentUser.id && message.createdAt > now;
     const usersById = new Map(knownUsers.map((user) => [user.id, user]));
     const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
     const messagesByChat = new Map<string, StoredChatMessage[]>();
@@ -4100,6 +4242,11 @@ export function WebMessenger({
     const regularChatItems = [...threads]
       .map((thread) => {
         const isGroup = thread.threadType === "group";
+        const groupKind: GroupKind | null = isGroup
+          ? thread.groupKind === "channel"
+            ? "channel"
+            : "group"
+          : null;
         const directMemberId = isGroup
           ? null
           : (thread.memberIds.find((userId) => userId !== currentUser.id) ??
@@ -4114,7 +4261,9 @@ export function WebMessenger({
           .filter((userId) => userId !== currentUser.id)
           .map((memberId) => usersById.get(memberId))
           .filter((member): member is AuthUser => member !== undefined);
-        const threadMessages = messagesByChat.get(thread.id) ?? [];
+        const threadMessages = (messagesByChat.get(thread.id) ?? []).filter(
+          (message) => !isPendingScheduledForCurrentUser(message)
+        );
         const lastMessage = threadMessages[threadMessages.length - 1];
         const lastMessagePreview = lastMessage
           ? lastMessage.text.trim() ||
@@ -4154,6 +4303,7 @@ export function WebMessenger({
           memberIds: thread.memberIds,
           groupRoles: normalizedGroupRoles,
           isGroup,
+          groupKind,
           isFavorites: false,
           isPreview: false,
           createdById: thread.createdById,
@@ -4171,7 +4321,7 @@ export function WebMessenger({
             : "",
           unread:
             isActiveChatVisible && thread.id === activeChatId ? 0 : unread,
-          updatedAt: thread.updatedAt,
+          updatedAt: Math.max(thread.updatedAt, lastMessage?.createdAt ?? 0),
           isPinned: thread.pinnedBy?.[currentUser.id] === true,
           isMuted: thread.mutedBy?.[currentUser.id] === true,
         };
@@ -4183,7 +4333,9 @@ export function WebMessenger({
         message,
         savedAt: message.savedBy?.[currentUser.id] ?? 0,
       }))
-      .filter((item) => item.savedAt > 0)
+      .filter(
+        (item) => item.savedAt > 0 && !isPendingScheduledForCurrentUser(item.message)
+      )
       .sort((a, b) => a.savedAt - b.savedAt);
     const latestFavorite = favoriteMessages[favoriteMessages.length - 1] ?? null;
     const favoriteThread = latestFavorite
@@ -4215,6 +4367,7 @@ export function WebMessenger({
       memberIds: [currentUser.id],
       groupRoles: {},
       isGroup: false,
+      groupKind: null,
       isFavorites: true,
       isPreview: false,
       createdById: currentUser.id,
@@ -4262,6 +4415,7 @@ export function WebMessenger({
     activeSidebar,
     mobileView,
     activeChatId,
+    serverTimeMs,
   ]);
 
   const filteredChats = useMemo(() => {
@@ -4298,6 +4452,7 @@ export function WebMessenger({
       memberIds: [currentUser.id, previewUser.id],
       groupRoles: {},
       isGroup: false,
+      groupKind: null,
       isFavorites: false,
       isPreview: true,
       createdById: currentUser.id,
@@ -4443,16 +4598,16 @@ export function WebMessenger({
       .filter((name): name is string => Boolean(name));
 
     if (typingUsers.length === 0) {
-      return language === "ru" ? "РџРµС‡Р°С‚Р°СЋС‚..." : "Typing...";
+      return language === "ru" ? "Р СџР ВµРЎвЂЎР В°РЎвЂљР В°РЎР‹РЎвЂљ..." : "Typing...";
     }
     if (typingUsers.length === 1) {
       return language === "ru"
-        ? `${typingUsers[0]} РїРµС‡Р°С‚Р°РµС‚...`
+        ? `${typingUsers[0]} Р С—Р ВµРЎвЂЎР В°РЎвЂљР В°Р ВµРЎвЂљ...`
         : `${typingUsers[0]} is typing...`;
     }
 
     return language === "ru"
-      ? `${typingUsers.length} РїРµС‡Р°С‚Р°СЋС‚...`
+      ? `${typingUsers.length} Р С—Р ВµРЎвЂЎР В°РЎвЂљР В°РЎР‹РЎвЂљ...`
       : `${typingUsers.length} typing...`;
   }, [activeChat, currentUser.id, knownUsers, language, t, threads]);
   const resolveCallPeerName = useCallback(
@@ -4477,9 +4632,9 @@ export function WebMessenger({
     const participantsCount = Math.max(1, callRemoteUserIds.length + 1);
     const participantsLabel =
       callSession.isGroup && participantsCount > 1
-        ? ` · ${participantsCount} ${t("participants").toLowerCase()}`
+        ? ` В· ${participantsCount} ${t("participants").toLowerCase()}`
         : "";
-    return `${t("inCall")} · ${formatCallDuration(callDurationSeconds)}${participantsLabel}`;
+    return `${t("inCall")} В· ${formatCallDuration(callDurationSeconds)}${participantsLabel}`;
   }, [callDurationSeconds, callRemoteUserIds.length, callSession, t]);
   const callTitle = useMemo(() => {
     if (!callSession) {
@@ -4524,6 +4679,20 @@ export function WebMessenger({
   useEffect(() => {
     callSessionRef.current = callSession;
   }, [callSession]);
+
+  useEffect(() => {
+    const ringtone = incomingCallRingtoneRef.current;
+    if (!ringtone) {
+      return;
+    }
+    if (callSession?.phase === "incoming") {
+      ringtone.currentTime = 0;
+      void ringtone.play().catch(() => undefined);
+      return;
+    }
+    ringtone.pause();
+    ringtone.currentTime = 0;
+  }, [callSession?.phase]);
 
   const registerRemoteMediaElement = useCallback(
     (userId: string, element: HTMLMediaElement | null) => {
@@ -5646,6 +5815,9 @@ export function WebMessenger({
     if (!activeChat) {
       return [];
     }
+    const now = serverTimeMs > 0 ? serverTimeMs : Date.now();
+    const isScheduledPendingForCurrentUser = (message: StoredChatMessage) =>
+      message.authorId === currentUser.id && message.createdAt > now;
     const usersById = new Map(knownUsers.map((user) => [user.id, user]));
     const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
     const resolveSourceChatName = (chatId: string) => {
@@ -5681,6 +5853,7 @@ export function WebMessenger({
       );
 
       return favoriteMessages.map<RenderMessage>(({ message, savedAt }) => {
+        const isScheduledPending = isScheduledPendingForCurrentUser(message);
         const replyTarget = message.replyToMessageId
           ? favoriteMessagesById.get(message.replyToMessageId) ?? null
           : null;
@@ -5709,6 +5882,10 @@ export function WebMessenger({
             message.authorId === currentUser.id
               ? currentUser.username
               : (usersById.get(message.authorId)?.username ?? ""),
+          authorAvatarUrl:
+            message.authorId === currentUser.id
+              ? currentUser.avatarUrl
+              : (usersById.get(message.authorId)?.avatarUrl ?? ""),
           text: message.text,
           createdAt: savedAt,
           attachments: message.attachments.map((attachment) => ({
@@ -5735,6 +5912,7 @@ export function WebMessenger({
           sourceChatId:
             message.chatId === FAVORITES_CHAT_ID ? null : message.chatId,
           sourceChatName: resolveSourceChatName(message.chatId),
+          isScheduledPending,
         };
       });
     }
@@ -5754,6 +5932,7 @@ export function WebMessenger({
     const messagesById = new Map(chatMessages.map((message) => [message.id, message]));
 
     return chatMessages.map<RenderMessage>((message) => {
+      const isScheduledPending = isScheduledPendingForCurrentUser(message);
       const replyTarget = message.replyToMessageId
         ? messagesById.get(message.replyToMessageId) ?? null
         : null;
@@ -5790,6 +5969,10 @@ export function WebMessenger({
           message.authorId === currentUser.id
             ? currentUser.username
             : (usersById.get(message.authorId)?.username ?? ""),
+        authorAvatarUrl:
+          message.authorId === currentUser.id
+            ? currentUser.avatarUrl
+            : (usersById.get(message.authorId)?.avatarUrl ?? ""),
         text: message.text,
         createdAt: message.createdAt,
         attachments: message.attachments.map((attachment) => ({
@@ -5818,6 +6001,7 @@ export function WebMessenger({
         isFavorite: (message.savedBy?.[currentUser.id] ?? 0) > 0,
         sourceChatId: null,
         sourceChatName: "",
+        isScheduledPending,
       };
     });
   }, [
@@ -5825,10 +6009,13 @@ export function WebMessenger({
     clearedChatAtById,
     messages,
     currentUser.id,
+    currentUser.username,
+    currentUser.avatarUrl,
     knownUsers,
     language,
     t,
     threads,
+    serverTimeMs,
   ]);
 
   const filteredActiveMessages = useMemo(() => {
@@ -5949,6 +6136,11 @@ export function WebMessenger({
   useEffect(() => {
     setReplyToMessageId(null);
     setEditingMessageId(null);
+    setScheduledSendAt(null);
+    setIsSchedulePickerOpen(false);
+    setSchedulePickerDate(undefined);
+    setSchedulePickerHour("00");
+    setSchedulePickerMinute("00");
   }, [activeChat?.id]);
 
   useEffect(() => {
@@ -6031,9 +6223,20 @@ export function WebMessenger({
     setGroupMemberIdsDraft([]);
   }, []);
   const openGroupCreationDialog = useCallback(() => {
-    resetGroupCreationDraft();
-    setIsGroupMenuOpen(true);
-  }, [resetGroupCreationDraft]);
+    setIsCreateThreadTypeMenuOpen(true);
+  }, []);
+  const startThreadCreation = useCallback(
+    (kind: "group" | "channel") => {
+      setGroupCreationKind(kind);
+      resetGroupCreationDraft();
+      if (kind === "channel") {
+        setGroupCreationStep("details");
+      }
+      setIsCreateThreadTypeMenuOpen(false);
+      setIsGroupMenuOpen(true);
+    },
+    [resetGroupCreationDraft]
+  );
   const handleGroupMenuOpenChange = useCallback(
     (open: boolean) => {
       setIsGroupMenuOpen(open);
@@ -6044,12 +6247,8 @@ export function WebMessenger({
     [isCreatingGroup, resetGroupCreationDraft]
   );
   const goToGroupDetailsStep = useCallback(() => {
-    if (groupMemberIdsDraft.length < 2) {
-      showToast(t("groupMembersMinError"));
-      return;
-    }
     setGroupCreationStep("details");
-  }, [groupMemberIdsDraft.length, showToast, t]);
+  }, []);
 
   const markChatAsRead = useCallback(
     async (chatId: string) => {
@@ -6256,6 +6455,11 @@ export function WebMessenger({
       }
       setReplyToMessageId(null);
       setEditingMessageId(messageId);
+      setScheduledSendAt(null);
+      setIsSchedulePickerOpen(false);
+      setSchedulePickerDate(undefined);
+      setSchedulePickerHour("00");
+      setSchedulePickerMinute("00");
       setPendingAttachments([]);
       setDraft(target.text);
       setIsEmojiMenuOpen(false);
@@ -6469,7 +6673,7 @@ export function WebMessenger({
 
       const reasonPrompt =
         language === "ru"
-          ? "Укажите причину жалобы на сообщение:"
+          ? "РЈРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ Р¶Р°Р»РѕР±С‹ РЅР° СЃРѕРѕР±С‰РµРЅРёРµ:"
           : "Enter a reason for reporting this message:";
       const reasonInput = window.prompt(reasonPrompt, "");
       const reason = reasonInput?.trim() ?? "";
@@ -6479,7 +6683,7 @@ export function WebMessenger({
       if (reason.length < 3) {
         showToast(
           language === "ru"
-            ? "Причина должна содержать минимум 3 символа."
+            ? "РџСЂРёС‡РёРЅР° РґРѕР»Р¶РЅР° СЃРѕРґРµСЂР¶Р°С‚СЊ РјРёРЅРёРјСѓРј 3 СЃРёРјРІРѕР»Р°."
             : "Reason must be at least 3 characters."
         );
         return;
@@ -6496,7 +6700,7 @@ export function WebMessenger({
           }),
         });
         showToast(
-          language === "ru" ? "Жалоба отправлена модератору." : "Report sent to moderation."
+          language === "ru" ? "Р–Р°Р»РѕР±Р° РѕС‚РїСЂР°РІР»РµРЅР° РјРѕРґРµСЂР°С‚РѕСЂСѓ." : "Report sent to moderation."
         );
       } catch (error) {
         showToast(getRequestErrorMessage(error));
@@ -6663,6 +6867,17 @@ export function WebMessenger({
     audio.currentTime = 0;
     void audio.play().catch(() => undefined);
   }, [messageSoundEnabled]);
+  const playOutgoingMessageSound = useCallback(() => {
+    if (!sendMessageSoundEnabled) {
+      return;
+    }
+    const audio = sendMessageSoundRef.current;
+    if (!audio) {
+      return;
+    }
+    audio.currentTime = 0;
+    void audio.play().catch(() => undefined);
+  }, [sendMessageSoundEnabled]);
 
   const deleteMessage = useCallback(
     async (messageId: string) => {
@@ -7002,6 +7217,8 @@ export function WebMessenger({
   );
 
   const createGroupChat = async () => {
+    const kind: GroupKind = groupCreationKind === "channel" ? "channel" : "group";
+    const memberIds = kind === "channel" ? [] : groupMemberIdsDraft;
     const title = groupNameDraft.trim().replace(/\s+/g, " ");
     if (title.length < GROUP_TITLE_MIN_LENGTH) {
       showToast(t("groupNameMinError"));
@@ -7011,11 +7228,7 @@ export function WebMessenger({
       showToast(t("groupNameMaxError"));
       return;
     }
-    if (groupMemberIdsDraft.length < 2) {
-      showToast(t("groupMembersMinError"));
-      return;
-    }
-    if (groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS) {
+    if (memberIds.length + 1 > GROUP_MAX_MEMBERS) {
       showToast(t("groupMembersLimitHint"));
       return;
     }
@@ -7029,7 +7242,8 @@ export function WebMessenger({
           body: JSON.stringify({
             userId: currentUser.id,
             title,
-            memberIds: groupMemberIdsDraft,
+            memberIds,
+            kind,
           }),
         }
       );
@@ -7678,10 +7892,63 @@ export function WebMessenger({
     [t]
   );
 
-  const sendMessage = async () => {
+  const openSchedulePicker = useCallback(() => {
+    const baselineNow = serverTimeMs > 0 ? serverTimeMs : Date.now();
+    const baseTimestamp =
+      scheduledSendAt && scheduledSendAt > baselineNow
+        ? scheduledSendAt
+        : baselineNow + SCHEDULE_DEFAULT_LEAD_MS;
+    const nextParts = toSchedulePickerParts(baseTimestamp);
+    setSchedulePickerDate(nextParts.date);
+    setSchedulePickerHour(nextParts.hour);
+    setSchedulePickerMinute(nextParts.minute);
+    setIsSchedulePickerOpen(true);
+  }, [scheduledSendAt, serverTimeMs]);
+
+  const clearScheduledSend = useCallback(() => {
+    setScheduledSendAt(null);
+    setIsSchedulePickerOpen(false);
+    setSchedulePickerDate(undefined);
+    setSchedulePickerHour("00");
+    setSchedulePickerMinute("00");
+  }, []);
+
+  const applySchedulePickerValue = () => {
+    const baselineNow = serverTimeMs > 0 ? serverTimeMs : Date.now();
+    const parsedScheduleTimestamp = buildScheduledTimestamp(
+      schedulePickerDate,
+      schedulePickerHour,
+      schedulePickerMinute
+    );
+    if (parsedScheduleTimestamp <= baselineNow + SCHEDULE_MIN_LEAD_MS) {
+      showToast(
+        language === "ru"
+          ? "Р’С‹Р±РµСЂРёС‚Рµ РІСЂРµРјСЏ РјРёРЅРёРјСѓРј С‡РµСЂРµР· 1 РјРёРЅСѓС‚Сѓ."
+          : "Pick a time at least 1 minute in the future."
+      );
+      return;
+    }
+    if (draft.trim().length === 0 && pendingAttachments.length === 0) {
+      showToast(
+        language === "ru"
+          ? "РќРµР»СЊР·СЏ Р·Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ РїСѓСЃС‚РѕРµ СЃРѕРѕР±С‰РµРЅРёРµ."
+          : "Cannot schedule an empty message."
+      );
+      return;
+    }
+    setScheduledSendAt(parsedScheduleTimestamp);
+    setIsSchedulePickerOpen(false);
+    void sendMessage(parsedScheduleTimestamp);
+  };
+
+  const sendMessage = async (scheduledForOverride?: number | null) => {
     const text = draft.trim();
     const attachments = pendingAttachments;
     const replyToId = replyToMessageId;
+    const scheduledForTimestamp =
+      typeof scheduledForOverride === "undefined"
+        ? scheduledSendAt
+        : scheduledForOverride;
     const editingId = editingMessageId;
     const editingTarget = editingId
       ? activeMessages.find((message) => message.id === editingId) ?? null
@@ -7726,6 +7993,27 @@ export function WebMessenger({
     }
 
     if (!text && attachments.length === 0) {
+      if (scheduledForTimestamp !== null) {
+        showToast(
+          language === "ru"
+            ? "РќРµР»СЊР·СЏ Р·Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ РїСѓСЃС‚РѕРµ СЃРѕРѕР±С‰РµРЅРёРµ."
+            : "Cannot schedule an empty message."
+        );
+      }
+      return;
+    }
+
+    const isScheduling = !editingTarget && scheduledForTimestamp !== null;
+    const baselineNow = serverTimeMs > 0 ? serverTimeMs : Date.now();
+    if (
+      isScheduling &&
+      (scheduledForTimestamp ?? 0) <= baselineNow + SCHEDULE_MIN_LEAD_MS
+    ) {
+      showToast(
+        language === "ru"
+          ? "Р’С‹Р±РµСЂРёС‚Рµ РІСЂРµРјСЏ РјРёРЅРёРјСѓРј С‡РµСЂРµР· 1 РјРёРЅСѓС‚Сѓ."
+          : "Pick a time at least 1 minute in the future."
+      );
       return;
     }
 
@@ -7745,6 +8033,9 @@ export function WebMessenger({
     setPendingAttachments([]);
     setReplyToMessageId(null);
     setIsEmojiMenuOpen(false);
+    if (!editingTarget) {
+      setIsSchedulePickerOpen(false);
+    }
 
     try {
       await requestJson<{ messageId: string; createdAt: number }>(
@@ -7764,14 +8055,29 @@ export function WebMessenger({
               })
             ),
             replyToMessageId: replyToId ?? undefined,
+            scheduledFor: isScheduling ? scheduledForTimestamp ?? undefined : undefined,
           }),
         }
       );
+      playOutgoingMessageSound();
       await loadChatData({ forceFullSync: true });
+      if (isScheduling) {
+        const formatted = formatAbsoluteDateTime(
+          scheduledForTimestamp ?? 0,
+          language
+        );
+        showToast(
+          language === "ru"
+            ? `РЎРѕРѕР±С‰РµРЅРёРµ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРѕ РЅР° ${formatted}`
+            : `Message scheduled for ${formatted}`
+        );
+        setScheduledSendAt(null);
+      }
     } catch (error) {
       setDraft(text);
       setPendingAttachments(attachments);
       setReplyToMessageId(replyToId);
+      setScheduledSendAt(scheduledForTimestamp);
       showToast(getRequestErrorMessage(error));
     }
   };
@@ -7795,6 +8101,7 @@ export function WebMessenger({
   }, [selectedGroupChat, currentUser.id]);
   const canManageSelectedGroup =
     selectedGroupMyRole === "owner" || selectedGroupMyRole === "admin";
+  const isSelectedChannel = selectedGroupChat?.groupKind === "channel";
   const isSelectedGroupOwner = selectedGroupMyRole === "owner";
   const isOwnProfile =
     !profileUserId ||
@@ -8091,7 +8398,7 @@ export function WebMessenger({
     selectedGroupMyRole,
   ]);
   const groupAddCandidates = useMemo(() => {
-    if (!selectedGroupChat || !canManageSelectedGroup) {
+    if (!selectedGroupChat || !canManageSelectedGroup || isSelectedChannel) {
       return [];
     }
     const normalized = normalizeSearchQuery(groupMemberSearchDraft);
@@ -8112,6 +8419,7 @@ export function WebMessenger({
   }, [
     selectedGroupChat,
     canManageSelectedGroup,
+    isSelectedChannel,
     groupMemberSearchDraft,
     knownUsers,
     currentUser.id,
@@ -8627,7 +8935,7 @@ export function WebMessenger({
     if (nextDescription.length > GROUP_DESCRIPTION_MAX_LENGTH) {
       showToast(
         language === "ru"
-          ? `Описание группы максимум ${GROUP_DESCRIPTION_MAX_LENGTH} символов`
+          ? `РћРїРёСЃР°РЅРёРµ РіСЂСѓРїРїС‹ РјР°РєСЃРёРјСѓРј ${GROUP_DESCRIPTION_MAX_LENGTH} СЃРёРјРІРѕР»РѕРІ`
           : `Group description must be at most ${GROUP_DESCRIPTION_MAX_LENGTH} characters`
       );
       return;
@@ -8668,7 +8976,7 @@ export function WebMessenger({
 
   const addMemberToSelectedGroup = async (memberId: string) => {
     const groupChatId = selectedGroupChat?.id ?? "";
-    if (!groupChatId || !canManageSelectedGroup) {
+    if (!groupChatId || !canManageSelectedGroup || isSelectedChannel) {
       return;
     }
 
@@ -9202,6 +9510,9 @@ export function WebMessenger({
     if (value === "dither") {
       return t("wallpaperDither");
     }
+    if (value === "gradient-blinds") {
+      return t("wallpaperGradientBlinds");
+    }
     return value;
   };
   const getChatFontSizeSettingLabel = (value: string) => {
@@ -9211,7 +9522,7 @@ export function WebMessenger({
     return getFontSizeLabel(value);
   };
   const adminDashboardLabel =
-    language === "ru" ? "Админ-панель" : "Admin dashboard";
+    language === "ru" ? "РђРґРјРёРЅ-РїР°РЅРµР»СЊ" : "Admin dashboard";
 
   return (
     <>
@@ -9305,8 +9616,8 @@ export function WebMessenger({
                   <Button
                     type="button"
                     onClick={openGroupCreationDialog}
-                    aria-label={t("newGroup")}
-                    title={t("newGroup")}
+                    aria-label={language === "ru" ? "Создать" : "Create"}
+                    title={language === "ru" ? "Создать" : "Create"}
                     className="h-9 w-9 rounded-lg bg-primary p-0 text-zinc-50 hover:bg-primary/90 hover:text-zinc-50"
                   >
                     <Plus className="size-4" />
@@ -9322,25 +9633,97 @@ export function WebMessenger({
                   />
                 </div>
               </div>
+              <AlertDialog
+                open={isCreateThreadTypeMenuOpen}
+                onOpenChange={setIsCreateThreadTypeMenuOpen}
+              >
+                <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-zinc-100">
+                      {language === "ru" ? "Что создать?" : "What do you want to create?"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-zinc-400">
+                      {language === "ru"
+                        ? "Выберите тип чата"
+                        : "Choose the chat type"}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => startThreadCreation("channel")}
+                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-3 text-left hover:border-zinc-600 hover:bg-zinc-800"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <MessageCircle className="size-4 text-primary" />
+                        <span>
+                          <span className="block text-sm font-medium text-zinc-100">
+                            {language === "ru" ? "Канал" : "Channel"}
+                          </span>
+                          <span className="block text-xs text-zinc-500">
+                            {language === "ru"
+                              ? "Для новостей и объявлений"
+                              : "For updates and announcements"}
+                          </span>
+                        </span>
+                      </span>
+                      <ArrowRight className="size-4 text-zinc-500" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startThreadCreation("group")}
+                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-3 text-left hover:border-zinc-600 hover:bg-zinc-800"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Users className="size-4 text-primary" />
+                        <span>
+                          <span className="block text-sm font-medium text-zinc-100">
+                            {language === "ru" ? "Группа" : "Group"}
+                          </span>
+                          <span className="block text-xs text-zinc-500">
+                            {language === "ru"
+                              ? "Для общения участников"
+                              : "For team conversations"}
+                          </span>
+                        </span>
+                      </span>
+                      <ArrowRight className="size-4 text-zinc-500" />
+                    </button>
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+                      {t("cancel")}
+                    </AlertDialogCancel>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
               <AlertDialog open={isGroupMenuOpen} onOpenChange={handleGroupMenuOpenChange}>
                 <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-xl">
                   <AlertDialogHeader className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <AlertDialogTitle className="text-zinc-100">
-                        {t("newGroup")}
+                        {groupCreationKind === "channel"
+                          ? language === "ru"
+                            ? "Новый канал"
+                            : "New channel"
+                          : t("newGroup")}
                       </AlertDialogTitle>
                       <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300">
-                        {groupCreationStep === "members" ? "1/2" : "2/2"}
+                        {groupCreationKind === "channel"
+                          ? "1/1"
+                          : groupCreationStep === "members"
+                            ? "1/2"
+                            : "2/2"}
                       </span>
                     </div>
                     <AlertDialogDescription className="text-zinc-400">
-                      {groupCreationStep === "members"
+                      {groupCreationKind !== "channel" && groupCreationStep === "members"
                         ? `${t("groupMembers")}: ${groupMemberIdsDraft.length + 1}/${GROUP_MAX_MEMBERS}`
                         : `${t("groupName")}: ${groupNameDraft.trim().replace(/\s+/g, " ").length}/${GROUP_TITLE_MAX_LENGTH}`}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
 
-                  {groupCreationStep === "members" ? (
+                  {groupCreationKind !== "channel" && groupCreationStep === "members" ? (
                     <div className="space-y-3">
                       <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
                         {selectedGroupDraftMembers.length > 0 ? (
@@ -9358,7 +9741,7 @@ export function WebMessenger({
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-zinc-500">{t("groupMembersMinError")}</p>
+                          <p className="text-xs text-zinc-500">{t("groupMembersOptionalHint")}</p>
                         )}
                       </div>
 
@@ -9460,7 +9843,7 @@ export function WebMessenger({
                   )}
 
                   <AlertDialogFooter className="gap-2">
-                    {groupCreationStep === "members" ? (
+                    {groupCreationKind !== "channel" && groupCreationStep === "members" ? (
                       <>
                         <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
                           {t("cancel")}
@@ -9468,10 +9851,9 @@ export function WebMessenger({
                         <Button
                           type="button"
                           onClick={goToGroupDetailsStep}
-                          disabled={groupMemberIdsDraft.length < 2}
                           className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {language === "ru" ? "Далее" : "Next"}
+                          {language === "ru" ? "Р”Р°Р»РµРµ" : "Next"}
                           <ArrowRight className="size-4" />
                         </Button>
                       </>
@@ -9480,11 +9862,20 @@ export function WebMessenger({
                         <Button
                           type="button"
                           variant="ghost"
-                          onClick={() => setGroupCreationStep("members")}
+                          onClick={() => {
+                            if (groupCreationKind === "channel") {
+                              setIsGroupMenuOpen(false);
+                              resetGroupCreationDraft();
+                              return;
+                            }
+                            setGroupCreationStep("members");
+                          }}
                           className="h-10 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                         >
-                          <ArrowLeft className="size-4" />
-                          {language === "ru" ? "Назад" : "Back"}
+                          {groupCreationKind === "channel" ? null : (
+                            <ArrowLeft className="size-4" />
+                          )}
+                          {groupCreationKind === "channel" ? t("cancel") : "Back"}
                         </Button>
                         <Button
                           type="button"
@@ -9495,12 +9886,16 @@ export function WebMessenger({
                               GROUP_TITLE_MIN_LENGTH ||
                             groupNameDraft.trim().replace(/\s+/g, " ").length >
                               GROUP_TITLE_MAX_LENGTH ||
-                            groupMemberIdsDraft.length < 2 ||
-                            groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS
+                            (groupCreationKind !== "channel" &&
+                              groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS)
                           }
                           className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {t("createGroup")}
+                          {groupCreationKind === "channel"
+                            ? language === "ru"
+                              ? "Создать канал"
+                              : "Create channel"
+                            : t("createGroup")}
                         </Button>
                       </>
                     )}
@@ -10039,6 +10434,18 @@ export function WebMessenger({
                         <Dither />
                       </div>
                     ) : null}
+                    {activeChatEffectiveWallpaper === "gradient-blinds" ? (
+                      <div className="absolute inset-0 z-0">
+                        <GradientBlinds
+                          className="h-full w-full"
+                          gradientColors={["#09090b", "#1d4ed8", "#155e75"]}
+                          angle={18}
+                          noise={0.25}
+                          blindMinWidth={34}
+                          blindCount={20}
+                        />
+                      </div>
+                    ) : null}
                     <div
                       ref={activeMessagesScrollRef}
                       className={`relative z-10 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
@@ -10052,9 +10459,30 @@ export function WebMessenger({
                           : t("noMessagesYet")}
                       </div>
                     ) : null}
-                    {filteredActiveMessages.map((message) => {
+                    {filteredActiveMessages.map((message, messageIndex) => {
                       const hasMessageText = message.text.trim().length > 0;
                       const firstAttachmentUrl = message.attachments[0]?.url ?? "";
+                      const previousVisibleMessage =
+                        messageIndex > 0
+                          ? filteredActiveMessages[messageIndex - 1]
+                          : null;
+                      const isFirstMessageInAuthorSequence =
+                        previousVisibleMessage === null ||
+                        previousVisibleMessage.authorId !== message.authorId;
+                      const isGroupIncomingMessage =
+                        activeChat.isGroup &&
+                        !activeChat.isFavorites &&
+                        message.author !== "me";
+                      const authorInitials = message.authorLabel
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0]?.toUpperCase() ?? "")
+                        .join("");
+                      const authorFallbackInitials =
+                        authorInitials ||
+                        message.authorUsername.slice(0, 2).toUpperCase() ||
+                        "?";
                       const canForwardMessage =
                         hasMessageText || message.attachments.length > 0;
                       const canDeleteMessage =
@@ -10073,7 +10501,7 @@ export function WebMessenger({
                         message.groupReadByCount > 0;
                       const viewsMenuLabel =
                         language === "ru"
-                          ? `${message.groupReadByCount} просмотры`
+                          ? `${message.groupReadByCount} РїСЂРѕСЃРјРѕС‚СЂС‹`
                           : `${message.groupReadByCount} ${
                               message.groupReadByCount === 1 ? "view" : "views"
                             }`;
@@ -10102,15 +10530,54 @@ export function WebMessenger({
                                 }`}
                               >
                                 <div
+                                  className={`flex min-w-0 items-end ${
+                                    isGroupIncomingMessage
+                                      ? "max-w-[90%] gap-2 sm:max-w-[76%]"
+                                      : "max-w-[85%] sm:max-w-[70%]"
+                                  }`}
+                                >
+                                  {isGroupIncomingMessage ? (
+                                    isFirstMessageInAuthorSequence ? (
+                                      message.authorAvatarUrl ? (
+                                        <span
+                                          className={`mt-1 inline-flex shrink-0 rounded-full bg-zinc-700 bg-cover bg-center ${
+                                            uiDensity === "compact" ? "size-7" : "size-8"
+                                          }`}
+                                          style={{
+                                            backgroundImage: `url(${message.authorAvatarUrl})`,
+                                          }}
+                                          aria-label={`${message.authorLabel} avatar`}
+                                        />
+                                      ) : (
+                                        <span
+                                          className={`mt-1 inline-flex shrink-0 items-center justify-center rounded-full bg-zinc-700 font-semibold text-zinc-100 ${
+                                            uiDensity === "compact"
+                                              ? "size-7 text-[10px]"
+                                              : "size-8 text-[11px]"
+                                          }`}
+                                        >
+                                          {authorFallbackInitials}
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span
+                                        className={`inline-flex shrink-0 ${
+                                          uiDensity === "compact" ? "size-7" : "size-8"
+                                        }`}
+                                        aria-hidden="true"
+                                      />
+                                    )
+                                  ) : null}
+                                <div
                                   ref={(node) => {
                                     messageNodeRefs.current.set(message.id, node);
                                   }}
-                                  className={`max-w-[85%] ${uiRadiusBubbleClass} ring-1 ring-white/5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7)] sm:max-w-[70%] ${
+                                  className={`${isGroupIncomingMessage ? "min-w-0 flex-1" : ""} ${uiRadiusBubbleClass} ring-1 ring-white/5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7)] ${
                                     uiDensity === "compact" ? "px-3 py-1.5" : "px-4 py-2"
                                   } ${
                                     animatingMessageIds.has(message.id)
                                       ? "clore-message-appear-once"
-                                      : ""
+                                    : ""
                                   } ${
                                     highlightedMessageId === message.id
                                       ? "clore-message-target-highlight"
@@ -10121,6 +10588,12 @@ export function WebMessenger({
                                       : "border border-zinc-600 bg-zinc-700 text-zinc-100"
                                   }`}
                                 >
+                                {isGroupIncomingMessage &&
+                                isFirstMessageInAuthorSequence ? (
+                                  <p className="mb-1 truncate text-[11px] font-semibold leading-tight text-primary/90">
+                                    {message.authorLabel}
+                                  </p>
+                                ) : null}
                                 {activeChat.isFavorites && message.sourceChatId ? (
                                   <button
                                     type="button"
@@ -10275,8 +10748,16 @@ export function WebMessenger({
                                   {message.isEdited ? (
                                     <span className="opacity-80">{t("editedLabel")}</span>
                                   ) : null}
+                                  {message.isScheduledPending ? (
+                                    <span className="inline-flex items-center gap-1 opacity-85">
+                                      <Clock3 className="size-3" />
+                                      {language === "ru" ? "Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРѕ" : "scheduled"}
+                                    </span>
+                                  ) : null}
                                   <span>{message.time}</span>
-                                  {!activeChat.isFavorites && message.author === "me" ? (
+                                  {!activeChat.isFavorites &&
+                                  message.author === "me" &&
+                                  !message.isScheduledPending ? (
                                     activeChat.isGroup ? (
                                       message.groupReadByCount > 0 ? (
                                         <CheckCheck className="size-3 text-white/90" />
@@ -10289,6 +10770,7 @@ export function WebMessenger({
                                       <Check className="size-3" />
                                     )
                                   ) : null}
+                                </div>
                                 </div>
                                 </div>
                               </div>
@@ -10386,7 +10868,7 @@ export function WebMessenger({
                                   onSelect={() => void reportMessage(message)}
                                 >
                                   <List className="size-4" />
-                                  {language === "ru" ? "Пожаловаться" : "Report message"}
+                                  {language === "ru" ? "РџРѕР¶Р°Р»РѕРІР°С‚СЊСЃСЏ" : "Report message"}
                                 </ContextMenuItem>
                               </>
                             ) : null}
@@ -10495,6 +10977,132 @@ export function WebMessenger({
                         </Button>
                       </div>
                     ) : null}
+                    {scheduledSendAt && !editingTargetMessage ? (
+                      <div
+                        className={`mb-2 flex items-start justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 ${
+                          uiDensity === "compact" ? "px-2.5 py-1.5" : "px-3 py-2"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                            <Clock3 className="size-3.5" />
+                            {language === "ru" ? "Р—Р°РїР»Р°РЅРёСЂРѕРІР°РЅРѕ" : "Scheduled"}
+                          </p>
+                          <p className="truncate text-xs text-zinc-200">
+                            {formatAbsoluteDateTime(scheduledSendAt, language)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={language === "ru" ? "РЎР±СЂРѕСЃРёС‚СЊ РѕС‚Р»РѕР¶РµРЅРЅСѓСЋ РѕС‚РїСЂР°РІРєСѓ" : "Clear schedule"}
+                          className="h-6 w-6 shrink-0 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                          onClick={clearScheduledSend}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                    ) : null}
+                    <Drawer
+                      open={isSchedulePickerOpen && !editingTargetMessage}
+                      onOpenChange={(open) => {
+                        setIsSchedulePickerOpen(open);
+                      }}
+                    >
+                      <DrawerContent className="border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
+                        <DrawerHeader className="text-left">
+                          <DrawerTitle className="text-zinc-100">
+                            {language === "ru" ? "Отправить позже" : "Send later"}
+                          </DrawerTitle>
+                          <DrawerDescription className="text-zinc-400">
+                            {language === "ru"
+                              ? "Выберите дату и время отправки."
+                              : "Choose a date and time to send."}
+                          </DrawerDescription>
+                        </DrawerHeader>
+                        <div className="px-4 pb-2">
+                          <div className="mx-auto w-fit rounded-lg border border-zinc-600 bg-zinc-800/85 p-1">
+                            <Calendar
+                              mode="single"
+                              selected={schedulePickerDate}
+                              onSelect={(date) => setSchedulePickerDate(date ?? undefined)}
+                              disabled={(date) => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                return date.getTime() < today.getTime();
+                              }}
+                              className="rounded-md bg-transparent p-0 text-zinc-100 [--cell-size:--spacing(6)]"
+                            />
+                          </div>
+                          <div className="mx-auto mt-3 flex w-full max-w-[300px] flex-col gap-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <Select
+                                value={schedulePickerHour}
+                                onValueChange={(value) => {
+                                  if (value !== null) {
+                                    setSchedulePickerHour(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-9 w-full border-zinc-600 bg-zinc-800 text-zinc-100">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent
+                                  portalled={false}
+                                  className="border-zinc-700 bg-zinc-900 text-zinc-100"
+                                >
+                                  {SCHEDULE_HOUR_OPTIONS.map((hour) => (
+                                    <SelectItem key={`schedule-hour-${hour}`} value={hour}>
+                                      {hour}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Select
+                                value={schedulePickerMinute}
+                                onValueChange={(value) => {
+                                  if (value !== null) {
+                                    setSchedulePickerMinute(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-9 w-full border-zinc-600 bg-zinc-800 text-zinc-100">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent
+                                  portalled={false}
+                                  className="border-zinc-700 bg-zinc-900 text-zinc-100"
+                                >
+                                  {SCHEDULE_MINUTE_OPTIONS.map((minute) => (
+                                    <SelectItem key={`schedule-minute-${minute}`} value={minute}>
+                                      {minute}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                        <DrawerFooter>
+                          <Button
+                            type="button"
+                            className="h-9 rounded-md bg-primary px-3 text-zinc-50 hover:bg-primary/90"
+                            onClick={applySchedulePickerValue}
+                          >
+                            {language === "ru" ? "Запланировать" : "Schedule"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-9 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700"
+                            onClick={() => setIsSchedulePickerOpen(false)}
+                          >
+                            {t("cancel")}
+                          </Button>
+                        </DrawerFooter>
+                      </DrawerContent>
+                    </Drawer>
                     {pendingAttachments.length > 0 && !editingTargetMessage ? (
                       <div className="mb-2 flex flex-wrap gap-2">
                         {pendingAttachments.map((attachment) => (
@@ -10685,6 +11293,17 @@ export function WebMessenger({
                               className={`shrink-0 rounded-lg bg-primary p-0 text-zinc-50 hover:bg-primary/90 ${
                                 uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
                               }`}
+                              onContextMenu={(event) => {
+                                if (editingTargetMessage) {
+                                  return;
+                                }
+                                event.preventDefault();
+                                if (isSchedulePickerOpen) {
+                                  setIsSchedulePickerOpen(false);
+                                  return;
+                                }
+                                openSchedulePicker();
+                              }}
                               disabled={
                                 editingTargetMessage
                                   ? (draft.trim().length === 0 &&
@@ -11328,7 +11947,7 @@ export function WebMessenger({
                                         onSelect={() => setIsGroupSettingsOpen(true)}
                                       >
                                         <Pencil className="size-4" />
-                                        {language === "ru" ? "Редактировать" : "Edit"}
+                                        {language === "ru" ? "Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ" : "Edit"}
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
@@ -11529,14 +12148,14 @@ export function WebMessenger({
                       <h2 className="text-xl font-semibold text-zinc-100">{t("settings")}</h2>
                       <p className="mt-1 text-sm text-zinc-400">{t("onboardingDescription")}</p>
                     </div>
-                    <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-950 p-2">
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-950 p-1.5 sm:mt-4 sm:rounded-xl sm:p-2">
+                      <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:gap-2 sm:overflow-visible sm:pb-0">
                         {(["privacy", "security", "appearance"] as const).map((section) => (
                           <button
                             key={section}
                             type="button"
                             onClick={() => setActiveSettingsSection(section)}
-                            className={`h-10 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                            className={`h-8 shrink-0 whitespace-nowrap rounded-md border px-3 text-xs font-medium transition-colors sm:h-10 sm:rounded-lg sm:text-sm ${
                               activeSettingsSection === section
                                 ? "border-primary bg-primary text-zinc-50"
                                 : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
@@ -11996,16 +12615,12 @@ export function WebMessenger({
                               {currentUser.email}
                             </p>
                           </div>
-                          {isAdminAccount ? (
-                            <Button
-                              type="button"
-                              onClick={openModerationPanel}
-                              className="h-10 rounded-md border border-amber-500/70 bg-amber-500/15 px-4 text-zinc-100 hover:bg-amber-500/25"
-                            >
-                              <List className="size-4" />
-                              {language === "ru" ? "Панель модерации" : "Moderation panel"}
-                            </Button>
-                          ) : null}
+                          <div className="rounded-md border border-zinc-700/80 bg-zinc-950/60 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                              {language === "ru" ? "Версия приложения" : "App version"}
+                            </p>
+                            <p className="mt-1 font-mono text-xs text-zinc-200">{APP_VERSION}</p>
+                          </div>
                           <Button
                             type="button"
                             onClick={onLogout}
@@ -12249,7 +12864,8 @@ export function WebMessenger({
                                     value === "color-bends" ||
                                     value === "pixel-blast" ||
                                     value === "plasma" ||
-                                    value === "dither"
+                                    value === "dither" ||
+                                    value === "gradient-blinds"
                                   ) {
                                     setGlobalChatWallpaper(value);
                                   }
@@ -12276,6 +12892,9 @@ export function WebMessenger({
                                   <SelectItem value="dither" className={unifiedSelectItemClassName}>
                                     {t("wallpaperDither")}
                                   </SelectItem>
+                                  <SelectItem value="gradient-blinds" className={unifiedSelectItemClassName}>
+                                    {t("wallpaperGradientBlinds")}
+                                  </SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -12289,6 +12908,21 @@ export function WebMessenger({
                               checked={messageSoundEnabled}
                               onCheckedChange={setMessageSoundEnabled}
                               aria-label={t("messageSound")}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">
+                                {t("sendMessageSound")}
+                              </p>
+                              <p className="mt-0.5 text-xs text-zinc-500">
+                                {t("sendMessageSoundHint")}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={sendMessageSoundEnabled}
+                              onCheckedChange={setSendMessageSoundEnabled}
+                              aria-label={t("sendMessageSound")}
                             />
                           </div>
                           <div className="hidden items-center justify-between gap-4 py-3 md:flex">
@@ -12415,7 +13049,8 @@ export function WebMessenger({
                       value === "color-bends" ||
                       value === "pixel-blast" ||
                       value === "plasma" ||
-                      value === "dither"
+                      value === "dither" ||
+                      value === "gradient-blinds"
                     ) {
                       updateActiveChatPersonalization({ wallpaper: value });
                     }
@@ -12448,6 +13083,9 @@ export function WebMessenger({
                     </SelectItem>
                     <SelectItem value="dither" className={unifiedSelectItemClassName}>
                       {t("wallpaperDither")}
+                    </SelectItem>
+                    <SelectItem value="gradient-blinds" className={unifiedSelectItemClassName}>
+                      {t("wallpaperGradientBlinds")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -12579,14 +13217,14 @@ export function WebMessenger({
             <AlertDialogTitle className="text-zinc-100">
               {messageViewsDialog
                 ? language === "ru"
-                  ? `${messageViewsDialog.count} просмотры`
+                  ? `${messageViewsDialog.count} РїСЂРѕСЃРјРѕС‚СЂС‹`
                   : `${messageViewsDialog.count} ${
                       messageViewsDialog.count === 1 ? "view" : "views"
                     }`
                 : ""}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400">
-              {language === "ru" ? "Кто прочитал это сообщение" : "Who read this message"}
+              {language === "ru" ? "РљС‚Рѕ РїСЂРѕС‡РёС‚Р°Р» СЌС‚Рѕ СЃРѕРѕР±С‰РµРЅРёРµ" : "Who read this message"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
@@ -12744,7 +13382,7 @@ export function WebMessenger({
         <AlertDialogContent className="!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 w-[min(94vw,760px)] max-w-none border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-zinc-100">
-              {language === "ru" ? "Редактирование группы" : "Group editing"}
+              {language === "ru" ? "Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РіСЂСѓРїРїС‹" : "Group editing"}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400">
               {selectedGroupChat?.name ?? ""}
@@ -12793,7 +13431,7 @@ export function WebMessenger({
                       {selectedGroupChat?.name ?? ""}
                     </p>
                     <p className="text-xs text-zinc-500">
-                      {language === "ru" ? "Профиль группы" : "Group profile"}
+                      {language === "ru" ? "РџСЂРѕС„РёР»СЊ РіСЂСѓРїРїС‹" : "Group profile"}
                     </p>
                   </div>
                 </div>
@@ -12810,7 +13448,7 @@ export function WebMessenger({
                     maxLength={GROUP_DESCRIPTION_MAX_LENGTH}
                     onChange={(event) => setGroupDescriptionDraft(event.target.value)}
                     className="min-h-24 border-zinc-600 bg-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-400"
-                    placeholder={language === "ru" ? "Описание группы" : "Group description"}
+                    placeholder={language === "ru" ? "РћРїРёСЃР°РЅРёРµ РіСЂСѓРїРїС‹" : "Group description"}
                   />
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] text-zinc-500">
@@ -12848,10 +13486,10 @@ export function WebMessenger({
                   <Sparkles className="size-4 shrink-0 text-primary" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-zinc-100">
-                      {language === "ru" ? "Тип" : "Type"}
+                      {language === "ru" ? "РўРёРї" : "Type"}
                     </span>
                     <span className="block truncate text-xs text-zinc-500">
-                      {language === "ru" ? "Тип группы и видимость" : "Group type and visibility"}
+                      {language === "ru" ? "РўРёРї РіСЂСѓРїРїС‹ Рё РІРёРґРёРјРѕСЃС‚СЊ" : "Group type and visibility"}
                     </span>
                   </span>
                 </span>
@@ -12866,10 +13504,10 @@ export function WebMessenger({
                   <Shield className="size-4 shrink-0 text-primary" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-zinc-100">
-                      {language === "ru" ? "Разрешения" : "Permissions"}
+                      {language === "ru" ? "Р Р°Р·СЂРµС€РµРЅРёСЏ" : "Permissions"}
                     </span>
                     <span className="block truncate text-xs text-zinc-500">
-                      {language === "ru" ? "Роли и действия участников" : "Member roles and actions"}
+                      {language === "ru" ? "Р РѕР»Рё Рё РґРµР№СЃС‚РІРёСЏ СѓС‡Р°СЃС‚РЅРёРєРѕРІ" : "Member roles and actions"}
                     </span>
                   </span>
                 </span>
@@ -12877,17 +13515,23 @@ export function WebMessenger({
               </button>
               <button
                 type="button"
-                onClick={() => setIsGroupInvitationsDialogOpen(true)}
-                className="mt-2 flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-left hover:border-zinc-600 hover:bg-zinc-700"
+                onClick={() => {
+                  if (isSelectedChannel) {
+                    return;
+                  }
+                  setIsGroupInvitationsDialogOpen(true);
+                }}
+                disabled={isSelectedChannel}
+                className="mt-2 flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-left hover:border-zinc-600 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="flex min-w-0 items-center gap-2.5">
                   <Users className="size-4 shrink-0 text-primary" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-zinc-100">
-                      {language === "ru" ? "Приглашения" : "Invitations"}
+                      {language === "ru" ? "РџСЂРёРіР»Р°С€РµРЅРёСЏ" : "Invitations"}
                     </span>
                     <span className="block truncate text-xs text-zinc-500">
-                      {language === "ru" ? "Приглашение и добавление участников" : "Invite and add members"}
+                      {language === "ru" ? "РџСЂРёРіР»Р°С€РµРЅРёРµ Рё РґРѕР±Р°РІР»РµРЅРёРµ СѓС‡Р°СЃС‚РЅРёРєРѕРІ" : "Invite and add members"}
                     </span>
                   </span>
                 </span>
@@ -12925,7 +13569,7 @@ export function WebMessenger({
         <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-zinc-100">
-              {language === "ru" ? "РўРёРї" : "Type"}
+              {language === "ru" ? "Р СћР С‘Р С—" : "Type"}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400">
               {selectedGroupChat?.name ?? ""}
@@ -12934,17 +13578,17 @@ export function WebMessenger({
           <div className="space-y-2">
             <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5">
               <p className="text-sm font-medium text-zinc-100">
-                {language === "ru" ? "Р—Р°РєСЂС‹С‚Р°СЏ РіСЂСѓРїРїР°" : "Private group"}
+                {language === "ru" ? "Р вЂ”Р В°Р С”РЎР‚РЎвЂ№РЎвЂљР В°РЎРЏ Р С–РЎР‚РЎС“Р С—Р С—Р В°" : "Private group"}
               </p>
               <p className="mt-1 text-xs text-zinc-400">
                 {language === "ru"
-                  ? "РЎРµР№С‡Р°СЃ РіСЂСѓРїРїР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ СѓС‡Р°СЃС‚РЅРёРєР°Рј."
+                  ? "Р РЋР ВµР в„–РЎвЂЎР В°РЎРѓ Р С–РЎР‚РЎС“Р С—Р С—Р В° Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р Р…Р В° РЎвЂљР С•Р В»РЎРЉР С”Р С• РЎС“РЎвЂЎР В°РЎРѓРЎвЂљР Р…Р С‘Р С”Р В°Р С."
                   : "This group is currently accessible to members only."}
               </p>
             </div>
             <p className="text-xs text-zinc-500">
               {language === "ru"
-                ? "РџСѓР±Р»РёС‡РЅС‹Р№ С‚РёРї Р±СѓРґРµС‚ РґРѕСЃС‚СѓРїРµРЅ РїРѕР·Р¶Рµ."
+                ? "Р СџРЎС“Р В±Р В»Р С‘РЎвЂЎР Р…РЎвЂ№Р в„– РЎвЂљР С‘Р С— Р В±РЎС“Р Т‘Р ВµРЎвЂљ Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р ВµР Р… Р С—Р С•Р В·Р В¶Р Вµ."
                 : "Public type will be available later."}
             </p>
           </div>
@@ -12969,7 +13613,7 @@ export function WebMessenger({
         <AlertDialogContent className="!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 w-[min(94vw,760px)] max-w-none border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-zinc-100">
-              {language === "ru" ? "Р Р°Р·СЂРµС€РµРЅРёСЏ" : "Permissions"}
+              {language === "ru" ? "Р В Р В°Р В·РЎР‚Р ВµРЎв‚¬Р ВµР Р…Р С‘РЎРЏ" : "Permissions"}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400">
               {selectedGroupChat?.name ?? ""}
@@ -13139,6 +13783,7 @@ export function WebMessenger({
         open={Boolean(
           isGroupProfile &&
             canManageSelectedGroup &&
+            !isSelectedChannel &&
             isGroupSettingsOpen &&
             isGroupInvitationsDialogOpen
         )}
@@ -13152,7 +13797,7 @@ export function WebMessenger({
         <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-zinc-100">
-              {language === "ru" ? "РџСЂРёРіР»Р°С€РµРЅРёСЏ" : "Invitations"}
+              {language === "ru" ? "Р СџРЎР‚Р С‘Р С–Р В»Р В°РЎв‚¬Р ВµР Р…Р С‘РЎРЏ" : "Invitations"}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400">
               {selectedGroupChat?.name ?? ""}
@@ -14007,3 +14652,6 @@ export function WebMessenger({
     </>
   );
 }
+
+
+

@@ -38,6 +38,9 @@ export async function POST(request: Request) {
       if (!thread) {
         throw new Error("Group not found.");
       }
+      if (thread.groupKind === "channel") {
+        throw new Error("Members cannot be added to channels.");
+      }
       if (!canModerateGroup(thread, userId)) {
         throw new Error("Only group owner or admin can add members.");
       }
@@ -74,6 +77,8 @@ export async function POST(request: Request) {
     const status =
       message === "Group not found." || message === "User not found."
         ? 404
+        : message === "Members cannot be added to channels."
+          ? 422
         : message === "Only group owner or admin can add members."
           ? 403
           : message === "User does not allow adding to groups."

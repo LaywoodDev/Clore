@@ -5,6 +5,7 @@ import {
   BOT_USER_ID,
   getBotPublicUser,
   getStore,
+  type StoredChatMessage,
   toPublicUser,
   updateStore,
 } from "@/lib/server/store";
@@ -13,6 +14,18 @@ type VisibilityScope = "everyone" | "contacts" | "nobody";
 type NextVisibilityScope = "everyone" | "selected" | "nobody";
 const LAST_SEEN_HEARTBEAT_MS = 15_000;
 const FAVORITES_CHAT_ID = "__favorites__";
+
+function isPendingScheduledMessageForAuthor(
+  message: StoredChatMessage,
+  userId: string,
+  now: number
+): boolean {
+  return message.authorId === userId && message.createdAt > now;
+}
+
+function getPendingScheduledMessageMarker(message: StoredChatMessage): number {
+  return message.scheduledAt > 0 ? message.scheduledAt : message.createdAt;
+}
 
 function canViewByVisibility(
   visibility: VisibilityScope | NextVisibilityScope,
@@ -161,10 +174,24 @@ export async function GET(request: Request) {
       if (!isAccessibleThreadMessage && !isSelfFavoriteMessage) {
         return false;
       }
+      const isPendingForAuthor = isPendingScheduledMessageForAuthor(
+        message,
+        userId,
+        now
+      );
+      if (message.createdAt > now && !isPendingForAuthor) {
+        return false;
+      }
       if (!hasSince) {
         return true;
       }
-      if (message.createdAt >= since) {
+      if (message.createdAt <= now && message.createdAt >= since) {
+        return true;
+      }
+      if (
+        isPendingForAuthor &&
+        getPendingScheduledMessageMarker(message) >= since
+      ) {
         return true;
       }
       const favoriteChangedAt = Math.abs(message.savedBy?.[userId] ?? 0);

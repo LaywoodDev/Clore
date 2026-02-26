@@ -43,6 +43,7 @@ type NormalizedAiChatMessage = {
 type SendIntent = {
   recipientQuery: string;
   messageText: string;
+  scheduledFor?: number | null;
 };
 
 type SendVerbKind = "send" | "congratulate";
@@ -94,11 +95,13 @@ type SendActionOutcome = {
   resolvedName?: string;
   resolvedUsername?: string;
   alternatives?: string[];
+  scheduledFor?: number;
 };
 
 type SendActionSummary = {
   outcomes: SendActionOutcome[];
   sentMessages: number;
+  scheduledMessages: number;
 };
 
 type DeleteIntent = {
@@ -242,6 +245,12 @@ type PlannedSendIntentPayload = {
   message?: unknown;
   text?: unknown;
   content?: unknown;
+  scheduledFor?: unknown;
+  scheduleFor?: unknown;
+  scheduleAt?: unknown;
+  sendAt?: unknown;
+  deliverAt?: unknown;
+  when?: unknown;
 };
 
 const MAX_MESSAGES = 24;
@@ -254,6 +263,7 @@ const MAX_AUTOMATION_TARGETS = 8;
 const MAX_CONTEXT_MESSAGES_PER_CANDIDATE = 160;
 const MAX_SEND_AI_CONTACTS = 140;
 const FAVORITES_CHAT_ID = "__favorites__";
+const MIN_SCHEDULE_DELAY_MS = 5_000;
 const GROUP_TITLE_MIN_LENGTH = 3;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_DESCRIPTION_MAX_LENGTH = 280;
@@ -281,7 +291,7 @@ const FAVORITES_RECIPIENT_ALIASES = new Set(
 );
 
 const SEND_COMMAND_START_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|запланир(?:уй|уйте|овать)|send|text|message|write|tell|notify|schedule|поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu;
 const SEND_VERB_DEFINITIONS: Array<{ value: string; kind: SendVerbKind }> = [
   { value: "отправь", kind: "send" },
   { value: "отправьте", kind: "send" },
@@ -291,12 +301,15 @@ const SEND_VERB_DEFINITIONS: Array<{ value: string; kind: SendVerbKind }> = [
   { value: "сообщи", kind: "send" },
   { value: "скажи", kind: "send" },
   { value: "уведоми", kind: "send" },
+  { value: "запланируй", kind: "send" },
+  { value: "запланируйте", kind: "send" },
   { value: "send", kind: "send" },
   { value: "text", kind: "send" },
   { value: "message", kind: "send" },
   { value: "write", kind: "send" },
   { value: "tell", kind: "send" },
   { value: "notify", kind: "send" },
+  { value: "schedule", kind: "send" },
   { value: "поздравь", kind: "congratulate" },
   { value: "поздравьте", kind: "congratulate" },
   { value: "congratulate", kind: "congratulate" },
@@ -1751,6 +1764,136 @@ function cleanMessageText(value: string): string {
   return normalizeCommandMessageText(value).slice(0, MAX_MESSAGE_LENGTH);
 }
 
+function parseRelativeScheduleToTimestamp(
+  amountRaw: string,
+  unitRaw: string,
+  now: number
+): number | null {
+  const amount = Number.parseInt(amountRaw.trim(), 10);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000) {
+    return null;
+  }
+
+  const unit = normalizeForMatching(unitRaw).replace(/\s+/g, "");
+  let unitMs = 0;
+  if (/^(?:s|sec|secs|second|seconds|\u0441\u0435\u043a|\u0441\u0435\u043a\u0443\u043d\u0434)/u.test(unit)) {
+    unitMs = 1_000;
+  } else if (/^(?:m|min|mins|minute|minutes|\u043c\u0438\u043d|\u043c\u0438\u043d\u0443\u0442)/u.test(unit)) {
+    unitMs = 60_000;
+  } else if (/^(?:h|hr|hrs|hour|hours|\u0447|\u0447\u0430\u0441)/u.test(unit)) {
+    unitMs = 3_600_000;
+  } else if (/^(?:d|day|days|\u0434\u0435\u043d|\u0434\u043d)/u.test(unit)) {
+    unitMs = 86_400_000;
+  } else {
+    return null;
+  }
+
+  return now + amount * unitMs;
+}
+
+function normalizeScheduledForValue(value: unknown, now: number): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d{10,16}$/u.test(trimmed)) {
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+    return Math.trunc(numeric < 1_000_000_000_000 ? numeric * 1_000 : numeric);
+  }
+
+  const relativeOnlyMatch = trimmed.match(
+    /^(?:\u0447\u0435\u0440\u0435\u0437|in)\s+(\d{1,4})\s+([^\s,.;:!?]+)$/iu
+  );
+  if (relativeOnlyMatch) {
+    return parseRelativeScheduleToTimestamp(
+      relativeOnlyMatch[1] ?? "",
+      relativeOnlyMatch[2] ?? "",
+      now
+    );
+  }
+
+  const parsedDate = Date.parse(trimmed);
+  if (Number.isFinite(parsedDate)) {
+    return Math.trunc(parsedDate);
+  }
+
+  return null;
+}
+
+function enforceScheduledDelay(scheduledFor: number | null, now: number): number | null {
+  if (scheduledFor === null || !Number.isFinite(scheduledFor)) {
+    return null;
+  }
+  const normalized = Math.trunc(scheduledFor);
+  if (normalized <= now + MIN_SCHEDULE_DELAY_MS) {
+    return null;
+  }
+  return normalized;
+}
+
+function extractScheduleFromMessageText(
+  messageText: string,
+  now: number
+): { messageText: string; scheduledFor: number | null } {
+  const compact = messageText.trim().replace(/\s+/g, " ");
+  if (!compact) {
+    return {
+      messageText: "",
+      scheduledFor: null,
+    };
+  }
+
+  const relativePrefixMatch = compact.match(
+    /^(?:\u0447\u0435\u0440\u0435\u0437|in)\s+(\d{1,4})\s+([^\s,.;:!?]+)\s+(.+)$/iu
+  );
+  if (relativePrefixMatch) {
+    const scheduledFor = parseRelativeScheduleToTimestamp(
+      relativePrefixMatch[1] ?? "",
+      relativePrefixMatch[2] ?? "",
+      now
+    );
+    if (scheduledFor !== null) {
+      return {
+        messageText: (relativePrefixMatch[3] ?? "").trim(),
+        scheduledFor,
+      };
+    }
+  }
+
+  const relativeSuffixMatch = compact.match(
+    /^(.+?)\s+(?:\u0447\u0435\u0440\u0435\u0437|in)\s+(\d{1,4})\s+([^\s,.;:!?]+)[.!?]*$/iu
+  );
+  if (relativeSuffixMatch) {
+    const scheduledFor = parseRelativeScheduleToTimestamp(
+      relativeSuffixMatch[2] ?? "",
+      relativeSuffixMatch[3] ?? "",
+      now
+    );
+    if (scheduledFor !== null) {
+      return {
+        messageText: (relativeSuffixMatch[1] ?? "").trim(),
+        scheduledFor,
+      };
+    }
+  }
+
+  return {
+    messageText: compact,
+    scheduledFor: null,
+  };
+}
+
 function isFavoritesRecipientQuery(value: string): boolean {
   const normalized = normalizeForMatching(cleanRecipientQuery(value));
   if (!normalized) {
@@ -1836,7 +1979,7 @@ function splitIntoIntentSegments(input: string): string[] {
     return [];
   }
   const withCommandSeparators = compact.replace(
-    /\s+(?:и|а|или|and|or)\s+(?=(?:пожалуйста\s+|please\s+|ну\s+)?(?:отправ|напиш|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав|congratulat))/giu,
+    /\s+(?:и|а|или|and|or)\s+(?=(?:пожалуйста\s+|please\s+|ну\s+)?(?:отправ|напиш|передай|сообщи|скажи|уведоми|запланир|send|text|message|write|tell|notify|schedule|поздрав|congratulat))/giu,
     ", "
   );
   const withImplicitSeparators = withCommandSeparators.replace(
@@ -2918,6 +3061,118 @@ function resolveMemberInGroup(
   return resolveRecipient(scopedCandidates, rawQuery);
 }
 
+type SendTargetResolution =
+  | {
+      status: "resolved";
+      target:
+        | { kind: "direct"; candidate: RecipientCandidate }
+        | { kind: "group"; thread: StoredChatThread; label: string };
+    }
+  | {
+      status: "ambiguous";
+      alternatives: string[];
+    }
+  | {
+      status: "not_found";
+    };
+
+function hasExplicitGroupSendHint(value: string): boolean {
+  const normalized = normalizeForMatching(value);
+  if (!normalized) {
+    return false;
+  }
+  return /(?:^|\s)(?:group|groups|\u0433\u0440\u0443\u043f\u043f(?:\u0430|\u0443|\u0435|\u044b)?|latest\s+group|last\s+group|new\s+group|\u0442\u0443\u0434\u0430|\u0442\u0430\u043c)(?:\s|$)/iu.test(
+    normalized
+  );
+}
+
+function hasExplicitDirectSendHint(value: string): boolean {
+  return /@[\p{L}\p{N}._-]{2,64}/u.test(value);
+}
+
+function mergeUniqueLabels(values: string[], limit = 4): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = normalizeForMatching(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(value);
+    if (result.length >= limit) {
+      break;
+    }
+  }
+  return result;
+}
+
+function resolveSendTarget(
+  store: StoreData,
+  candidates: RecipientCandidate[],
+  userId: string,
+  recipientQuery: string
+): SendTargetResolution {
+  const hasGroupHint = hasExplicitGroupSendHint(recipientQuery);
+  const hasDirectHint = hasExplicitDirectSendHint(recipientQuery);
+  const directResolution: RecipientResolution = hasGroupHint && !hasDirectHint
+    ? { status: "not_found" }
+    : resolveRecipient(candidates, recipientQuery);
+  const groupResolution: DeleteThreadResolution = hasDirectHint && !hasGroupHint
+    ? { status: "not_found" }
+    : resolveGroupForInvite(store, userId, recipientQuery);
+
+  const directResolved = directResolution.status === "resolved";
+  const directAmbiguous = directResolution.status === "ambiguous";
+  const groupResolved = groupResolution.status === "resolved";
+  const groupAmbiguous = groupResolution.status === "ambiguous";
+
+  if (directResolved && !groupResolved && !groupAmbiguous) {
+    return {
+      status: "resolved",
+      target: {
+        kind: "direct",
+        candidate: directResolution.candidate,
+      },
+    };
+  }
+
+  if (groupResolved && !directResolved && !directAmbiguous) {
+    return {
+      status: "resolved",
+      target: {
+        kind: "group",
+        thread: groupResolution.thread,
+        label: groupResolution.label,
+      },
+    };
+  }
+
+  if (directResolved || directAmbiguous || groupResolved || groupAmbiguous) {
+    const directLabels =
+      directResolution.status === "resolved"
+        ? [formatCandidateLabel(directResolution.candidate)]
+        : directResolution.status === "ambiguous"
+          ? directResolution.alternatives.map(formatCandidateLabel)
+          : [];
+    const groupLabels =
+      groupResolution.status === "resolved"
+        ? [`Group: ${groupResolution.label}`]
+        : groupResolution.status === "ambiguous"
+          ? groupResolution.alternatives.map((label) => `Group: ${label}`)
+          : [];
+    const alternatives = mergeUniqueLabels([...directLabels, ...groupLabels], 4);
+    return {
+      status: "ambiguous",
+      alternatives,
+    };
+  }
+
+  return {
+    status: "not_found",
+  };
+}
+
 function removeMemberFromGroupThread(
   thread: StoredChatThread,
   memberId: string
@@ -2950,11 +3205,31 @@ function shortenPreview(text: string, maxLength: number): string {
   return `${trimmed.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
+function formatScheduledDateTime(
+  timestamp: number,
+  language: "en" | "ru"
+): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "";
+  }
+  try {
+    return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : "en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(timestamp));
+  } catch {
+    return new Date(timestamp).toISOString();
+  }
+}
+
 function buildSendActionReply(
   language: "en" | "ru",
   summary: SendActionSummary
 ): string {
   const sent = summary.outcomes.filter((item) => item.status === "sent");
+  const scheduled = sent.filter(
+    (item) => typeof item.scheduledFor === "number" && item.scheduledFor > 0
+  );
   const notFound = summary.outcomes.filter((item) => item.status === "not_found");
   const ambiguous = summary.outcomes.filter((item) => item.status === "ambiguous");
   const blocked = summary.outcomes.filter((item) => item.status === "blocked");
@@ -2963,17 +3238,39 @@ function buildSendActionReply(
 
   if (language === "ru") {
     if (sent.length > 0) {
-      lines.push(
-        sent.length === 1
-          ? "Готово. Сообщение отправлено."
-          : `Готово. Отправил ${sent.length} сообщений.`
-      );
+      if (scheduled.length > 0 && sent.length === scheduled.length) {
+        lines.push(
+          sent.length === 1
+            ? "Готово. Сообщение запланировано."
+            : `Готово. Запланировано ${sent.length} сообщений.`
+        );
+      } else if (scheduled.length > 0) {
+        lines.push(
+          `Готово. Отправил ${sent.length - scheduled.length} и запланировал ${scheduled.length} сообщений.`
+        );
+      } else {
+        lines.push(
+          sent.length === 1
+            ? "Готово. Сообщение отправлено."
+            : `Готово. Отправил ${sent.length} сообщений.`
+        );
+      }
       for (const item of sent) {
         const label =
           item.resolvedName && item.resolvedUsername
             ? `${item.resolvedName} (@${item.resolvedUsername})`
             : item.resolvedName || item.recipientQuery;
-        lines.push(`- ${label}: "${shortenPreview(item.messageText, 90)}"`);
+        const preview = shortenPreview(item.messageText, 90);
+        if (typeof item.scheduledFor === "number" && item.scheduledFor > 0) {
+          lines.push(
+            `- ${label}: "${preview}" (запланировано на ${formatScheduledDateTime(
+              item.scheduledFor,
+              language
+            )})`
+          );
+        } else {
+          lines.push(`- ${label}: "${preview}"`);
+        }
       }
     }
 
@@ -3006,17 +3303,39 @@ function buildSendActionReply(
   }
 
   if (sent.length > 0) {
-    lines.push(
-      sent.length === 1
-        ? "Done. Message sent."
-        : `Done. Sent ${sent.length} messages.`
-    );
+    if (scheduled.length > 0 && sent.length === scheduled.length) {
+      lines.push(
+        sent.length === 1
+          ? "Done. Message scheduled."
+          : `Done. Scheduled ${sent.length} messages.`
+      );
+    } else if (scheduled.length > 0) {
+      lines.push(
+        `Done. Sent ${sent.length - scheduled.length} and scheduled ${scheduled.length} messages.`
+      );
+    } else {
+      lines.push(
+        sent.length === 1
+          ? "Done. Message sent."
+          : `Done. Sent ${sent.length} messages.`
+      );
+    }
     for (const item of sent) {
       const label =
         item.resolvedName && item.resolvedUsername
           ? `${item.resolvedName} (@${item.resolvedUsername})`
           : item.resolvedName || item.recipientQuery;
-      lines.push(`- ${label}: "${shortenPreview(item.messageText, 90)}"`);
+      const preview = shortenPreview(item.messageText, 90);
+      if (typeof item.scheduledFor === "number" && item.scheduledFor > 0) {
+        lines.push(
+          `- ${label}: "${preview}" (scheduled for ${formatScheduledDateTime(
+            item.scheduledFor,
+            language
+          )})`
+        );
+      } else {
+        lines.push(`- ${label}: "${preview}"`);
+      }
     }
   }
 
@@ -3052,12 +3371,12 @@ function buildSendParseErrorReply(language: "en" | "ru"): string {
   if (language === "ru") {
     return [
       "Не смог разобрать команду отправки.",
-      'Формат: `напиши [кому] что [текст]` или `send [name] - [text]`.',
+      'Формат: `напиши [кому] что [текст]`, `send [chat/group] - [text]`, `send [chat/group] - [text] in 10 minutes`.',
     ].join("\n");
   }
   return [
     "Couldn't parse the send command.",
-    "Use: `send [recipient] that [message]` or `send [recipient] - [message]`.",
+    "Use: `send [recipient/group] that [message]`, `send [recipient/group] - [message]`, or `send [recipient/group] - [message] in 10 minutes`.",
   ].join("\n");
 }
 
@@ -3713,7 +4032,7 @@ function extractFirstJsonObject(raw: string): string | null {
   return null;
 }
 
-function normalizePlannedSendIntents(payload: unknown): SendIntent[] {
+function normalizePlannedSendIntents(payload: unknown, now: number): SendIntent[] {
   const asRecord =
     payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
   const rawActions = Array.isArray(payload)
@@ -3741,15 +4060,30 @@ function normalizePlannedSendIntents(payload: unknown): SendIntent[] {
       action.text,
       action.content,
     ].find((value) => typeof value === "string") as string | undefined;
+    const scheduledForRaw = [
+      action.scheduledFor,
+      action.scheduleFor,
+      action.scheduleAt,
+      action.sendAt,
+      action.deliverAt,
+      action.when,
+    ].find(
+      (value) => typeof value === "number" || typeof value === "string"
+    );
 
     const recipientQuery = cleanRecipientQuery(recipientRaw ?? "");
     const messageText = cleanMessageText(messageRaw ?? "");
+    const scheduledFor = enforceScheduledDelay(
+      normalizeScheduledForValue(scheduledForRaw, now),
+      now
+    );
     if (!recipientQuery || !messageText) {
       continue;
     }
     intents.push({
       recipientQuery,
       messageText,
+      scheduledFor,
     });
     if (intents.length >= MAX_AUTOMATION_TARGETS) {
       break;
@@ -3839,6 +4173,15 @@ async function planSendIntentsWithAi(
       return username ? `- ${name} (@${username})` : `- ${name}`;
     })
     .join("\n");
+  const groupsCatalog = store.threads
+    .filter(
+      (thread) => thread.threadType === "group" && thread.memberIds.includes(userId)
+    )
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, MAX_SEND_AI_CONTACTS)
+    .map((thread) => `- ${formatThreadLabel(thread)}`)
+    .join("\n");
+  const plannerNow = Date.now();
 
   const { apiKey, baseUrl, model: modelFromEnv } = providerConfig;
   const modelCandidates = buildModelCandidates(modelFromEnv, false).slice(0, 2);
@@ -3846,20 +4189,22 @@ async function planSendIntentsWithAi(
     language === "ru"
       ? [
           "Ты AI-оркестратор команды send в мессенджере.",
-          "На входе команда пользователя и список известных контактов.",
+          "На входе команда пользователя, список известных контактов и групп.",
           "Нужно вернуть только JSON без markdown и без пояснений.",
-          "Формат строго: {\"actions\":[{\"recipientQuery\":\"...\",\"messageText\":\"...\"}]}",
-          "recipientQuery должен быть из команды и по возможности с точным @username из списка.",
+          "Формат строго: {\"actions\":[{\"recipientQuery\":\"...\",\"messageText\":\"...\",\"scheduledFor\":1234567890000}]}",
+          "scheduledFor опционален. Добавляй его только когда нужна отложенная отправка (Unix time в миллисекундах).",
+          "recipientQuery должен быть из команды и по возможности точно совпадать с контактом или названием группы из списка.",
           "Если текст похож на задачу для написания сообщения, сам сгенерируй финальное сообщение.",
           "Если просят подробно, сообщение должно быть развернутым и конкретным.",
           `Максимум действий: ${MAX_AUTOMATION_TARGETS}.`,
         ].join(" ")
       : [
           "You are the send-command orchestrator in a messenger app.",
-          "Input includes user command plus known contacts.",
+          "Input includes user command plus known contacts and groups.",
           "Return JSON only, with no markdown and no explanations.",
-          'Strict format: {"actions":[{"recipientQuery":"...","messageText":"..."}]}',
-          "recipientQuery should use the exact contact identifier, preferably @username from the catalog.",
+          'Strict format: {"actions":[{"recipientQuery":"...","messageText":"...","scheduledFor":1234567890000}]}',
+          "scheduledFor is optional and should be set only for delayed messages (Unix time in milliseconds).",
+          "recipientQuery should map to either a known contact or a known group title.",
           "If user text is an instruction, generate the final outgoing message.",
           "If user asks for details, make the message detailed and concrete.",
           `Maximum actions: ${MAX_AUTOMATION_TARGETS}.`,
@@ -3887,12 +4232,15 @@ async function planSendIntentsWithAi(
               role: "user" as const,
               content: [
                 `Command: ${cleanedCommand}`,
+                `Current timestamp (ms): ${plannerNow}`,
                 "Recent user messages (last 5):",
                 recentUserMessages.length > 0
                   ? recentUserMessages.map((message, index) => `${index + 1}. ${message}`).join("\n")
                   : "(none)",
                 "Known contacts:",
                 contactsCatalog || "(none)",
+                "Known groups:",
+                groupsCatalog || "(none)",
               ].join("\n"),
             },
           ],
@@ -3914,7 +4262,7 @@ async function planSendIntentsWithAi(
 
       const jsonText = extractFirstJsonObject(raw) ?? raw.trim();
       const parsed = JSON.parse(jsonText) as unknown;
-      const planned = normalizePlannedSendIntents(parsed);
+      const planned = normalizePlannedSendIntents(parsed, plannerNow);
       if (planned.length > 0) {
         return planned;
       }
@@ -4064,9 +4412,18 @@ async function prepareSendIntent(
     return null;
   }
 
+  const now = Date.now();
+  const extractedSchedule = extractScheduleFromMessageText(intent.messageText, now);
+  const explicitScheduledFor = enforceScheduledDelay(
+    normalizeScheduledForValue(intent.scheduledFor, now),
+    now
+  );
+  const scheduledFor =
+    explicitScheduledFor ??
+    enforceScheduledDelay(extractedSchedule.scheduledFor, now);
   const messageText = await rewriteSendMessageText(
     language,
-    intent.messageText,
+    extractedSchedule.messageText,
     recentUserMessages
   );
   if (!messageText) {
@@ -4076,6 +4433,7 @@ async function prepareSendIntent(
   return {
     recipientQuery,
     messageText,
+    scheduledFor,
   };
 }
 
@@ -4101,13 +4459,17 @@ async function executeSendIntents(
     const candidates = buildRecipientCandidates(store, userId);
     const outcomes: SendActionOutcome[] = [];
     let sentMessages = 0;
+    let scheduledMessages = 0;
 
     for (const intent of preparedIntents) {
       const recipientQuery = intent.recipientQuery;
       const messageText = intent.messageText;
+      const now = Date.now() + sentMessages;
+      const scheduledFor = enforceScheduledDelay(intent.scheduledFor ?? null, now);
+      const createdAt = scheduledFor ?? now;
+      const scheduledAt = scheduledFor ? now : 0;
 
       if (isFavoritesRecipientQuery(recipientQuery)) {
-        const createdAt = Date.now() + sentMessages;
         const nextMessage: StoredChatMessage = {
           id: createEntityId("msg"),
           chatId: FAVORITES_CHAT_ID,
@@ -4116,6 +4478,7 @@ async function executeSendIntents(
           attachments: [],
           replyToMessageId: "",
           createdAt,
+          scheduledAt,
           editedAt: 0,
           savedBy: {
             [userId]: createdAt,
@@ -4124,6 +4487,9 @@ async function executeSendIntents(
 
         store.messages.push(nextMessage);
         sentMessages += 1;
+        if (scheduledFor) {
+          scheduledMessages += 1;
+        }
 
         outcomes.push({
           recipientQuery,
@@ -4132,11 +4498,12 @@ async function executeSendIntents(
           resolvedName: /[а-яё]/iu.test(recipientQuery)
             ? "Избранное"
             : "Favorites",
+          scheduledFor: scheduledFor ?? undefined,
         });
         continue;
       }
 
-      const resolution = resolveRecipient(candidates, recipientQuery);
+      const resolution = resolveSendTarget(store, candidates, userId, recipientQuery);
 
       if (resolution.status === "not_found") {
         outcomes.push({
@@ -4152,15 +4519,83 @@ async function executeSendIntents(
           recipientQuery,
           messageText,
           status: "ambiguous",
-          alternatives: resolution.alternatives.map(formatCandidateLabel).slice(0, 3),
+          alternatives: resolution.alternatives.slice(0, 4),
         });
         continue;
       }
 
-      const targetUser = store.users.find(
-        (candidate) => candidate.id === resolution.candidate.userId
-      );
-      if (!targetUser) {
+      const target = resolution.target;
+      if (target.kind === "direct") {
+        const targetUser = store.users.find(
+          (candidate) => candidate.id === target.candidate.userId
+        );
+        if (!targetUser) {
+          outcomes.push({
+            recipientQuery,
+            messageText,
+            status: "not_found",
+          });
+          continue;
+        }
+
+        const senderBlockedTarget = sender.blockedUserIds.includes(targetUser.id);
+        const targetBlockedSender = targetUser.blockedUserIds.includes(userId);
+        if (senderBlockedTarget || targetBlockedSender) {
+          outcomes.push({
+            recipientQuery,
+            messageText,
+            status: "blocked",
+            resolvedName: targetUser.name,
+            resolvedUsername: targetUser.username,
+          });
+          continue;
+        }
+
+        const thread = ensureDirectThread(
+          store,
+          userId,
+          targetUser.id,
+          scheduledFor ? now : createdAt
+        );
+        const nextMessage: StoredChatMessage = {
+          id: createEntityId("msg"),
+          chatId: thread.id,
+          authorId: userId,
+          text: messageText,
+          attachments: [],
+          replyToMessageId: "",
+          createdAt,
+          scheduledAt,
+          editedAt: 0,
+          savedBy: {},
+        };
+
+        store.messages.push(nextMessage);
+        if (!scheduledFor) {
+          thread.updatedAt = createdAt;
+          thread.readBy = {
+            ...thread.readBy,
+            [userId]: createdAt,
+          };
+        }
+        sentMessages += 1;
+        if (scheduledFor) {
+          scheduledMessages += 1;
+        }
+
+        outcomes.push({
+          recipientQuery,
+          messageText,
+          status: "sent",
+          resolvedName: targetUser.name,
+          resolvedUsername: targetUser.username,
+          scheduledFor: scheduledFor ?? undefined,
+        });
+        continue;
+      }
+
+      const thread = target.thread;
+      if (!thread.memberIds.includes(userId)) {
         outcomes.push({
           recipientQuery,
           messageText,
@@ -4169,21 +4604,6 @@ async function executeSendIntents(
         continue;
       }
 
-      const senderBlockedTarget = sender.blockedUserIds.includes(targetUser.id);
-      const targetBlockedSender = targetUser.blockedUserIds.includes(userId);
-      if (senderBlockedTarget || targetBlockedSender) {
-        outcomes.push({
-          recipientQuery,
-          messageText,
-          status: "blocked",
-          resolvedName: targetUser.name,
-          resolvedUsername: targetUser.username,
-        });
-        continue;
-      }
-
-      const createdAt = Date.now() + sentMessages;
-      const thread = ensureDirectThread(store, userId, targetUser.id, createdAt);
       const nextMessage: StoredChatMessage = {
         id: createEntityId("msg"),
         chatId: thread.id,
@@ -4192,30 +4612,37 @@ async function executeSendIntents(
         attachments: [],
         replyToMessageId: "",
         createdAt,
+        scheduledAt,
         editedAt: 0,
         savedBy: {},
       };
 
       store.messages.push(nextMessage);
-      thread.updatedAt = createdAt;
-      thread.readBy = {
-        ...thread.readBy,
-        [userId]: createdAt,
-      };
+      if (!scheduledFor) {
+        thread.updatedAt = createdAt;
+        thread.readBy = {
+          ...thread.readBy,
+          [userId]: createdAt,
+        };
+      }
       sentMessages += 1;
+      if (scheduledFor) {
+        scheduledMessages += 1;
+      }
 
       outcomes.push({
         recipientQuery,
         messageText,
         status: "sent",
-        resolvedName: targetUser.name,
-        resolvedUsername: targetUser.username,
+        resolvedName: target.label,
+        scheduledFor: scheduledFor ?? undefined,
       });
     }
 
     return {
       outcomes,
       sentMessages,
+      scheduledMessages,
     };
   });
 }
@@ -4691,6 +5118,15 @@ async function executeInviteToGroupIntents(
         outcomes.push({
           groupQuery,
           status: "not_found",
+        });
+        continue;
+      }
+      if (thread.groupKind === "channel") {
+        outcomes.push({
+          groupQuery,
+          status: "forbidden",
+          resolvedGroupTitle: groupResolution.label,
+          details: "Members cannot be added to channels.",
         });
         continue;
       }

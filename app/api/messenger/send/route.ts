@@ -27,6 +27,7 @@ type SendPayload = {
   replyToMessageId?: string;
   isForwarded?: boolean;
   forwardedMessageId?: string;
+  scheduledFor?: number | string;
 };
 
 type BotConversationMessage = {
@@ -45,6 +46,7 @@ type SendResult = {
 };
 
 const FAVORITES_CHAT_ID = "__favorites__";
+const MIN_SCHEDULE_DELAY_MS = 5_000;
 
 function fallbackBotReply(lastUserText: string): string {
   const isRussian = /[а-яё]/i.test(lastUserText);
@@ -191,6 +193,27 @@ export async function POST(request: Request) {
   const replyToMessageId = body?.replyToMessageId?.trim() ?? "";
   const isForwarded = body?.isForwarded === true;
   const forwardedMessageId = body?.forwardedMessageId?.trim() ?? "";
+  const rawScheduledFor = body?.scheduledFor;
+  const parsedScheduledFor =
+    typeof rawScheduledFor === "number"
+      ? rawScheduledFor
+      : typeof rawScheduledFor === "string" && rawScheduledFor.trim().length > 0
+        ? Number(rawScheduledFor.trim())
+        : Number.NaN;
+  const hasScheduledFor = Number.isFinite(parsedScheduledFor);
+  const normalizedScheduledFor = hasScheduledFor
+    ? Math.trunc(parsedScheduledFor)
+    : 0;
+  const now = Date.now();
+  if (hasScheduledFor && normalizedScheduledFor <= now + MIN_SCHEDULE_DELAY_MS) {
+    return NextResponse.json(
+      { error: "Scheduled time must be at least 5 seconds in the future." },
+      { status: 400 }
+    );
+  }
+  const isScheduledMessage = hasScheduledFor;
+  const scheduledAt = isScheduledMessage ? now : 0;
+  const messageCreatedAt = isScheduledMessage ? normalizedScheduledFor : now;
   const attachmentsRaw = Array.isArray(body?.attachments) ? body.attachments : [];
   const attachments: StoredChatAttachment[] = attachmentsRaw
     .map((attachment) => {
@@ -229,7 +252,6 @@ export async function POST(request: Request) {
         assertUserCanSendMessages(store, userId);
 
         if (chatId === FAVORITES_CHAT_ID) {
-          const now = Date.now();
           const message: StoredChatMessage = {
             id: createEntityId("msg"),
             chatId: FAVORITES_CHAT_ID,
@@ -237,17 +259,18 @@ export async function POST(request: Request) {
             text,
             attachments,
             replyToMessageId: "",
-            createdAt: now,
+            createdAt: messageCreatedAt,
+            scheduledAt,
             editedAt: 0,
             savedBy: {
-              [userId]: now,
+              [userId]: messageCreatedAt,
             },
           };
           store.messages.push(message);
 
           return {
             messageId: message.id,
-            createdAt: now,
+            createdAt: messageCreatedAt,
             shouldAutoReply: false,
             botUserId: null,
             conversation: [],
@@ -313,7 +336,6 @@ export async function POST(request: Request) {
           }
         }
 
-        const now = Date.now();
         const message: StoredChatMessage = {
           id: createEntityId("msg"),
           chatId,
@@ -321,27 +343,33 @@ export async function POST(request: Request) {
           text,
           attachments,
           replyToMessageId,
-          createdAt: now,
+          createdAt: messageCreatedAt,
+          scheduledAt,
           editedAt: 0,
           savedBy: {},
         };
 
         store.messages.push(message);
-        thread.updatedAt = now;
-        thread.readBy = {
-          ...thread.readBy,
-          [userId]: now,
-        };
+        if (!isScheduledMessage) {
+          thread.updatedAt = messageCreatedAt;
+          thread.readBy = {
+            ...thread.readBy,
+            [userId]: messageCreatedAt,
+          };
+        }
 
         const botUserId =
           thread.threadType === "direct"
             ? (thread.memberIds.find((memberId) => memberId !== userId && isBotUserId(memberId)) ??
               null)
             : null;
-        const shouldAutoReply = !isBotUserId(userId) && botUserId !== null;
+        const shouldAutoReply =
+          !isScheduledMessage && !isBotUserId(userId) && botUserId !== null;
         const usersById = new Map(store.users.map((user) => [user.id, user]));
         const chatMessages = store.messages
-          .filter((candidate) => candidate.chatId === chatId)
+          .filter(
+            (candidate) => candidate.chatId === chatId && candidate.createdAt <= now
+          )
           .sort((a, b) => a.createdAt - b.createdAt)
           .slice(-12);
         const conversation: BotConversationMessage[] = chatMessages.map((candidate) => {
@@ -361,7 +389,7 @@ export async function POST(request: Request) {
 
         return {
           messageId: message.id,
-          createdAt: now,
+          createdAt: messageCreatedAt,
           shouldAutoReply,
           botUserId,
           conversation,
@@ -394,6 +422,7 @@ export async function POST(request: Request) {
           attachments: [],
           replyToMessageId: "",
           createdAt: now,
+          scheduledAt: 0,
           editedAt: 0,
           savedBy: {},
         };
