@@ -595,6 +595,8 @@ const FAVORITES_CHAT_PINNED_STORAGE_KEY_PREFIX =
 const AI_ASSISTANT_HISTORY_STORAGE_KEY_PREFIX = "clore_ai_assistant_history_v1_";
 const AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX =
   "clore_ai_assistant_search_mode_v1_";
+const AI_ASSISTANT_AGENT_MODE_STORAGE_KEY_PREFIX =
+  "clore_ai_assistant_agent_mode_v1_";
 const INCOMING_MESSAGE_SOUND_PATH = "/sounds/meet-message-sound-1.mp3";
 const MAX_PINNED_CHATS = 5;
 const MIN_BIRTH_YEAR = 1900;
@@ -915,8 +917,15 @@ const translations = {
     aiAssistantEmptyTitle: "Start a new conversation",
     aiAssistantEmptyHint: "Ask a question and ChatGPT will answer right here.",
     aiAssistantClear: "Clear chat",
-    aiAssistantSearchMode: "Search mode",
+    aiAssistantSearchMode: "Search",
     aiAssistantSearchHint: "Allow web search for up-to-date answers",
+    aiAssistantAgentMode: "Agent",
+    aiAssistantAgentModeHint:
+      "Allow AI to execute messenger commands (send/delete/create groups/invite/remove members, update groups, change roles)",
+    aiAssistantAgentWarningTitle: "Enable Agent (Beta)?",
+    aiAssistantAgentWarningDescription:
+      "Agent is in beta and can execute actions in your messenger (for example send/delete/create groups/invite/remove members, update groups, change roles). This may modify your chats and related data.",
+    aiAssistantAgentWarningConfirm: "Enable agent",
     aiAssistantThinking: "Thinking...",
     onboardingApply: "Apply",
   },
@@ -1223,8 +1232,15 @@ const translations = {
     aiAssistantEmptyTitle: "Начните новый диалог",
     aiAssistantEmptyHint: "Задайте вопрос, и ChatGPT ответит прямо здесь.",
     aiAssistantClear: "Очистить чат",
-    aiAssistantSearchMode: "Режим поиска",
+    aiAssistantSearchMode: "Поиск",
     aiAssistantSearchHint: "Разрешить веб-поиск для актуальных ответов",
+    aiAssistantAgentMode: "Агент",
+    aiAssistantAgentModeHint:
+      "Разрешить AI выполнять команды мессенджера (отправка/удаление/создание групп/приглашения)",
+    aiAssistantAgentWarningTitle: "Включить агента (Beta)?",
+    aiAssistantAgentWarningDescription:
+      "Агент в бета-режиме и может выполнять действия в мессенджере (например, отправка/удаление/создание групп/приглашения). Это может изменить ваши чаты и связанные данные.",
+    aiAssistantAgentWarningConfirm: "Включить агента",
     aiAssistantThinking: "Думаю...",
     onboardingApply: "Применить",
   },
@@ -1257,6 +1273,12 @@ type AiAssistantRequestMessage = {
 type AiAssistantChatResponse = {
   message: string;
   sentMessages?: number;
+  deletedChats?: number;
+  createdGroups?: number;
+  invitedMembers?: number;
+  removedMembers?: number;
+  updatedGroups?: number;
+  updatedMemberRoles?: number;
 };
 
 function normalizeAiAssistantMessages(value: unknown): AiAssistantMessage[] {
@@ -1748,38 +1770,125 @@ function renderFormattedInlineContent(text: string, keyPrefix: string): ReactNod
 }
 
 function renderFormattedMessageText(text: string): ReactNode {
-  const lines = text.split("\n");
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const nodes: ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeBlockLanguage = "";
+  let codeBlockLines: string[] = [];
 
-  return (
-    <div className="space-y-1 leading-6 break-words">
-      {lines.map((line, index) => {
-        const key = `line-${index}`;
-
-        if (line.startsWith("> ")) {
-          return (
-            <div key={key} className="border-l-2 border-primary/70 pl-2 opacity-95">
-              {renderFormattedInlineContent(line.slice(2), `${key}-quote`)}
-            </div>
-          );
-        }
-
-        if (line.startsWith("- ") || line.startsWith("* ")) {
-          return (
-            <div key={key} className="flex items-start gap-2">
-              <span className="mt-2 inline-block size-1.5 shrink-0 rounded-full bg-current/80" />
-              <span>{renderFormattedInlineContent(line.slice(2), `${key}-list`)}</span>
-            </div>
-          );
-        }
-
-        return (
-          <div key={key} className="whitespace-pre-wrap">
-            {renderFormattedInlineContent(line, `${key}-text`)}
+  const flushCodeBlock = (key: string) => {
+    if (!inCodeBlock) {
+      return;
+    }
+    nodes.push(
+      <pre
+        key={key}
+        className="overflow-x-auto rounded-lg border border-zinc-700/80 bg-zinc-950/90 px-3 py-2 text-[13px] leading-5"
+      >
+        {codeBlockLanguage ? (
+          <div className="mb-1 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+            {codeBlockLanguage}
           </div>
-        );
-      })}
-    </div>
-  );
+        ) : null}
+        <code className="whitespace-pre text-zinc-100">
+          {codeBlockLines.join("\n")}
+        </code>
+      </pre>
+    );
+    inCodeBlock = false;
+    codeBlockLanguage = "";
+    codeBlockLines = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const key = `line-${index}`;
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      if (inCodeBlock) {
+        flushCodeBlock(`${key}-code-close`);
+      } else {
+        inCodeBlock = true;
+        codeBlockLanguage = trimmed.slice(3).trim();
+        codeBlockLines = [];
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      continue;
+    }
+
+    if (!trimmed) {
+      nodes.push(<div key={`${key}-spacer`} className="h-1.5" />);
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      const level = headingMatch[1]?.length ?? 1;
+      const headingContent = headingMatch[2] ?? "";
+      const headingClassName =
+        level <= 1
+          ? "text-lg font-semibold"
+          : level === 2
+            ? "text-base font-semibold"
+            : "text-sm font-semibold";
+      nodes.push(
+        <div key={`${key}-heading`} className={`${headingClassName} leading-6`}>
+          {renderFormattedInlineContent(headingContent, `${key}-heading`)}
+        </div>
+      );
+      continue;
+    }
+
+    if (line.startsWith("> ")) {
+      nodes.push(
+        <div key={key} className="border-l-2 border-primary/70 pl-2 opacity-95">
+          {renderFormattedInlineContent(line.slice(2), `${key}-quote`)}
+        </div>
+      );
+      continue;
+    }
+
+    const unorderedMatch = line.match(/^[-*]\s+(.*)$/);
+    if (unorderedMatch) {
+      nodes.push(
+        <div key={key} className="flex items-start gap-2">
+          <span className="mt-2 inline-block size-1.5 shrink-0 rounded-full bg-current/80" />
+          <span>{renderFormattedInlineContent(unorderedMatch[1] ?? "", `${key}-list`)}</span>
+        </div>
+      );
+      continue;
+    }
+
+    const orderedMatch = line.match(/^(\d+)[.)]\s+(.*)$/);
+    if (orderedMatch) {
+      nodes.push(
+        <div key={key} className="flex items-start gap-2">
+          <span className="min-w-[1.25rem] shrink-0 text-right text-current/80">
+            {(orderedMatch[1] ?? "1").slice(0, 4)}.
+          </span>
+          <span>{renderFormattedInlineContent(orderedMatch[2] ?? "", `${key}-olist`)}</span>
+        </div>
+      );
+      continue;
+    }
+
+    nodes.push(
+      <div key={key} className="whitespace-pre-wrap">
+        {renderFormattedInlineContent(line, `${key}-text`)}
+      </div>
+    );
+  }
+
+  if (inCodeBlock) {
+    flushCodeBlock("line-code-eof");
+  }
+
+  return <div className="space-y-1 leading-6 break-words">{nodes}</div>;
 }
 
 function extractMediaUrls(text: string): string[] {
@@ -2417,6 +2526,23 @@ export function WebMessenger({
       return false;
     }
   });
+  const [aiAgentEnabled, setAiAgentEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    try {
+      const stored = window.localStorage.getItem(
+        `${AI_ASSISTANT_AGENT_MODE_STORAGE_KEY_PREFIX}${currentUser.id}`
+      );
+      if (stored === null) {
+        return true;
+      }
+      return stored === "1";
+    } catch {
+      return true;
+    }
+  });
+  const [isAiAgentWarningOpen, setIsAiAgentWarningOpen] = useState(false);
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState("");
   const [aiPendingSyncVersion, setAiPendingSyncVersion] = useState(0);
@@ -2838,6 +2964,15 @@ export function WebMessenger({
     );
   }, [aiSearchEnabled, currentUser.id]);
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      `${AI_ASSISTANT_AGENT_MODE_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      aiAgentEnabled ? "1" : "0"
+    );
+  }, [aiAgentEnabled, currentUser.id]);
+  useEffect(() => {
     if (activeSidebar !== "assistant") {
       return;
     }
@@ -3149,6 +3284,23 @@ export function WebMessenger({
     setAiMessages([]);
     setAiError("");
   }, []);
+  const handleAiAgentToggle = useCallback(
+    (checked: boolean) => {
+      if (!checked) {
+        setAiAgentEnabled(false);
+        return;
+      }
+      if (aiAgentEnabled) {
+        return;
+      }
+      setIsAiAgentWarningOpen(true);
+    },
+    [aiAgentEnabled]
+  );
+  const confirmEnableAiAgent = useCallback(() => {
+    setAiAgentEnabled(true);
+    setIsAiAgentWarningOpen(false);
+  }, []);
   const sendAiPrompt = useCallback(async () => {
     const prompt = aiDraft.trim();
     if (!prompt || isAiSubmitting) {
@@ -3195,6 +3347,7 @@ export function WebMessenger({
           userId: currentUser.id,
           language,
           searchEnabled: aiSearchEnabled,
+          agentEnabled: aiAgentEnabled,
           messages: conversation,
         }),
       });
@@ -3211,7 +3364,15 @@ export function WebMessenger({
             : message
         )
       );
-      if ((response.sentMessages ?? 0) > 0) {
+      if (
+        (response.sentMessages ?? 0) > 0 ||
+        (response.deletedChats ?? 0) > 0 ||
+        (response.createdGroups ?? 0) > 0 ||
+        (response.invitedMembers ?? 0) > 0 ||
+        (response.removedMembers ?? 0) > 0 ||
+        (response.updatedGroups ?? 0) > 0 ||
+        (response.updatedMemberRoles ?? 0) > 0
+      ) {
         setAiPendingSyncVersion((prev) => prev + 1);
       }
     } catch (error) {
@@ -3233,6 +3394,7 @@ export function WebMessenger({
       setIsAiSubmitting(false);
     }
   }, [
+    aiAgentEnabled,
     aiSearchEnabled,
     aiDraft,
     aiMessages,
@@ -10588,9 +10750,7 @@ export function WebMessenger({
                                       : "border-zinc-700/90 bg-zinc-900/90 text-zinc-100"
                                 }`}
                               >
-                                <p className="whitespace-pre-wrap break-words leading-relaxed">
-                                  {message.content}
-                                </p>
+                                {renderFormattedMessageText(message.content)}
                               </div>
                             </div>
                           </ContextMenuTrigger>
@@ -10619,18 +10779,32 @@ export function WebMessenger({
                 >
                   <div className="w-full">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <label className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-300">
-                        <Search className="size-3.5 text-zinc-400" />
-                        <span className="font-medium text-zinc-200">
-                          {t("aiAssistantSearchMode")}
-                        </span>
-                        <Switch
-                          checked={aiSearchEnabled}
-                          onCheckedChange={setAiSearchEnabled}
-                          aria-label={t("aiAssistantSearchHint")}
-                          size="sm"
-                        />
-                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-300">
+                          <Search className="size-3.5 text-zinc-400" />
+                          <span className="font-medium text-zinc-200">
+                            {t("aiAssistantSearchMode")}
+                          </span>
+                          <Switch
+                            checked={aiSearchEnabled}
+                            onCheckedChange={setAiSearchEnabled}
+                            aria-label={t("aiAssistantSearchHint")}
+                            size="sm"
+                          />
+                        </label>
+                        <label className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-300">
+                          <Shield className="size-3.5 text-zinc-400" />
+                          <span className="font-medium text-zinc-200">
+                            {t("aiAssistantAgentMode")}
+                          </span>
+                          <Switch
+                            checked={aiAgentEnabled}
+                            onCheckedChange={handleAiAgentToggle}
+                            aria-label={t("aiAssistantAgentModeHint")}
+                            size="sm"
+                          />
+                        </label>
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
@@ -10673,6 +10847,32 @@ export function WebMessenger({
                     </div>
                   </div>
                 </form>
+                <AlertDialog
+                  open={isAiAgentWarningOpen}
+                  onOpenChange={(open) => setIsAiAgentWarningOpen(open)}
+                >
+                  <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-zinc-100">
+                        {t("aiAssistantAgentWarningTitle")}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="text-zinc-400">
+                        {t("aiAssistantAgentWarningDescription")}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2">
+                      <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:!text-zinc-100">
+                        {t("cancel")}
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        className="h-10 rounded-lg border border-amber-500/70 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 hover:!text-zinc-100"
+                        onClick={confirmEnableAiAgent}
+                      >
+                        {t("aiAssistantAgentWarningConfirm")}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             ) : null}
             {shouldShowProfileSidebar ? (

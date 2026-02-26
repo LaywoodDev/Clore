@@ -34,3 +34,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## AI Knowledge Base (Clore)
+
+- Runtime KB logic for assistant responses: `lib/server/ai-knowledge-base.ts`
+- Human-readable KB reference: `docs/ai-knowledge-base.md`
+- Integrated into assistant API route: `app/api/ai/chat/route.ts`
+
+If you add new product features or APIs, update the KB module and reference doc so AI answers stay aligned with current app behavior.
