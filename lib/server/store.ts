@@ -58,6 +58,7 @@ export type StoredChatThread = {
   memberIds: string[];
   threadType: "direct" | "group";
   title: string;
+  description: string;
   avatarUrl: string;
   bannerUrl: string;
   createdById: string;
@@ -712,6 +713,8 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
           ? "group"
           : "direct";
     const title = typeof thread.title === "string" ? thread.title.trim() : "";
+    const description =
+      typeof thread.description === "string" ? thread.description.trim() : "";
     const avatarUrl =
       typeof thread.avatarUrl === "string" ? thread.avatarUrl.trim() : "";
     const bannerUrl =
@@ -793,6 +796,7 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       memberIds: uniqueMemberIds,
       threadType,
       title,
+      description,
       avatarUrl,
       bannerUrl,
       createdById,

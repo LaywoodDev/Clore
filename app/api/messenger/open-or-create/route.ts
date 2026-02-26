@@ -60,6 +60,7 @@ export async function POST(request: Request) {
         memberIds: [userId, targetUserId],
         threadType: "direct",
         title: "",
+        description: "",
         avatarUrl: "",
         bannerUrl: "",
         createdById: userId,

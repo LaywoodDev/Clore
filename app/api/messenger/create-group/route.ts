@@ -112,6 +112,7 @@ export async function POST(request: Request) {
         memberIds: [...memberSet],
         threadType: "group",
         title,
+        description: "",
         avatarUrl: "",
         bannerUrl: "",
         createdById: userId,

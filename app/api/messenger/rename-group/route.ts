@@ -6,10 +6,12 @@ type RenameGroupPayload = {
   userId?: string;
   chatId?: string;
   title?: string;
+  description?: string;
 };
 
 const GROUP_TITLE_MIN_LENGTH = 3;
 const GROUP_TITLE_MAX_LENGTH = 64;
+const GROUP_DESCRIPTION_MAX_LENGTH = 280;
 
 function normalizeGroupTitle(value: string): string {
   return value.trim().replace(/\s+/g, " ");
@@ -20,6 +22,7 @@ export async function PATCH(request: Request) {
   const userId = body?.userId?.trim() ?? "";
   const chatId = body?.chatId?.trim() ?? "";
   const title = normalizeGroupTitle(body?.title ?? "");
+  const description = body?.description?.trim() ?? "";
 
   if (!userId || !chatId) {
     return NextResponse.json({ error: "Missing rename fields." }, { status: 400 });
@@ -33,6 +36,14 @@ export async function PATCH(request: Request) {
   if (title.length > GROUP_TITLE_MAX_LENGTH) {
     return NextResponse.json(
       { error: `Group title must be at most ${GROUP_TITLE_MAX_LENGTH} characters.` },
+      { status: 422 }
+    );
+  }
+  if (description.length > GROUP_DESCRIPTION_MAX_LENGTH) {
+    return NextResponse.json(
+      {
+        error: `Group description must be at most ${GROUP_DESCRIPTION_MAX_LENGTH} characters.`,
+      },
       { status: 422 }
     );
   }
@@ -75,6 +86,7 @@ export async function PATCH(request: Request) {
       }
 
       thread.title = title;
+      thread.description = description;
       thread.updatedAt = Date.now();
     });
 

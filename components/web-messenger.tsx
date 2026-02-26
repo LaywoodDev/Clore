@@ -290,6 +290,7 @@ type StoredChatThread = {
   memberIds: string[];
   threadType: "direct" | "group";
   title: string;
+  description: string;
   avatarUrl: string;
   bannerUrl: string;
   createdById: string;
@@ -383,6 +384,7 @@ type ChatListItem = {
   isGroupCreator: boolean;
   myGroupRole: GroupRole | null;
   name: string;
+  description: string;
   username: string;
   avatarUrl: string;
   bannerUrl: string;
@@ -578,6 +580,7 @@ const MESSAGE_TARGET_HIGHLIGHT_MS = 1_200;
 const UNDO_WINDOW_MS = 5_000;
 const GROUP_TITLE_MIN_LENGTH = 3;
 const GROUP_TITLE_MAX_LENGTH = 64;
+const GROUP_DESCRIPTION_MAX_LENGTH = 280;
 const GROUP_MAX_MEMBERS = 50;
 const MAX_AI_ASSISTANT_HISTORY_MESSAGES = 40;
 const BUILT_IN_ASSISTANT_USER_ID = "bot-chatgpt";
@@ -1220,6 +1223,7 @@ type AiAssistantRequestMessage = {
 };
 type AiAssistantChatResponse = {
   message: string;
+  sentMessages?: number;
 };
 
 function normalizeAiAssistantMessages(value: unknown): AiAssistantMessage[] {
@@ -2378,12 +2382,21 @@ export function WebMessenger({
   });
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [aiPendingSyncVersion, setAiPendingSyncVersion] = useState(0);
   const [query, setQuery] = useState("");
+  const [groupCreationStep, setGroupCreationStep] = useState<"members" | "details">(
+    "members"
+  );
+  const [groupMemberQueryDraft, setGroupMemberQueryDraft] = useState("");
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [groupMemberIdsDraft, setGroupMemberIdsDraft] = useState<string[]>([]);
   const [groupRenameDraft, setGroupRenameDraft] = useState("");
+  const [groupDescriptionDraft, setGroupDescriptionDraft] = useState("");
   const [groupMemberSearchDraft, setGroupMemberSearchDraft] = useState("");
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
+  const [isGroupTypeDialogOpen, setIsGroupTypeDialogOpen] = useState(false);
+  const [isGroupPermissionsDialogOpen, setIsGroupPermissionsDialogOpen] = useState(false);
+  const [isGroupInvitationsDialogOpen, setIsGroupInvitationsDialogOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -3159,6 +3172,9 @@ export function WebMessenger({
             : message
         )
       );
+      if ((response.sentMessages ?? 0) > 0) {
+        setAiPendingSyncVersion((prev) => prev + 1);
+      }
     } catch (error) {
       const message = getRequestErrorMessage(error);
       setAiError(message);
@@ -3777,6 +3793,13 @@ export function WebMessenger({
     void loadChatData();
   }, [loadChatData]);
 
+  useEffect(() => {
+    if (aiPendingSyncVersion === 0) {
+      return;
+    }
+    void loadChatData({ forceFullSync: true });
+  }, [aiPendingSyncVersion, loadChatData]);
+
   const chatItems = useMemo<ChatListItem[]>(() => {
     const isDesktopViewport =
       typeof window !== "undefined" &&
@@ -3859,6 +3882,7 @@ export function WebMessenger({
           isGroupCreator: isGroup && myGroupRole === "owner",
           myGroupRole,
           name: displayName,
+          description: isGroup ? thread.description : "",
           username: displayUsername,
           avatarUrl: displayAvatarUrl,
           bannerUrl: displayBannerUrl,
@@ -3919,6 +3943,7 @@ export function WebMessenger({
       isGroupCreator: false,
       myGroupRole: null,
       name: t("favorites"),
+      description: "",
       username:
         latestFavorite && favoriteThread
           ? favoriteThread.threadType === "group"
@@ -4001,6 +4026,7 @@ export function WebMessenger({
       isGroupCreator: false,
       myGroupRole: null,
       name: previewUser.name || t("unknownUser"),
+      description: "",
       username: previewUser.username || "unknown",
       avatarUrl: previewUser.avatarUrl ?? "",
       bannerUrl: previewUser.bannerUrl ?? "",
@@ -5692,6 +5718,60 @@ export function WebMessenger({
       ),
     [knownUsers, currentUser.id]
   );
+  const normalizedGroupMemberDraftQuery = useMemo(
+    () => normalizeSearchQuery(groupMemberQueryDraft),
+    [groupMemberQueryDraft]
+  );
+  const groupCandidateById = useMemo(
+    () => new Map(groupCandidates.map((candidate) => [candidate.id, candidate])),
+    [groupCandidates]
+  );
+  const selectedGroupDraftMembers = useMemo(
+    () =>
+      groupMemberIdsDraft
+        .map((memberId) => groupCandidateById.get(memberId))
+        .filter((candidate): candidate is AuthUser => Boolean(candidate)),
+    [groupCandidateById, groupMemberIdsDraft]
+  );
+  const filteredGroupCandidates = useMemo(() => {
+    const normalized = normalizedGroupMemberDraftQuery;
+    return groupCandidates.filter((candidate) => {
+      if (!normalized.raw) {
+        return true;
+      }
+      return (
+        candidate.name.toLowerCase().includes(normalized.raw) ||
+        candidate.username.toLowerCase().includes(normalized.username) ||
+        candidate.email.toLowerCase().includes(normalized.raw)
+      );
+    });
+  }, [groupCandidates, normalizedGroupMemberDraftQuery]);
+  const resetGroupCreationDraft = useCallback(() => {
+    setGroupCreationStep("members");
+    setGroupMemberQueryDraft("");
+    setGroupNameDraft("");
+    setGroupMemberIdsDraft([]);
+  }, []);
+  const openGroupCreationDialog = useCallback(() => {
+    resetGroupCreationDraft();
+    setIsGroupMenuOpen(true);
+  }, [resetGroupCreationDraft]);
+  const handleGroupMenuOpenChange = useCallback(
+    (open: boolean) => {
+      setIsGroupMenuOpen(open);
+      if (!open && !isCreatingGroup) {
+        resetGroupCreationDraft();
+      }
+    },
+    [isCreatingGroup, resetGroupCreationDraft]
+  );
+  const goToGroupDetailsStep = useCallback(() => {
+    if (groupMemberIdsDraft.length < 2) {
+      showToast(t("groupMembersMinError"));
+      return;
+    }
+    setGroupCreationStep("details");
+  }, [groupMemberIdsDraft.length, showToast, t]);
 
   const markChatAsRead = useCallback(
     async (chatId: string) => {
@@ -6621,15 +6701,25 @@ export function WebMessenger({
     [currentUser.id, getRequestErrorMessage, loadChatData, showToast]
   );
 
-  const toggleGroupMember = (userId: string) => {
-    setGroupMemberIdsDraft((prev) =>
-      prev.includes(userId)
-        ? prev.filter((candidate) => candidate !== userId)
-        : prev.length + 1 >= GROUP_MAX_MEMBERS
-          ? prev
-          : [...prev, userId]
-    );
-  };
+  const toggleGroupMember = useCallback(
+    (userId: string) => {
+      let hitLimit = false;
+      setGroupMemberIdsDraft((prev) => {
+        if (prev.includes(userId)) {
+          return prev.filter((candidate) => candidate !== userId);
+        }
+        if (prev.length + 1 >= GROUP_MAX_MEMBERS) {
+          hitLimit = true;
+          return prev;
+        }
+        return [...prev, userId];
+      });
+      if (hitLimit) {
+        showToast(t("groupMembersLimitHint"));
+      }
+    },
+    [showToast, t]
+  );
 
   const createGroupChat = async () => {
     const title = groupNameDraft.trim().replace(/\s+/g, " ");
@@ -6663,8 +6753,7 @@ export function WebMessenger({
           }),
         }
       );
-      setGroupNameDraft("");
-      setGroupMemberIdsDraft([]);
+      resetGroupCreationDraft();
       setIsGroupMenuOpen(false);
       setActiveChatId(result.chatId);
       setMobileView("chat");
@@ -7442,10 +7531,14 @@ export function WebMessenger({
       return profile;
     }
     if (selectedGroupChat) {
+      const groupBio =
+        selectedGroupChat.description.trim().length > 0
+          ? selectedGroupChat.description
+          : `${selectedGroupChat.memberIds.length} ${t("members")}`;
       return {
         name: selectedGroupChat.name,
         username: "",
-        bio: `${selectedGroupChat.memberIds.length} ${t("members")}`,
+        bio: groupBio,
         birthday: "",
         avatarUrl: selectedGroupChat.avatarUrl,
         bannerUrl: selectedGroupChat.bannerUrl,
@@ -7743,18 +7836,25 @@ export function WebMessenger({
     knownUsers,
     currentUser.id,
   ]);
-
   useEffect(() => {
     if (!selectedGroupChat) {
       setGroupRenameDraft("");
+      setGroupDescriptionDraft("");
       setGroupMemberSearchDraft("");
       setIsGroupSettingsOpen(false);
+      setIsGroupTypeDialogOpen(false);
+      setIsGroupPermissionsDialogOpen(false);
+      setIsGroupInvitationsDialogOpen(false);
       return;
     }
     setGroupRenameDraft(selectedGroupChat.name);
+    setGroupDescriptionDraft(selectedGroupChat.description);
     setGroupMemberSearchDraft("");
     setIsGroupSettingsOpen(false);
-  }, [selectedGroupChat?.id, selectedGroupChat?.name]);
+    setIsGroupTypeDialogOpen(false);
+    setIsGroupPermissionsDialogOpen(false);
+    setIsGroupInvitationsDialogOpen(false);
+  }, [selectedGroupChat?.id, selectedGroupChat?.name, selectedGroupChat?.description]);
 
   const viewedChatId = useMemo(() => {
     if (isOwnProfile || !profileUserId) {
@@ -8216,6 +8316,7 @@ export function WebMessenger({
     const selectedGroup = selectedGroupChat;
     const groupChatId = selectedGroup?.id ?? "";
     const nextTitle = groupRenameDraft.trim().replace(/\s+/g, " ");
+    const nextDescription = groupDescriptionDraft.trim();
     if (!groupChatId || !selectedGroup || !canManageSelectedGroup) {
       return;
     }
@@ -8227,7 +8328,15 @@ export function WebMessenger({
       showToast(t("groupNameMaxError"));
       return;
     }
-    if (nextTitle === selectedGroup.name) {
+    if (nextDescription.length > GROUP_DESCRIPTION_MAX_LENGTH) {
+      showToast(
+        language === "ru"
+          ? `Описание группы максимум ${GROUP_DESCRIPTION_MAX_LENGTH} символов`
+          : `Group description must be at most ${GROUP_DESCRIPTION_MAX_LENGTH} characters`
+      );
+      return;
+    }
+    if (nextTitle === selectedGroup.name && nextDescription === selectedGroup.description) {
       return;
     }
 
@@ -8237,6 +8346,7 @@ export function WebMessenger({
           ? {
               ...thread,
               title: nextTitle,
+              description: nextDescription,
               updatedAt: Date.now(),
             }
           : thread
@@ -8250,6 +8360,7 @@ export function WebMessenger({
           userId: currentUser.id,
           chatId: groupChatId,
           title: nextTitle,
+          description: nextDescription,
         }),
       });
       showToast(t("groupRenamedToast"));
@@ -8897,7 +9008,7 @@ export function WebMessenger({
                   </h1>
                   <Button
                     type="button"
-                    onClick={() => setIsGroupMenuOpen(true)}
+                    onClick={openGroupCreationDialog}
                     aria-label={t("newGroup")}
                     title={t("newGroup")}
                     className="h-9 w-9 rounded-lg bg-primary p-0 text-zinc-50 hover:bg-primary/90 hover:text-zinc-50"
@@ -8915,65 +9026,188 @@ export function WebMessenger({
                   />
                 </div>
               </div>
-              <AlertDialog open={isGroupMenuOpen} onOpenChange={setIsGroupMenuOpen}>
-                <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-lg">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="text-zinc-100">
-                      {t("newGroup")}
-                    </AlertDialogTitle>
+              <AlertDialog open={isGroupMenuOpen} onOpenChange={handleGroupMenuOpenChange}>
+                <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-xl">
+                  <AlertDialogHeader className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <AlertDialogTitle className="text-zinc-100">
+                        {t("newGroup")}
+                      </AlertDialogTitle>
+                      <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300">
+                        {groupCreationStep === "members" ? "1/2" : "2/2"}
+                      </span>
+                    </div>
                     <AlertDialogDescription className="text-zinc-400">
-                      {`${t("groupMembers")}: ${groupMemberIdsDraft.length} - ${t("groupMembersLimitHint")}`}
+                      {groupCreationStep === "members"
+                        ? `${t("groupMembers")}: ${groupMemberIdsDraft.length + 1}/${GROUP_MAX_MEMBERS}`
+                        : `${t("groupName")}: ${groupNameDraft.trim().replace(/\s+/g, " ").length}/${GROUP_TITLE_MAX_LENGTH}`}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
-                  <div className="space-y-3">
-                    <Input
-                      value={groupNameDraft}
-                      maxLength={GROUP_TITLE_MAX_LENGTH}
-                      onChange={(event) => setGroupNameDraft(event.target.value)}
-                      placeholder={t("groupName")}
-                      className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400"
-                    />
-                    <div className="max-h-64 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
-                      {groupCandidates.map((user) => {
-                        const selected = groupMemberIdsDraft.includes(user.id);
-                        return (
-                          <button
-                            key={`group-dialog-${user.id}`}
-                            type="button"
-                            onClick={() => toggleGroupMember(user.id)}
-                            className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm ${
-                              selected
-                                ? "border-primary/50 bg-zinc-700 text-zinc-100"
-                                : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                            }`}
-                          >
-                            <span className="truncate">{user.name}</span>
-                            {selected ? <Check className="size-4 text-primary" /> : null}
-                          </button>
-                        );
-                      })}
+
+                  {groupCreationStep === "members" ? (
+                    <div className="space-y-3">
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+                        {selectedGroupDraftMembers.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedGroupDraftMembers.map((member) => (
+                              <button
+                                key={`group-picked-${member.id}`}
+                                type="button"
+                                onClick={() => toggleGroupMember(member.id)}
+                                className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/15"
+                              >
+                                <span className="truncate">{member.name}</span>
+                                <X className="size-3.5 shrink-0" />
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-zinc-500">{t("groupMembersMinError")}</p>
+                        )}
+                      </div>
+
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+                        <Input
+                          value={groupMemberQueryDraft}
+                          onChange={(event) => setGroupMemberQueryDraft(event.target.value)}
+                          placeholder={t("searchChat")}
+                          className="h-10 rounded-lg border-zinc-600 bg-zinc-800 pl-9 text-zinc-100 placeholder:text-zinc-400"
+                        />
+                      </div>
+
+                      <div className="max-h-72 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                        {filteredGroupCandidates.length > 0 ? (
+                          filteredGroupCandidates.map((user) => {
+                            const selected = groupMemberIdsDraft.includes(user.id);
+                            const initials = user.name
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((part) => part[0]?.toUpperCase() ?? "")
+                              .join("");
+                            return (
+                              <button
+                                key={`group-dialog-${user.id}`}
+                                type="button"
+                                onClick={() => toggleGroupMember(user.id)}
+                                className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left ${
+                                  selected
+                                    ? "border-primary/45 bg-zinc-700 text-zinc-100"
+                                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-700"
+                                }`}
+                              >
+                                <span className="flex min-w-0 items-center gap-3">
+                                  {user.avatarUrl ? (
+                                    <span
+                                      className="inline-flex size-8 shrink-0 rounded-full bg-zinc-700 bg-cover bg-center"
+                                      style={{ backgroundImage: `url(${user.avatarUrl})` }}
+                                      aria-label={`${user.name} avatar`}
+                                    />
+                                  ) : (
+                                    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-[11px] font-semibold text-zinc-100">
+                                      {initials || user.username.slice(0, 2).toUpperCase()}
+                                    </span>
+                                  )}
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-sm text-zinc-100">
+                                      {user.name}
+                                    </span>
+                                    <span className="block truncate text-xs text-zinc-500">
+                                      @{user.username}
+                                    </span>
+                                  </span>
+                                </span>
+                                {selected ? (
+                                  <Check className="size-4 shrink-0 text-primary" />
+                                ) : (
+                                  <Plus className="size-4 shrink-0 text-zinc-500" />
+                                )}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <p className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-500">
+                            {t("noChatsOrUsersFound")}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Input
+                        value={groupNameDraft}
+                        maxLength={GROUP_TITLE_MAX_LENGTH}
+                        onChange={(event) => setGroupNameDraft(event.target.value)}
+                        placeholder={t("groupName")}
+                        className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400"
+                      />
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
+                          {`${t("groupMembers")} (${groupMemberIdsDraft.length + 1})`}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200">
+                            {currentUser.name} {t("youLabel")}
+                          </span>
+                          {selectedGroupDraftMembers.map((member) => (
+                            <span
+                              key={`group-member-preview-${member.id}`}
+                              className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200"
+                            >
+                              {member.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <AlertDialogFooter className="gap-2">
-                    <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
-                      {t("cancel")}
-                    </AlertDialogCancel>
-                    <Button
-                      type="button"
-                      onClick={() => void createGroupChat()}
-                      disabled={
-                        isCreatingGroup ||
-                        groupNameDraft.trim().replace(/\s+/g, " ").length <
-                          GROUP_TITLE_MIN_LENGTH ||
-                        groupNameDraft.trim().replace(/\s+/g, " ").length >
-                          GROUP_TITLE_MAX_LENGTH ||
-                        groupMemberIdsDraft.length < 2 ||
-                        groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS
-                      }
-                      className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
-                    >
-                      {t("createGroup")}
-                    </Button>
+                    {groupCreationStep === "members" ? (
+                      <>
+                        <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+                          {t("cancel")}
+                        </AlertDialogCancel>
+                        <Button
+                          type="button"
+                          onClick={goToGroupDetailsStep}
+                          disabled={groupMemberIdsDraft.length < 2}
+                          className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {language === "ru" ? "Далее" : "Next"}
+                          <ArrowRight className="size-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setGroupCreationStep("members")}
+                          className="h-10 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                        >
+                          <ArrowLeft className="size-4" />
+                          {language === "ru" ? "Назад" : "Back"}
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => void createGroupChat()}
+                          disabled={
+                            isCreatingGroup ||
+                            groupNameDraft.trim().replace(/\s+/g, " ").length <
+                              GROUP_TITLE_MIN_LENGTH ||
+                            groupNameDraft.trim().replace(/\s+/g, " ").length >
+                              GROUP_TITLE_MAX_LENGTH ||
+                            groupMemberIdsDraft.length < 2 ||
+                            groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS
+                          }
+                          className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {t("createGroup")}
+                        </Button>
+                      </>
+                    )}
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -10185,24 +10419,38 @@ export function WebMessenger({
                       </div>
                     ) : (
                       aiMessages.map((message) => (
-                        <div
-                          key={message.id}
-                          className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                        >
-                          <div
-                            className={`max-w-[94%] rounded-2xl border px-3.5 py-2.5 text-sm shadow-[0_14px_30px_-24px_rgba(0,0,0,0.9)] sm:max-w-[82%] ${
-                              message.role === "user"
-                                ? "border-primary/35 bg-primary/90 text-zinc-50"
-                                : message.error
-                                  ? "border-red-500/35 bg-red-500/10 text-red-100"
-                                  : "border-zinc-700/90 bg-zinc-900/90 text-zinc-100"
-                            }`}
-                          >
-                            <p className="whitespace-pre-wrap break-words leading-relaxed">
-                              {message.content}
-                            </p>
-                          </div>
-                        </div>
+                        <ContextMenu key={message.id}>
+                          <ContextMenuTrigger asChild>
+                            <div
+                              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                            >
+                              <div
+                                className={`max-w-[94%] rounded-2xl border px-3.5 py-2.5 text-sm shadow-[0_14px_30px_-24px_rgba(0,0,0,0.9)] sm:max-w-[82%] ${
+                                  message.role === "user"
+                                    ? "border-primary/35 bg-primary/90 text-zinc-50"
+                                    : message.error
+                                      ? "border-red-500/35 bg-red-500/10 text-red-100"
+                                      : "border-zinc-700/90 bg-zinc-900/90 text-zinc-100"
+                                }`}
+                              >
+                                <p className="whitespace-pre-wrap break-words leading-relaxed">
+                                  {message.content}
+                                </p>
+                              </div>
+                            </div>
+                          </ContextMenuTrigger>
+                          {!message.pending && message.content.trim().length > 0 ? (
+                            <ContextMenuContent className={chatActionMenuContentClassName}>
+                              <ContextMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() => void copyToClipboard(message.content)}
+                              >
+                                <Copy className="size-4" />
+                                {t("copyText")}
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          ) : null}
+                        </ContextMenu>
                       ))
                     )}
                   </div>
@@ -10675,182 +10923,123 @@ export function WebMessenger({
                           <p className="mt-3 text-sm text-zinc-300">{viewedProfile.bio}</p>
                         ) : null}
                         {isGroupProfile ? (
-                          <div className="mt-4 space-y-2">
-                            {canManageSelectedGroup ? (
-                              <div className="flex justify-end">
+                          <div className="mt-4 space-y-3">
+                            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
+                              <div className="flex items-center gap-2">
                                 <Button
                                   type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={t("settings")}
-                                  onClick={() => setIsGroupSettingsOpen((prev) => !prev)}
-                                  className="h-8 w-8 rounded-md border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100"
-                                >
-                                  <Pencil className="size-4" />
-                                </Button>
-                              </div>
-                            ) : null}
-                            {canManageSelectedGroup && isGroupSettingsOpen ? (
-                              <div className="space-y-1.5 rounded-md border border-zinc-800/90 bg-zinc-950/70 p-2 backdrop-blur-lg">
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    value={groupRenameDraft}
-                                    maxLength={GROUP_TITLE_MAX_LENGTH}
-                                    onChange={(event) => setGroupRenameDraft(event.target.value)}
-                                    className="h-8 border-zinc-600 bg-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-400"
-                                    placeholder={t("groupName")}
-                                  />
-                                  <Button
-                                    type="button"
-                                    onClick={() => void renameSelectedGroup()}
-                                    disabled={
-                                      groupRenameDraft.trim().replace(/\s+/g, " ").length <
-                                        GROUP_TITLE_MIN_LENGTH ||
-                                      groupRenameDraft.trim().replace(/\s+/g, " ").length >
-                                        GROUP_TITLE_MAX_LENGTH ||
-                                      groupRenameDraft.trim().replace(/\s+/g, " ") ===
-                                        (selectedGroupChat?.name ?? "")
+                                  onClick={() => {
+                                    if (selectedGroupChat) {
+                                      openChat(selectedGroupChat.id);
                                     }
-                                    className="h-8 rounded-md bg-primary px-3 text-xs text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {t("save")}
-                                  </Button>
-                                </div>
-                                <Input
-                                  value={groupMemberSearchDraft}
-                                  onChange={(event) => setGroupMemberSearchDraft(event.target.value)}
-                                  className="h-8 border-zinc-600 bg-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-400"
-                                  placeholder={t("addMembers")}
-                                />
-                                {groupAddCandidates.length > 0 ? (
-                                  <div className="max-h-28 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
-                                    {groupAddCandidates.map((candidate) => (
-                                      <button
-                                        key={`group-add-${candidate.id}`}
+                                  }}
+                                  className="h-9 flex-1 rounded-lg bg-primary px-3 text-zinc-50 hover:bg-primary/90"
+                                >
+                                  <MessageCircle className="size-4" />
+                                  {t("openChat")}
+                                </Button>
+                                {canManageSelectedGroup ? (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
                                         type="button"
-                                        onClick={() => void addMemberToSelectedGroup(candidate.id)}
-                                        className="flex w-full items-center justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-left text-xs text-zinc-200 hover:border-zinc-600 hover:bg-zinc-700"
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={t("menu")}
+                                        className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 aria-expanded:bg-zinc-700 aria-expanded:text-zinc-100"
                                       >
-                                        <span className="truncate">{`${candidate.name} (@${candidate.username})`}</span>
-                                        <Plus className="size-3.5 shrink-0 text-primary" />
-                                      </button>
-                                    ))}
-                                  </div>
-                                ) : groupMemberSearchDraft.trim().length > 0 ? (
-                                  <p className="text-xs text-zinc-500">{t("noChatsOrUsersFound")}</p>
+                                        <MoreVertical className="size-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                      align="end"
+                                      className={profileActionMenuContentClassName}
+                                    >
+                                      <DropdownMenuItem
+                                        className={profileActionMenuItemClassName}
+                                        onSelect={() => setIsGroupSettingsOpen(true)}
+                                      >
+                                        <Pencil className="size-4" />
+                                        {language === "ru" ? "Редактировать" : "Edit"}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 ) : null}
                               </div>
-                            ) : null}
-
-                            <div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200">
+                                  {`${t("yourRole")}: ${selectedGroupMyRole === "owner" ? t("owner") : selectedGroupMyRole === "admin" ? t("admin") : t("member")}`}
+                                </span>
+                                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">
+                                  {`${t("groupMembers")}: ${groupParticipants.length}`}
+                                </span>
+                                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-500">
+                                  {t("groupMembersLimitHint")}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
                               <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
                                 {t("participants")} ({groupParticipants.length})
                               </p>
-                              <div className="mt-1 space-y-1">
-                                {groupParticipants.map((member) => (
-                                  <div
-                                    key={member.id}
-                                    className="flex items-center justify-between gap-2 rounded-md border border-zinc-800/90 bg-zinc-950/70 px-2.5 py-1.5 backdrop-blur-lg"
-                                  >
-                                    <div className="min-w-0">
-                                      <p className="truncate text-sm text-zinc-100">
-                                        {member.name}
-                                        {member.isCurrentUser ? ` ${t("youLabel")}` : ""}
-                                      </p>
-                                      <p className="truncate text-xs text-zinc-500">
-                                        @{member.username}
-                                      </p>
+                              <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                                {groupParticipants.map((member) => {
+                                  const initials = member.name
+                                    .split(" ")
+                                    .filter(Boolean)
+                                    .slice(0, 2)
+                                    .map((part) => part[0]?.toUpperCase() ?? "")
+                                    .join("");
+                                  const roleLabel =
+                                    member.role === "owner"
+                                      ? t("owner")
+                                      : member.role === "admin"
+                                        ? t("admin")
+                                        : t("member");
+                                  const roleClassName =
+                                    member.role === "owner"
+                                      ? "border-amber-400/40 bg-amber-500/10 text-amber-200"
+                                      : member.role === "admin"
+                                        ? "border-primary/40 bg-primary/10 text-primary"
+                                        : "border-zinc-700 bg-zinc-800 text-zinc-300";
+
+                                  return (
+                                    <div
+                                      key={`group-profile-member-${member.id}`}
+                                      className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2.5 py-2"
+                                    >
+                                      <div className="flex min-w-0 items-center gap-2.5">
+                                        {member.avatarUrl ? (
+                                          <span
+                                            className="inline-flex size-8 shrink-0 rounded-full bg-zinc-700 bg-cover bg-center"
+                                            style={{ backgroundImage: `url(${member.avatarUrl})` }}
+                                            aria-label={`${member.name} avatar`}
+                                          />
+                                        ) : (
+                                          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-[11px] font-semibold text-zinc-100">
+                                            {initials || member.username.slice(0, 2).toUpperCase()}
+                                          </span>
+                                        )}
+                                        <div className="min-w-0">
+                                          <p className="truncate text-sm text-zinc-100">
+                                            {member.name}
+                                            {member.isCurrentUser ? ` ${t("youLabel")}` : ""}
+                                          </p>
+                                          <p className="truncate text-xs text-zinc-500">
+                                            @{member.username}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <span
+                                        className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${roleClassName}`}
+                                      >
+                                        {roleLabel}
+                                      </span>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                      {member.role === "admin" ? (
-                                        <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                                          {t("admin")}
-                                        </span>
-                                      ) : null}
-                                      {member.canPromote ||
-                                      member.canDemote ||
-                                      member.canTransferOwnership ||
-                                      member.canRemove ? (
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-7 w-7 rounded-md border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100"
-                                            >
-                                              <MoreVertical className="size-3.5" />
-                                            </Button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent
-                                            align="end"
-                                            className={chatActionMenuContentClassName}
-                                          >
-                                            {member.canPromote ? (
-                                              <DropdownMenuItem
-                                                className={chatActionMenuItemClassName}
-                                                onSelect={() =>
-                                                  void updateSelectedGroupMemberRole(member.id, "admin")
-                                                }
-                                              >
-                                                {t("promoteToAdmin")}
-                                              </DropdownMenuItem>
-                                            ) : null}
-                                            {member.canDemote ? (
-                                              <DropdownMenuItem
-                                                className={chatActionMenuItemClassName}
-                                                onSelect={() =>
-                                                  void updateSelectedGroupMemberRole(member.id, "member")
-                                                }
-                                              >
-                                                {t("demoteToMember")}
-                                              </DropdownMenuItem>
-                                            ) : null}
-                                            {member.canTransferOwnership ? (
-                                              <>
-                                                {member.canPromote || member.canDemote ? (
-                                                  <DropdownMenuSeparator
-                                                    className={chatActionMenuSeparatorClassName}
-                                                  />
-                                                ) : null}
-                                                <DropdownMenuItem
-                                                  className={chatActionMenuItemClassName}
-                                                  onSelect={() =>
-                                                    void transferSelectedGroupOwnership(member.id)
-                                                  }
-                                                >
-                                                  {t("transferOwnership")}
-                                                </DropdownMenuItem>
-                                              </>
-                                            ) : null}
-                                            {member.canRemove ? (
-                                              <>
-                                                {member.canPromote ||
-                                                member.canDemote ||
-                                                member.canTransferOwnership ? (
-                                                  <DropdownMenuSeparator
-                                                    className={chatActionMenuSeparatorClassName}
-                                                  />
-                                                ) : null}
-                                                <DropdownMenuItem
-                                                  variant="destructive"
-                                                  className={
-                                                    chatActionMenuDestructiveItemClassName
-                                                  }
-                                                  onSelect={() =>
-                                                    void removeMemberFromSelectedGroup(member.id)
-                                                  }
-                                                >
-                                                  {t("removeMember")}
-                                                </DropdownMenuItem>
-                                              </>
-                                            ) : null}
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -11962,6 +12151,471 @@ export function WebMessenger({
             >
               {t("onboardingApply")}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(isGroupProfile && canManageSelectedGroup && isGroupSettingsOpen)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsGroupSettingsOpen(false);
+            setGroupMemberSearchDraft("");
+            setIsGroupTypeDialogOpen(false);
+            setIsGroupPermissionsDialogOpen(false);
+            setIsGroupInvitationsDialogOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent className="!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 w-[min(94vw,760px)] max-w-none border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {language === "ru" ? "Редактирование группы" : "Group editing"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {selectedGroupChat?.name ?? ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-[min(70vh,560px)] space-y-3 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+            <div className="overflow-hidden rounded-xl border border-zinc-800/90 bg-zinc-950/70 backdrop-blur-lg">
+              <div
+                className={`h-28 w-full ${
+                  selectedGroupChat?.bannerUrl
+                    ? "bg-zinc-800 bg-cover bg-center"
+                    : "bg-[linear-gradient(130deg,#8b5cf6_0%,#6d28d9_45%,#27272a_100%)]"
+                } ${canManageSelectedGroup ? "cursor-pointer" : ""}`}
+                style={
+                  selectedGroupChat?.bannerUrl
+                    ? {
+                        backgroundImage: `linear-gradient(130deg,rgba(39,39,42,0.45),rgba(24,24,27,0.55)),url(${selectedGroupChat.bannerUrl})`,
+                      }
+                    : undefined
+                }
+                onClick={() => openImagePickerDialog("banner")}
+              />
+              <div className="px-4 pb-4">
+                <div className="-mt-10 flex items-end gap-3">
+                  {selectedGroupChat?.avatarUrl ? (
+                    <span
+                      className={`inline-flex size-20 shrink-0 rounded-full border-4 border-zinc-900 bg-zinc-800 bg-cover bg-center ${
+                        canManageSelectedGroup ? "cursor-pointer" : ""
+                      }`}
+                      style={{ backgroundImage: `url(${selectedGroupChat.avatarUrl})` }}
+                      aria-label={`${selectedGroupChat.name} avatar`}
+                      onClick={() => openImagePickerDialog("avatar")}
+                    />
+                  ) : (
+                    <span
+                      className={`inline-flex size-20 shrink-0 items-center justify-center rounded-full border-4 border-zinc-900 bg-primary text-lg font-semibold text-zinc-50 ${
+                        canManageSelectedGroup ? "cursor-pointer" : ""
+                      }`}
+                      onClick={() => openImagePickerDialog("avatar")}
+                    >
+                      {profileInitials || "GR"}
+                    </span>
+                  )}
+                  <div className="min-w-0 pb-1">
+                    <p className="truncate text-sm font-semibold text-zinc-100">
+                      {selectedGroupChat?.name ?? ""}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {language === "ru" ? "Профиль группы" : "Group profile"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  <Input
+                    value={groupRenameDraft}
+                    maxLength={GROUP_TITLE_MAX_LENGTH}
+                    onChange={(event) => setGroupRenameDraft(event.target.value)}
+                    className="h-9 border-zinc-600 bg-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-400"
+                    placeholder={t("groupName")}
+                  />
+                  <Textarea
+                    value={groupDescriptionDraft}
+                    maxLength={GROUP_DESCRIPTION_MAX_LENGTH}
+                    onChange={(event) => setGroupDescriptionDraft(event.target.value)}
+                    className="min-h-24 border-zinc-600 bg-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-400"
+                    placeholder={language === "ru" ? "Описание группы" : "Group description"}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] text-zinc-500">
+                      {`${groupDescriptionDraft.trim().length}/${GROUP_DESCRIPTION_MAX_LENGTH}`}
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={() => void renameSelectedGroup()}
+                      disabled={
+                        groupRenameDraft.trim().replace(/\s+/g, " ").length <
+                          GROUP_TITLE_MIN_LENGTH ||
+                        groupRenameDraft.trim().replace(/\s+/g, " ").length >
+                          GROUP_TITLE_MAX_LENGTH ||
+                        groupDescriptionDraft.trim().length > GROUP_DESCRIPTION_MAX_LENGTH ||
+                        (groupRenameDraft.trim().replace(/\s+/g, " ") ===
+                          (selectedGroupChat?.name ?? "") &&
+                          groupDescriptionDraft.trim() ===
+                            (selectedGroupChat?.description ?? ""))
+                      }
+                      className="h-9 rounded-lg bg-primary px-3 text-xs text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {t("save")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 backdrop-blur-lg">
+              <button
+                type="button"
+                onClick={() => setIsGroupTypeDialogOpen(true)}
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-left hover:border-zinc-600 hover:bg-zinc-700"
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Sparkles className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-zinc-100">
+                      {language === "ru" ? "Тип" : "Type"}
+                    </span>
+                    <span className="block truncate text-xs text-zinc-500">
+                      {language === "ru" ? "Тип группы и видимость" : "Group type and visibility"}
+                    </span>
+                  </span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-zinc-500" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsGroupPermissionsDialogOpen(true)}
+                className="mt-2 flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-left hover:border-zinc-600 hover:bg-zinc-700"
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Shield className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-zinc-100">
+                      {language === "ru" ? "Разрешения" : "Permissions"}
+                    </span>
+                    <span className="block truncate text-xs text-zinc-500">
+                      {language === "ru" ? "Роли и действия участников" : "Member roles and actions"}
+                    </span>
+                  </span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-zinc-500" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsGroupInvitationsDialogOpen(true)}
+                className="mt-2 flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-left hover:border-zinc-600 hover:bg-zinc-700"
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Users className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-zinc-100">
+                      {language === "ru" ? "Приглашения" : "Invitations"}
+                    </span>
+                    <span className="block truncate text-xs text-zinc-500">
+                      {language === "ru" ? "Приглашение и добавление участников" : "Invite and add members"}
+                    </span>
+                  </span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-zinc-500" />
+              </button>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+              onClick={() => {
+                setIsGroupSettingsOpen(false);
+                setGroupMemberSearchDraft("");
+                setIsGroupTypeDialogOpen(false);
+                setIsGroupPermissionsDialogOpen(false);
+                setIsGroupInvitationsDialogOpen(false);
+              }}
+            >
+              {t("cancel")}
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(
+          isGroupProfile &&
+            canManageSelectedGroup &&
+            isGroupSettingsOpen &&
+            isGroupTypeDialogOpen
+        )}
+        onOpenChange={(open) => {
+          setIsGroupTypeDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {language === "ru" ? "РўРёРї" : "Type"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {selectedGroupChat?.name ?? ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5">
+              <p className="text-sm font-medium text-zinc-100">
+                {language === "ru" ? "Р—Р°РєСЂС‹С‚Р°СЏ РіСЂСѓРїРїР°" : "Private group"}
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">
+                {language === "ru"
+                  ? "РЎРµР№С‡Р°СЃ РіСЂСѓРїРїР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ СѓС‡Р°СЃС‚РЅРёРєР°Рј."
+                  : "This group is currently accessible to members only."}
+              </p>
+            </div>
+            <p className="text-xs text-zinc-500">
+              {language === "ru"
+                ? "РџСѓР±Р»РёС‡РЅС‹Р№ С‚РёРї Р±СѓРґРµС‚ РґРѕСЃС‚СѓРїРµРЅ РїРѕР·Р¶Рµ."
+                : "Public type will be available later."}
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              {t("cancel")}
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(
+          isGroupProfile &&
+            canManageSelectedGroup &&
+            isGroupSettingsOpen &&
+            isGroupPermissionsDialogOpen
+        )}
+        onOpenChange={(open) => {
+          setIsGroupPermissionsDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent className="!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 w-[min(94vw,760px)] max-w-none border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {language === "ru" ? "Р Р°Р·СЂРµС€РµРЅРёСЏ" : "Permissions"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {selectedGroupChat?.name ?? ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-[min(70vh,560px)] space-y-3 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200">
+                  {`${t("yourRole")}: ${selectedGroupMyRole === "owner" ? t("owner") : selectedGroupMyRole === "admin" ? t("admin") : t("member")}`}
+                </span>
+                <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">
+                  {`${t("groupMembers")}: ${groupParticipants.length}`}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
+              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
+                {t("participants")} ({groupParticipants.length})
+              </p>
+              <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                {groupParticipants.map((member) => {
+                  const initials = member.name
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part[0]?.toUpperCase() ?? "")
+                    .join("");
+                  const roleLabel =
+                    member.role === "owner"
+                      ? t("owner")
+                      : member.role === "admin"
+                        ? t("admin")
+                        : t("member");
+                  const roleClassName =
+                    member.role === "owner"
+                      ? "border-amber-400/40 bg-amber-500/10 text-amber-200"
+                      : member.role === "admin"
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-zinc-700 bg-zinc-800 text-zinc-300";
+
+                  return (
+                    <div
+                      key={`group-member-dialog-${member.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2.5 py-2"
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        {member.avatarUrl ? (
+                          <span
+                            className="inline-flex size-8 shrink-0 rounded-full bg-zinc-700 bg-cover bg-center"
+                            style={{ backgroundImage: `url(${member.avatarUrl})` }}
+                            aria-label={`${member.name} avatar`}
+                          />
+                        ) : (
+                          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-[11px] font-semibold text-zinc-100">
+                            {initials || member.username.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-zinc-100">
+                            {member.name}
+                            {member.isCurrentUser ? ` ${t("youLabel")}` : ""}
+                          </p>
+                          <p className="truncate text-xs text-zinc-500">@{member.username}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${roleClassName}`}
+                        >
+                          {roleLabel}
+                        </span>
+                        {member.canPromote ||
+                        member.canDemote ||
+                        member.canTransferOwnership ||
+                        member.canRemove ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 rounded-md border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100"
+                              >
+                                <MoreVertical className="size-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className={chatActionMenuContentClassName}
+                            >
+                              {member.canPromote ? (
+                                <DropdownMenuItem
+                                  className={chatActionMenuItemClassName}
+                                  onSelect={() =>
+                                    void updateSelectedGroupMemberRole(member.id, "admin")
+                                  }
+                                >
+                                  {t("promoteToAdmin")}
+                                </DropdownMenuItem>
+                              ) : null}
+                              {member.canDemote ? (
+                                <DropdownMenuItem
+                                  className={chatActionMenuItemClassName}
+                                  onSelect={() =>
+                                    void updateSelectedGroupMemberRole(member.id, "member")
+                                  }
+                                >
+                                  {t("demoteToMember")}
+                                </DropdownMenuItem>
+                              ) : null}
+                              {member.canTransferOwnership ? (
+                                <>
+                                  {member.canPromote || member.canDemote ? (
+                                    <DropdownMenuSeparator
+                                      className={chatActionMenuSeparatorClassName}
+                                    />
+                                  ) : null}
+                                  <DropdownMenuItem
+                                    className={chatActionMenuItemClassName}
+                                    onSelect={() =>
+                                      void transferSelectedGroupOwnership(member.id)
+                                    }
+                                  >
+                                    {t("transferOwnership")}
+                                  </DropdownMenuItem>
+                                </>
+                              ) : null}
+                              {member.canRemove ? (
+                                <>
+                                  {member.canPromote ||
+                                  member.canDemote ||
+                                  member.canTransferOwnership ? (
+                                    <DropdownMenuSeparator
+                                      className={chatActionMenuSeparatorClassName}
+                                    />
+                                  ) : null}
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    className={chatActionMenuDestructiveItemClassName}
+                                    onSelect={() =>
+                                      void removeMemberFromSelectedGroup(member.id)
+                                    }
+                                  >
+                                    {t("removeMember")}
+                                  </DropdownMenuItem>
+                                </>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              {t("cancel")}
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(
+          isGroupProfile &&
+            canManageSelectedGroup &&
+            isGroupSettingsOpen &&
+            isGroupInvitationsDialogOpen
+        )}
+        onOpenChange={(open) => {
+          setIsGroupInvitationsDialogOpen(open);
+          if (!open) {
+            setGroupMemberSearchDraft("");
+          }
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {language === "ru" ? "РџСЂРёРіР»Р°С€РµРЅРёСЏ" : "Invitations"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {selectedGroupChat?.name ?? ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-zinc-500">{t("groupMembersLimitHint")}</p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-500" />
+              <Input
+                value={groupMemberSearchDraft}
+                onChange={(event) => setGroupMemberSearchDraft(event.target.value)}
+                className="h-9 border-zinc-600 bg-zinc-800 pl-8 text-sm text-zinc-100 placeholder:text-zinc-400"
+                placeholder={t("addMembers")}
+              />
+            </div>
+            {groupAddCandidates.length > 0 ? (
+              <div className="max-h-56 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                {groupAddCandidates.map((candidate) => (
+                  <button
+                    key={`group-add-dialog-${candidate.id}`}
+                    type="button"
+                    onClick={() => void addMemberToSelectedGroup(candidate.id)}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-left text-xs text-zinc-200 hover:border-zinc-600 hover:bg-zinc-700"
+                  >
+                    <span className="truncate">{`${candidate.name} (@${candidate.username})`}</span>
+                    <Plus className="size-3.5 shrink-0 text-primary" />
+                  </button>
+                ))}
+              </div>
+            ) : groupMemberSearchDraft.trim().length > 0 ? (
+              <p className="text-xs text-zinc-500">{t("noChatsOrUsersFound")}</p>
+            ) : null}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              {t("cancel")}
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -70,6 +70,10 @@ function isValidUsername(value: string): boolean {
   return /^[a-z0-9_]{3,20}$/.test(value);
 }
 
+function isSuspendedErrorMessage(value: string): boolean {
+  return value.toLowerCase().includes("your account is suspended until");
+}
+
 function readLegacyUsers(): Array<Required<LegacyStoredUser>> {
   try {
     const raw = window.localStorage.getItem(LEGACY_USERS_STORAGE_KEY);
@@ -167,6 +171,7 @@ export function AuthGate() {
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState("");
+  const [suspensionMessage, setSuspensionMessage] = useState("");
   const [uiTheme] = useState<"light" | "dark">(() => {
     if (typeof window === "undefined") {
       return "light";
@@ -256,11 +261,19 @@ export function AuthGate() {
         );
         const payload = await parseAuthResponse(response);
         if (!response.ok || !payload.user) {
+          const message = payload.error ?? "";
+          if (response.status === 403 && isSuspendedErrorMessage(message)) {
+            if (!cancelled) {
+              setSuspensionMessage(message);
+            }
+            return;
+          }
           window.localStorage.removeItem(SESSION_STORAGE_KEY);
           return;
         }
 
         if (!cancelled) {
+          setSuspensionMessage("");
           setCurrentUser(payload.user);
         }
       } finally {
@@ -275,6 +288,57 @@ export function AuthGate() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    let cancelled = false;
+    let isRequestRunning = false;
+
+    const checkSuspensionStatus = async () => {
+      if (isRequestRunning) {
+        return;
+      }
+      isRequestRunning = true;
+      try {
+        const response = await fetch(
+          `/api/auth/user?userId=${encodeURIComponent(currentUser.id)}`,
+          {
+            cache: "no-store",
+          }
+        );
+        const payload = await parseAuthResponse(response);
+        const message = payload.error ?? "";
+        if (response.ok && payload.user) {
+          if (!cancelled) {
+            setSuspensionMessage("");
+          }
+          return;
+        }
+        if (response.status === 403 && isSuspendedErrorMessage(message)) {
+          if (!cancelled) {
+            setSuspensionMessage(message);
+          }
+        }
+      } catch {
+        // Ignore transient connectivity failures.
+      } finally {
+        isRequestRunning = false;
+      }
+    };
+
+    void checkSuspensionStatus();
+    const intervalId = window.setInterval(() => {
+      void checkSuspensionStatus();
+    }, 8_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [currentUser]);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -309,6 +373,7 @@ export function AuthGate() {
         JSON.stringify({ userId: payload.user.id } satisfies SessionData)
       );
       rememberLegacyUser(payload.user, password);
+      setSuspensionMessage("");
       setCurrentUser(payload.user);
       setLoginForm(emptyLoginForm);
     } catch {
@@ -380,6 +445,7 @@ export function AuthGate() {
       );
       rememberLegacyUser(payload.user, password);
 
+      setSuspensionMessage("");
       setCurrentUser(payload.user);
       setRegisterForm(emptyRegisterForm);
     } catch {
@@ -394,6 +460,7 @@ export function AuthGate() {
     setCurrentUser(null);
     setMode("login");
     setError("");
+    setSuspensionMessage("");
     setLoginForm(emptyLoginForm);
   };
 
@@ -501,12 +568,53 @@ export function AuthGate() {
 
   if (currentUser) {
     return (
-      <WebMessenger
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        onProfileUpdate={handleProfileUpdate}
-        onPrivacyUpdate={handlePrivacyUpdate}
-      />
+      <div className="relative h-[100dvh] min-h-[100dvh] w-full">
+        <WebMessenger
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onProfileUpdate={handleProfileUpdate}
+          onPrivacyUpdate={handlePrivacyUpdate}
+        />
+        {suspensionMessage ? (
+          <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/85 px-5 pt-[env(safe-area-inset-top)]">
+            <div className="w-full max-w-md rounded-2xl border border-red-400/50 bg-zinc-950 p-5 text-zinc-100 shadow-2xl">
+              <h2 className="text-xl font-semibold text-red-200">Аккаунт заблокирован</h2>
+              <p className="mt-3 text-sm leading-relaxed text-zinc-200">{suspensionMessage}</p>
+              <p className="mt-2 text-xs text-zinc-400">
+                Это окно нельзя закрыть. Вы можете только выйти из аккаунта.
+              </p>
+              <Button
+                type="button"
+                className="mt-5 h-10 w-full rounded-lg border border-red-400 bg-red-600/20 text-red-100 hover:bg-red-500/30"
+                onClick={handleLogout}
+              >
+                Выйти
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (suspensionMessage) {
+    return (
+      <main className="flex h-[100dvh] min-h-[100dvh] w-full items-center justify-center bg-zinc-950 px-5 pt-[env(safe-area-inset-top)] text-zinc-100">
+        <div className="w-full max-w-md rounded-2xl border border-red-400/50 bg-zinc-900 p-5 shadow-2xl">
+          <h2 className="text-xl font-semibold text-red-200">Аккаунт заблокирован</h2>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-200">{suspensionMessage}</p>
+          <p className="mt-2 text-xs text-zinc-400">
+            Это окно нельзя закрыть. Вы можете только выйти из аккаунта.
+          </p>
+          <Button
+            type="button"
+            className="mt-5 h-10 w-full rounded-lg border border-red-400 bg-red-600/20 text-red-100 hover:bg-red-500/30"
+            onClick={handleLogout}
+          >
+            Выйти
+          </Button>
+        </div>
+      </main>
     );
   }
 

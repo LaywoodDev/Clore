@@ -175,6 +175,7 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
   const [editingUserId, setEditingUserId] = useState("");
   const [editingUserForm, setEditingUserForm] = useState<EditableUserForm | null>(
     null
@@ -313,6 +314,13 @@ export function AdminDashboard() {
       return;
     }
 
+    if (
+      !selectedUserId ||
+      !snapshot.users.some((user) => user.id === selectedUserId)
+    ) {
+      setSelectedUserId(snapshot.users[0]?.id ?? "");
+    }
+
     setBlockDurationByUserId((previous) => {
       const next: Record<string, string> = {};
       for (const user of snapshot.users) {
@@ -336,7 +344,7 @@ export function AdminDashboard() {
         setEditingUserForm(null);
       }
     }
-  }, [editingUserId, snapshot]);
+  }, [editingUserId, selectedUserId, snapshot]);
 
   const updateEditingUserField = useCallback(
     (field: keyof EditableUserForm, value: string) => {
@@ -697,12 +705,16 @@ export function AdminDashboard() {
             placeholder="Search users"
             className="mb-3 h-9 border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500"
           />
+          <p className="mb-2 text-xs text-zinc-400">
+            Нажмите «Управление», чтобы открыть действия пользователя.
+          </p>
           <div className="min-h-0 space-y-2 overflow-y-auto">
             {filteredUsers.map((user) => {
               const isEditing = editingUserId === user.id && editingUserForm !== null;
               const isPending = activeUserActionId === user.id;
               const isBlocked = user.bannedUntil > 0;
               const isMuted = user.mutedUntil > 0;
+              const isSelectedUser = selectedUserId === user.id;
               const isProtectedAdmin =
                 normalizeUsername(user.username) === ADMIN_PANEL_USERNAME;
               const blockDurationValue = blockDurationByUserId[user.id] ?? "720";
@@ -712,48 +724,73 @@ export function AdminDashboard() {
               return (
                 <div
                   key={`admin-user-${user.id}`}
-                  className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2"
+                  className={`rounded-lg border px-3 py-3 ${
+                    isSelectedUser
+                      ? "border-primary bg-zinc-800/95"
+                      : "border-zinc-700 bg-zinc-900/85"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-medium text-zinc-100">
+                      <p className="text-base font-semibold text-zinc-100">
                         {user.name} (@{user.username})
                       </p>
-                      <p className="text-xs text-zinc-400">{user.email}</p>
+                      <p className="text-sm text-zinc-300">{user.email}</p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      disabled={isPending || isProtectedAdmin}
-                      onClick={() =>
-                        isEditing ? cancelEditingUser() : startEditingUser(user)
-                      }
-                    >
-                      {isEditing ? "Close Edit" : "Edit"}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 border-zinc-500 bg-zinc-800 px-3 text-sm text-zinc-100 hover:bg-zinc-700"
+                        onClick={() => {
+                          if (isSelectedUser) {
+                            if (isEditing) {
+                              cancelEditingUser();
+                            }
+                            setSelectedUserId("");
+                            return;
+                          }
+                          setSelectedUserId(user.id);
+                        }}
+                      >
+                        {isSelectedUser ? "Скрыть" : "Управление"}
+                      </Button>
+                      {isSelectedUser ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 border-zinc-500 bg-zinc-800 px-3 text-sm text-zinc-100 hover:bg-zinc-700"
+                          disabled={isPending || isProtectedAdmin}
+                          onClick={() =>
+                            isEditing ? cancelEditingUser() : startEditingUser(user)
+                          }
+                        >
+                          {isEditing ? "Закрыть" : "Редакт."}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-sm text-zinc-300">
                     Threads: {user.threadsCount} | Messages: {user.messagesCount}
                   </p>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-sm text-zinc-300">
                     Last seen: {formatDateTime(user.lastSeenAt)}
                   </p>
                   {isBlocked || isMuted ? (
-                    <p className="mt-1 text-xs text-amber-300">
+                    <p className="mt-1 text-sm font-medium text-amber-200">
                       {isBlocked
                         ? `Blocked until ${formatDateTime(user.bannedUntil)}`
                         : `Muted until ${formatDateTime(user.mutedUntil)}`}
                     </p>
                   ) : null}
                   {user.sanctionReason ? (
-                    <p className="mt-1 text-xs text-zinc-400">{user.sanctionReason}</p>
+                    <p className="mt-1 text-sm text-zinc-300">{user.sanctionReason}</p>
                   ) : null}
 
-                  {form ? (
-                    <div className="mt-2 space-y-2 rounded-md border border-zinc-700/70 bg-zinc-900/50 p-2">
-                      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
-                        Edit Profile
+                  {isSelectedUser && form ? (
+                    <div className="mt-3 space-y-2 rounded-md border border-zinc-600 bg-zinc-800/80 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">
+                        Редактирование профиля
                       </p>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <Input
@@ -762,7 +799,7 @@ export function AdminDashboard() {
                             updateEditingUserField("name", event.target.value)
                           }
                           placeholder="Name"
-                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                         />
                         <Input
                           value={form.username}
@@ -770,7 +807,7 @@ export function AdminDashboard() {
                             updateEditingUserField("username", event.target.value)
                           }
                           placeholder="Username"
-                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                         />
                         <Input
                           value={form.email}
@@ -778,7 +815,7 @@ export function AdminDashboard() {
                             updateEditingUserField("email", event.target.value)
                           }
                           placeholder="Email"
-                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                         />
                         <Input
                           type="date"
@@ -786,7 +823,7 @@ export function AdminDashboard() {
                           onChange={(event) =>
                             updateEditingUserField("birthday", event.target.value)
                           }
-                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100"
                         />
                         <Input
                           value={form.avatarUrl}
@@ -794,7 +831,7 @@ export function AdminDashboard() {
                             updateEditingUserField("avatarUrl", event.target.value)
                           }
                           placeholder="Avatar URL"
-                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                         />
                         <Input
                           value={form.bannerUrl}
@@ -802,7 +839,7 @@ export function AdminDashboard() {
                             updateEditingUserField("bannerUrl", event.target.value)
                           }
                           placeholder="Banner URL"
-                          className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                         />
                       </div>
                       <Textarea
@@ -811,93 +848,95 @@ export function AdminDashboard() {
                           updateEditingUserField("bio", event.target.value)
                         }
                         placeholder="Bio"
-                        className="min-h-20 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
+                        className="min-h-20 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                       />
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
-                          className="h-8 px-3 text-xs"
+                          className="h-9 px-3 text-sm"
                           disabled={isPending || isProtectedAdmin}
                           onClick={() => void saveEditedUser(user.id)}
                         >
-                          Save
+                          Сохранить
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-8 px-3 text-xs"
+                          className="h-9 border-zinc-500 bg-zinc-800 px-3 text-sm text-zinc-100 hover:bg-zinc-700"
                           disabled={isPending || isProtectedAdmin}
                           onClick={cancelEditingUser}
                         >
-                          Cancel
+                          Отмена
                         </Button>
                       </div>
                     </div>
                   ) : null}
 
-                  <div className="mt-2 rounded-md border border-zinc-700/70 bg-zinc-900/50 p-2">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
-                      Account Actions
-                    </p>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-[140px_1fr]">
-                      <Input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={blockDurationValue}
-                        onChange={(event) =>
-                          updateBlockDuration(user.id, event.target.value)
-                        }
-                        placeholder="Hours"
-                        className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
-                      />
-                      <Input
-                        value={blockReasonValue}
-                        onChange={(event) =>
-                          updateBlockReason(user.id, event.target.value)
-                        }
-                        placeholder="Reason (optional)"
-                        className="h-8 border-zinc-700 bg-zinc-950 text-xs text-zinc-100"
-                      />
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        className="h-8 px-3 text-xs"
-                        disabled={isPending || isProtectedAdmin}
-                        onClick={() => void setUserBlocked(user, true)}
-                      >
-                        {isBlocked ? "Extend Block" : "Block Account"}
-                      </Button>
-                      {isBlocked ? (
+                  {isSelectedUser ? (
+                    <div className="mt-3 rounded-md border border-zinc-600 bg-zinc-800/80 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">
+                        Действия с аккаунтом
+                      </p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-[140px_1fr]">
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={blockDurationValue}
+                          onChange={(event) =>
+                            updateBlockDuration(user.id, event.target.value)
+                          }
+                          placeholder="Часы"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
+                        />
+                        <Input
+                          value={blockReasonValue}
+                          onChange={(event) =>
+                            updateBlockReason(user.id, event.target.value)
+                          }
+                          placeholder="Причина (необязательно)"
+                          className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
+                        />
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
                         <Button
                           type="button"
-                          variant="outline"
-                          className="h-8 px-3 text-xs"
+                          className="h-9 bg-amber-600 px-3 text-sm text-white hover:bg-amber-500"
                           disabled={isPending || isProtectedAdmin}
-                          onClick={() => void setUserBlocked(user, false)}
+                          onClick={() => void setUserBlocked(user, true)}
                         >
-                          Unblock
+                          {isBlocked ? "Продлить блок" : "Заблокировать"}
                         </Button>
+                        {isBlocked ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-9 border-zinc-500 bg-zinc-800 px-3 text-sm text-zinc-100 hover:bg-zinc-700"
+                            disabled={isPending || isProtectedAdmin}
+                            onClick={() => void setUserBlocked(user, false)}
+                          >
+                            Разблокировать
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          className="h-9 border border-red-400 bg-red-600/20 px-3 text-sm font-medium text-red-100 hover:bg-red-500/30"
+                          disabled={isPending || isProtectedAdmin}
+                          onClick={() => void deleteUser(user)}
+                        >
+                          Удалить аккаунт
+                        </Button>
+                      </div>
+                      {isProtectedAdmin ? (
+                        <p className="mt-2 text-sm text-zinc-300">
+                          Защищенный админ аккаунт.
+                        </p>
                       ) : null}
-                      <Button
-                        type="button"
-                        className="h-8 border border-red-500/70 bg-red-500/15 px-3 text-xs text-red-100 hover:bg-red-500/25"
-                        disabled={isPending || isProtectedAdmin}
-                        onClick={() => void deleteUser(user)}
-                      >
-                        Delete Account
-                      </Button>
+                      {isPending ? (
+                        <p className="mt-2 text-sm text-zinc-200">Выполняю действие...</p>
+                      ) : null}
                     </div>
-                    {isProtectedAdmin ? (
-                      <p className="mt-2 text-xs text-zinc-500">
-                        Protected admin account.
-                      </p>
-                    ) : null}
-                    {isPending ? (
-                      <p className="mt-2 text-xs text-zinc-400">Applying action...</p>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </div>
               );
             })}
