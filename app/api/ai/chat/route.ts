@@ -88,7 +88,7 @@ const MAX_AUTOMATION_TARGETS = 8;
 const MAX_CONTEXT_MESSAGES_PER_CANDIDATE = 160;
 
 const SEND_COMMAND_START_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав(?:ь|ьте)|congratulate)\b/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu;
 const SEND_LEADING_VERB_REGEX =
   /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав(?:ь|ьте)|congratulate)\s+/iu;
 const SEND_SEGMENT_PREFIX_REGEX =
@@ -191,6 +191,54 @@ function normalizeForMatching(value: string): string {
     .trim();
 }
 
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  е: "e",
+  ж: "zh",
+  з: "z",
+  и: "i",
+  й: "i",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  ф: "f",
+  х: "h",
+  ц: "ts",
+  ч: "ch",
+  ш: "sh",
+  щ: "sch",
+  ъ: "",
+  ы: "y",
+  ь: "",
+  э: "e",
+  ю: "yu",
+  я: "ya",
+};
+
+function transliterateCyrillicToLatin(value: string): string {
+  const normalized = value.toLowerCase().replace(/ё/g, "е");
+  let out = "";
+  for (const char of normalized) {
+    out += CYRILLIC_TO_LATIN[char] ?? char;
+  }
+  return out;
+}
+
+function containsCyrillic(value: string): boolean {
+  return /[а-яё]/iu.test(value);
+}
+
 function stemToken(value: string): string {
   let token = normalizeForMatching(value).replace(/\s+/g, "");
   if (!token) {
@@ -262,13 +310,23 @@ function tokenizeForMatching(value: string): string[] {
   const result: string[] = [];
   const seen = new Set<string>();
 
-  for (const token of tokens) {
+  const pushToken = (token: string) => {
     const stem = stemToken(token);
     if (stem.length < 2 || STOP_WORD_STEMS.has(stem) || seen.has(stem)) {
-      continue;
+      return;
     }
     seen.add(stem);
     result.push(stem);
+  };
+
+  for (const token of tokens) {
+    pushToken(token);
+    if (containsCyrillic(token)) {
+      const transliterated = transliterateCyrillicToLatin(token);
+      if (transliterated && transliterated !== token) {
+        pushToken(transliterated);
+      }
+    }
   }
 
   return result;
@@ -283,7 +341,7 @@ function cleanRecipientQuery(value: string): string {
     .trim()
     .replace(/^["'«“]+|["'»”]+$/gu, "")
     .replace(/^(?:для|к|to|for)\s+/iu, "")
-    .replace(/\b(?:пожалуйста|please)\b/giu, "")
+    .replace(/(?:^|\s)(?:пожалуйста|please)(?=\s|$)/giu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -325,7 +383,7 @@ function splitIntoIntentSegments(input: string): string[] {
     return [];
   }
   const withImplicitSeparators = compact.replace(
-    /\s+\b(?:и|а|and)\b\s+(?=[^,;]{1,90}\b(?:что|that|поздрав|congratulat)\b)/giu,
+    /\s+(?:и|а|and)\s+(?=[^,;]{1,90}(?:что|that|поздрав|congratulat))/giu,
     ", "
   );
   return withImplicitSeparators
@@ -340,7 +398,7 @@ function parseIntentSegment(
   isFirstSegment: boolean
 ): SendIntent | null {
   const trimmed = segment.trim().replace(/^(?:и|а|and)\s+/iu, "");
-  const startsWithCongratulation = /^(?:пожалуйста\s+|please\s+)?(?:поздрав(?:ь|ьте)|congratulate)\b/iu.test(
+  const startsWithCongratulation = /^(?:пожалуйста\s+|please\s+)?(?:поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu.test(
     trimmed
   );
 
@@ -358,6 +416,18 @@ function parseIntentSegment(
   if (messageByWhat) {
     const recipientQuery = cleanRecipientQuery(messageByWhat[1] ?? "");
     const messageText = cleanMessageText(messageByWhat[2] ?? "");
+    if (recipientQuery && messageText) {
+      return {
+        recipientQuery,
+        messageText,
+      };
+    }
+  }
+
+  const messageByDash = working.match(/^(.+?)\s*[-–—]\s*(.+)$/u);
+  if (messageByDash) {
+    const recipientQuery = cleanRecipientQuery(messageByDash[1] ?? "");
+    const messageText = cleanMessageText(messageByDash[2] ?? "");
     if (recipientQuery && messageText) {
       return {
         recipientQuery,
@@ -897,6 +967,19 @@ function buildSendActionReply(
   return lines.join("\n");
 }
 
+function buildSendParseErrorReply(language: "en" | "ru"): string {
+  if (language === "ru") {
+    return [
+      "Не смог разобрать команду отправки.",
+      'Формат: `напиши [кому] что [текст]` или `send [name] - [text]`.',
+    ].join("\n");
+  }
+  return [
+    "Couldn't parse the send command.",
+    "Use: `send [recipient] that [message]` or `send [recipient] - [message]`.",
+  ].join("\n");
+}
+
 async function executeSendIntents(
   userId: string,
   intents: SendIntent[]
@@ -1162,7 +1245,14 @@ export async function POST(request: Request) {
     }
 
     const latestUserPrompt = messages[messages.length - 1]?.content ?? "";
+    const isSendCommand = SEND_COMMAND_START_REGEX.test(latestUserPrompt.trim());
     const sendIntents = extractSendIntents(latestUserPrompt, language);
+    if (isSendCommand && sendIntents.length === 0) {
+      return NextResponse.json({
+        message: buildSendParseErrorReply(language),
+        sentMessages: 0,
+      });
+    }
     if (sendIntents.length > 0) {
       const sendSummary = await executeSendIntents(userId, sendIntents);
       const message = buildSendActionReply(language, sendSummary);
