@@ -155,7 +155,7 @@
       "avatarAllowedUserIds": [],
       "bioAllowedUserIds": [],
       "birthdayAllowedUserIds": [],
-      "lastSeenAt": 1772096142351,
+      "lastSeenAt": 1772100960298,
       "avatarUrl": "",
       "bannerUrl": ""
     }
@@ -177,7 +177,7 @@
       "createdAt": 1772092968882,
       "updatedAt": 1772092968882,
       "readBy": {
-        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772094370044,
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772099294809,
         "u-69e38a42-7c7c-42c8-a75f-469a164b64d6": 0,
         "u-51e71bfe-35bf-4bca-9dcf-048bb28bfc11": 0
       },
@@ -191,6 +191,29 @@
         "u-69e38a42-7c7c-42c8-a75f-469a164b64d6": "member",
         "u-51e71bfe-35bf-4bca-9dcf-048bb28bfc11": "member"
       }
+    },
+    {
+      "id": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "memberIds": [
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+        "u-69e38a42-7c7c-42c8-a75f-469a164b64d6"
+      ],
+      "threadType": "direct",
+      "title": "",
+      "description": "",
+      "avatarUrl": "",
+      "bannerUrl": "",
+      "createdById": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "createdAt": 1772099312874,
+      "updatedAt": 1772099393151,
+      "readBy": {
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772100086789,
+        "u-69e38a42-7c7c-42c8-a75f-469a164b64d6": 0
+      },
+      "pinnedBy": {},
+      "mutedBy": {},
+      "typingBy": {},
+      "groupRoles": {}
     }
   ],
   "messages": [
@@ -206,6 +229,41 @@
       "savedBy": {
         "u-51e71bfe-35bf-4bca-9dcf-048bb28bfc11": 1772006303852
       }
+    },
+    {
+      "id": "msg-76d5d3d7-7f84-4948-b7ec-29872ffc89e9",
+      "chatId": "__favorites__",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "купить пасту",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772099266855,
+      "editedAt": 0,
+      "savedBy": {
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772099266855
+      }
+    },
+    {
+      "id": "msg-5a8d9e5c-eaf4-4f3f-bef2-c9128fd2c79d",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "f",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772099313460,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-ab83bea2-b17e-4d79-81f1-25f6de8a1491",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "я буду в 6",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772099393151,
+      "editedAt": 0,
+      "savedBy": {}
     }
   ],
   "callSignals": [],

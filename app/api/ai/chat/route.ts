@@ -36,6 +36,13 @@ type SendIntent = {
   messageText: string;
 };
 
+type SendVerbKind = "send" | "congratulate";
+type ConsumedSendVerb = {
+  rest: string;
+  kind: SendVerbKind;
+  leadingText?: string;
+};
+
 type RecipientCandidate = {
   userId: string;
   name: string;
@@ -84,15 +91,97 @@ type SendActionSummary = {
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_LENGTH = 4000;
 const RESPONSE_TIMEOUT_MS = 12_000;
+const SEND_MESSAGE_REWRITE_TIMEOUT_MS = 2_500;
 const MAX_AUTOMATION_TARGETS = 8;
 const MAX_CONTEXT_MESSAGES_PER_CANDIDATE = 160;
+const FAVORITES_CHAT_ID = "__favorites__";
+
+const FAVORITES_RECIPIENT_ALIASES = new Set(
+  [
+    "избранное",
+    "избранном",
+    "избранку",
+    "мое избранное",
+    "моё избранное",
+    "сохраненное",
+    "сохранённое",
+    "сохраненные",
+    "сохранённые",
+    "saved",
+    "saved messages",
+    "favorite",
+    "favorites",
+    "my favorites",
+  ].map((alias) => normalizeForMatching(alias))
+);
 
 const SEND_COMMAND_START_REGEX =
   /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu;
-const SEND_LEADING_VERB_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав(?:ь|ьте)|congratulate)\s+/iu;
-const SEND_SEGMENT_PREFIX_REGEX =
-  /^(?:please\s+|пожалуйста\s+|and\s+|и\s+|а\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify)\s+/iu;
+const SEND_VERB_DEFINITIONS: Array<{ value: string; kind: SendVerbKind }> = [
+  { value: "отправь", kind: "send" },
+  { value: "отправьте", kind: "send" },
+  { value: "напиши", kind: "send" },
+  { value: "напишите", kind: "send" },
+  { value: "передай", kind: "send" },
+  { value: "сообщи", kind: "send" },
+  { value: "скажи", kind: "send" },
+  { value: "уведоми", kind: "send" },
+  { value: "send", kind: "send" },
+  { value: "text", kind: "send" },
+  { value: "message", kind: "send" },
+  { value: "write", kind: "send" },
+  { value: "tell", kind: "send" },
+  { value: "notify", kind: "send" },
+  { value: "поздравь", kind: "congratulate" },
+  { value: "поздравьте", kind: "congratulate" },
+  { value: "congratulate", kind: "congratulate" },
+];
+const LEADING_FILLER_REGEX = /^(?:пожалуйста|please|ну|на|и|а|and)\s+/iu;
+const FAVORITES_RECIPIENT_PREFIX_REGEX =
+  /^(?:(?:в|во|to|for|into)\s+)?((?:мо[её]\s+)?избран(?:ное|ном|ку)|(?:сохран[её]н(?:ное|ные))|saved(?:\s+messages)?|favorites?|my\s+favorites)(?:\s+(.+))?$/iu;
+const NON_RECIPIENT_LEAD_STEMS = new Set(
+  [
+    "please",
+    "пожалуйста",
+    "ну",
+    "and",
+    "и",
+    "а",
+    "давай",
+    "можешь",
+    "сможешь",
+    "можно",
+    "как",
+    "если",
+    "когда",
+    "почему",
+    "зачем",
+    "что",
+    "чтобы",
+    "кто",
+    "где",
+    "куда",
+    "can",
+    "could",
+    "would",
+    "how",
+    "if",
+    "when",
+    "why",
+    "what",
+    "who",
+    "where",
+    "you",
+    "ты",
+    "вы",
+    "i",
+    "я",
+    "we",
+    "мы",
+  ]
+    .map((word) => stemToken(word))
+    .filter((token) => token.length > 0)
+);
 
 const RAW_STOP_WORDS = [
   "что",
@@ -189,6 +278,211 @@ function normalizeForMatching(value: string): string {
     .replace(/[^0-9a-zа-я@]+/giu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeVerbToken(value: string): string {
+  return normalizeForMatching(value).replace(/\s+/g, "");
+}
+
+function levenshteinDistanceWithLimit(
+  left: string,
+  right: string,
+  maxDistance: number
+): number {
+  if (left === right) {
+    return 0;
+  }
+  const leftLength = left.length;
+  const rightLength = right.length;
+  if (leftLength === 0 || rightLength === 0) {
+    return Math.max(leftLength, rightLength);
+  }
+  if (Math.abs(leftLength - rightLength) > maxDistance) {
+    return maxDistance + 1;
+  }
+
+  const previous = new Array<number>(rightLength + 1);
+  const current = new Array<number>(rightLength + 1);
+  for (let index = 0; index <= rightLength; index += 1) {
+    previous[index] = index;
+  }
+
+  for (let row = 1; row <= leftLength; row += 1) {
+    current[0] = row;
+    let rowMin = current[0];
+    const leftCode = left.charCodeAt(row - 1);
+
+    for (let column = 1; column <= rightLength; column += 1) {
+      const cost = leftCode === right.charCodeAt(column - 1) ? 0 : 1;
+      const insertion = current[column - 1] + 1;
+      const deletion = previous[column] + 1;
+      const substitution = previous[column - 1] + cost;
+      const next = Math.min(insertion, deletion, substitution);
+      current[column] = next;
+      if (next < rowMin) {
+        rowMin = next;
+      }
+    }
+
+    if (rowMin > maxDistance) {
+      return maxDistance + 1;
+    }
+
+    for (let column = 0; column <= rightLength; column += 1) {
+      previous[column] = current[column];
+    }
+  }
+
+  return previous[rightLength] ?? maxDistance + 1;
+}
+
+function stripLeadingCommandFillers(value: string): string {
+  let output = value.trim();
+  let changed = true;
+  while (changed) {
+    const next = output.replace(LEADING_FILLER_REGEX, "").trimStart();
+    changed = next !== output;
+    output = next;
+  }
+  return output;
+}
+
+function isLikelyRecipientLead(value: string): boolean {
+  const normalized = normalizeForMatching(cleanRecipientQuery(value));
+  if (!normalized) {
+    return false;
+  }
+  if (normalized.includes("@")) {
+    return true;
+  }
+
+  const tokens = normalized.split(/\s+/).filter((token) => token.length > 0);
+  if (tokens.length === 0 || tokens.length > 2) {
+    return false;
+  }
+
+  return tokens.some((token) => {
+    const stem = stemToken(token);
+    return stem.length > 0 && !NON_RECIPIENT_LEAD_STEMS.has(stem);
+  });
+}
+
+function findMatchingSendVerb(
+  tokenRaw: string
+): { kind: SendVerbKind } | null {
+  const token = normalizeVerbToken(tokenRaw);
+  if (!token) {
+    return null;
+  }
+
+  let bestMatch: { kind: SendVerbKind; distance: number } | null = null;
+
+  for (const definition of SEND_VERB_DEFINITIONS) {
+    const target = normalizeVerbToken(definition.value);
+    if (!target) {
+      continue;
+    }
+
+    if (token === target) {
+      return { kind: definition.kind };
+    }
+
+    if (token.length <= 3 || target.length <= 3) {
+      continue;
+    }
+    if (token[0] !== target[0]) {
+      continue;
+    }
+    if (Math.abs(token.length - target.length) > 2) {
+      continue;
+    }
+
+    const minLength = Math.min(token.length, target.length);
+    const maxDistance = minLength <= 4 ? 1 : 2;
+    const distance = levenshteinDistanceWithLimit(token, target, maxDistance);
+    if (distance > maxDistance) {
+      continue;
+    }
+
+    if (!bestMatch || distance < bestMatch.distance) {
+      bestMatch = { kind: definition.kind, distance };
+    }
+  }
+
+  return bestMatch ? { kind: bestMatch.kind } : null;
+}
+
+function consumeLeadingSendVerb(
+  value: string
+): ConsumedSendVerb | null {
+  const withoutFillers = stripLeadingCommandFillers(value);
+  if (!withoutFillers) {
+    return null;
+  }
+
+  const tokenMatch = withoutFillers.match(/^([^\s,;:.!?-–—]+)([\s\S]*)$/u);
+  if (!tokenMatch) {
+    return null;
+  }
+
+  const token = tokenMatch[1] ?? "";
+  const matchedVerb = findMatchingSendVerb(token);
+  if (!matchedVerb) {
+    return null;
+  }
+
+  const rest = (tokenMatch[2] ?? "").replace(/^[\s,;:.!?-–—]+/u, "").trim();
+  return {
+    rest,
+    kind: matchedVerb.kind,
+  };
+}
+
+function consumeSendVerbNearStart(
+  value: string,
+  maxPrefixTokens = 4
+): ConsumedSendVerb | null {
+  const compact = value.trim().replace(/^[\s,;:.!?-–—]+/u, "");
+  if (!compact) {
+    return null;
+  }
+
+  const words = compact.split(/\s+/).filter((word) => word.length > 0);
+  if (words.length === 0) {
+    return null;
+  }
+
+  const limit = Math.min(words.length - 1, Math.max(0, maxPrefixTokens - 1));
+  for (let index = 0; index <= limit; index += 1) {
+    const token = words[index] ?? "";
+    const matchedVerb = findMatchingSendVerb(token);
+    if (!matchedVerb) {
+      continue;
+    }
+    const leadingText = words.slice(0, index).join(" ").trim();
+    const rest = words.slice(index + 1).join(" ").trim();
+    return {
+      rest,
+      kind: matchedVerb.kind,
+      leadingText: leadingText || undefined,
+    };
+  }
+
+  return null;
+}
+
+function isLikelySendCommandStart(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (SEND_COMMAND_START_REGEX.test(trimmed)) {
+    return true;
+  }
+  if (consumeLeadingSendVerb(trimmed) !== null) {
+    return true;
+  }
+  return consumeSendVerbNearStart(trimmed) !== null;
 }
 
 const CYRILLIC_TO_LATIN: Record<string, string> = {
@@ -340,19 +634,61 @@ function cleanRecipientQuery(value: string): string {
   return value
     .trim()
     .replace(/^["'«“]+|["'»”]+$/gu, "")
-    .replace(/^(?:для|к|to|for)\s+/iu, "")
+    .replace(/^(?:для|к|в|во|to|for|into)\s+/iu, "")
     .replace(/(?:^|\s)(?:пожалуйста|please)(?=\s|$)/giu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function cleanMessageText(value: string): string {
-  return value
+function capitalizeLeadingLetter(value: string): string {
+  const firstChar = value.charAt(0);
+  if (!firstChar || !/[a-zа-яё]/iu.test(firstChar)) {
+    return value;
+  }
+  return `${firstChar.toLocaleUpperCase()}${value.slice(firstChar.length)}`;
+}
+
+function normalizeCommandMessageText(value: string): string {
+  const compact = value
     .trim()
     .replace(/^["'«“]+|["'»”]+$/gu, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_MESSAGE_LENGTH);
+    .trim();
+  if (!compact) {
+    return "";
+  }
+
+  const startsWithBridge = compact.match(/^(?:что|that)\s+(.+)$/iu);
+  if (!startsWithBridge || /\?\s*$/u.test(compact)) {
+    return compact;
+  }
+
+  const bridgedText = (startsWithBridge[1] ?? "").trim();
+  if (!bridgedText) {
+    return compact;
+  }
+  return capitalizeLeadingLetter(bridgedText);
+}
+
+function cleanMessageText(value: string): string {
+  return normalizeCommandMessageText(value).slice(0, MAX_MESSAGE_LENGTH);
+}
+
+function isFavoritesRecipientQuery(value: string): boolean {
+  const normalized = normalizeForMatching(cleanRecipientQuery(value));
+  if (!normalized) {
+    return false;
+  }
+
+  if (FAVORITES_RECIPIENT_ALIASES.has(normalized)) {
+    return true;
+  }
+
+  if (normalized.startsWith("мои ")) {
+    return FAVORITES_RECIPIENT_ALIASES.has(normalized.slice(4).trim());
+  }
+
+  return false;
 }
 
 function buildCongratulationMessage(
@@ -377,12 +713,56 @@ function buildCongratulationMessage(
   return `${trimmed}${/[!?]$/u.test(trimmed) ? "" : "!"}`;
 }
 
+function parseLooseSendIntent(working: string): SendIntent | null {
+  const compact = working.trim();
+  if (!compact) {
+    return null;
+  }
+
+  const favoritePrefix = compact.match(FAVORITES_RECIPIENT_PREFIX_REGEX);
+  if (favoritePrefix) {
+    const recipientQuery = cleanRecipientQuery(favoritePrefix[1] ?? "");
+    const messageText = cleanMessageText(favoritePrefix[2] ?? "");
+    if (recipientQuery && messageText) {
+      return {
+        recipientQuery,
+        messageText,
+      };
+    }
+  }
+
+  const words = compact.split(/\s+/).filter((word) => word.length > 0);
+  if (words.length < 2) {
+    return null;
+  }
+
+  const firstWord = words[0] ?? "";
+  const secondWord = words[1] ?? "";
+  const prepositionHead = /^(?:в|во|к|для|to|for|into)$/iu.test(firstWord);
+  const recipientQuery = cleanRecipientQuery(prepositionHead ? secondWord : firstWord);
+  const messageText = cleanMessageText(
+    prepositionHead ? words.slice(2).join(" ") : words.slice(1).join(" ")
+  );
+  if (!recipientQuery || !messageText) {
+    return null;
+  }
+
+  return {
+    recipientQuery,
+    messageText,
+  };
+}
+
 function splitIntoIntentSegments(input: string): string[] {
   const compact = input.replace(/\r?\n+/g, ", ").replace(/\s+/g, " ").trim();
   if (!compact) {
     return [];
   }
-  const withImplicitSeparators = compact.replace(
+  const withCommandSeparators = compact.replace(
+    /\s+(?:и|а|или|and|or)\s+(?=(?:пожалуйста\s+|please\s+|ну\s+)?(?:отправ|напиш|передай|сообщи|скажи|уведоми|send|text|message|write|tell|notify|поздрав|congratulat))/giu,
+    ", "
+  );
+  const withImplicitSeparators = withCommandSeparators.replace(
     /\s+(?:и|а|and)\s+(?=[^,;]{1,90}(?:что|that|поздрав|congratulat))/giu,
     ", "
   );
@@ -397,16 +777,26 @@ function parseIntentSegment(
   language: "en" | "ru",
   isFirstSegment: boolean
 ): SendIntent | null {
-  const trimmed = segment.trim().replace(/^(?:и|а|and)\s+/iu, "");
-  const startsWithCongratulation = /^(?:пожалуйста\s+|please\s+)?(?:поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu.test(
-    trimmed
-  );
+  const trimmed = segment.trim();
+  if (!trimmed) {
+    return null;
+  }
 
-  let working = trimmed.replace(/^(?:пожалуйста|please)\s+/iu, "");
-  working = isFirstSegment
-    ? working.replace(SEND_LEADING_VERB_REGEX, "")
-    : working.replace(SEND_SEGMENT_PREFIX_REGEX, "");
-  working = working.trim();
+  const consumedVerb =
+    consumeLeadingSendVerb(trimmed) ||
+    (isFirstSegment ? consumeSendVerbNearStart(trimmed) : null);
+  const startsWithCongratulation =
+    consumedVerb?.kind === "congratulate";
+
+  let working = "";
+  if (consumedVerb) {
+    working = consumedVerb.rest;
+  } else if (!isFirstSegment) {
+    // Follow-up segments like "..., маме что ..." may omit the verb.
+    working = stripLeadingCommandFillers(trimmed);
+  } else {
+    return null;
+  }
 
   if (!working) {
     return null;
@@ -414,8 +804,24 @@ function parseIntentSegment(
 
   const messageByWhat = working.match(/^(.+?)\s+(?:что|that)\s+(.+)$/iu);
   if (messageByWhat) {
-    const recipientQuery = cleanRecipientQuery(messageByWhat[1] ?? "");
-    const messageText = cleanMessageText(messageByWhat[2] ?? "");
+    const rawRecipient = messageByWhat[1] ?? "";
+    const rawMessage = messageByWhat[2] ?? "";
+    const favoritePrefix = rawRecipient.match(FAVORITES_RECIPIENT_PREFIX_REGEX);
+    if (favoritePrefix) {
+      const recipientQuery = cleanRecipientQuery(favoritePrefix[1] ?? "");
+      const messageText = cleanMessageText(
+        [favoritePrefix[2] ?? "", rawMessage].filter((part) => part.trim().length > 0).join(" ")
+      );
+      if (recipientQuery && messageText) {
+        return {
+          recipientQuery,
+          messageText,
+        };
+      }
+    }
+
+    const recipientQuery = cleanRecipientQuery(rawRecipient);
+    const messageText = cleanMessageText(rawMessage);
     if (recipientQuery && messageText) {
       return {
         recipientQuery,
@@ -426,8 +832,24 @@ function parseIntentSegment(
 
   const messageByDash = working.match(/^(.+?)\s*[-–—]\s*(.+)$/u);
   if (messageByDash) {
-    const recipientQuery = cleanRecipientQuery(messageByDash[1] ?? "");
-    const messageText = cleanMessageText(messageByDash[2] ?? "");
+    const rawRecipient = messageByDash[1] ?? "";
+    const rawMessage = messageByDash[2] ?? "";
+    const favoritePrefix = rawRecipient.match(FAVORITES_RECIPIENT_PREFIX_REGEX);
+    if (favoritePrefix) {
+      const recipientQuery = cleanRecipientQuery(favoritePrefix[1] ?? "");
+      const messageText = cleanMessageText(
+        [favoritePrefix[2] ?? "", rawMessage].filter((part) => part.trim().length > 0).join(" ")
+      );
+      if (recipientQuery && messageText) {
+        return {
+          recipientQuery,
+          messageText,
+        };
+      }
+    }
+
+    const recipientQuery = cleanRecipientQuery(rawRecipient);
+    const messageText = cleanMessageText(rawMessage);
     if (recipientQuery && messageText) {
       return {
         recipientQuery,
@@ -494,6 +916,32 @@ function parseIntentSegment(
     }
   }
 
+  const favoritesBySpace = working.match(FAVORITES_RECIPIENT_PREFIX_REGEX);
+  if (favoritesBySpace) {
+    const recipientQuery = cleanRecipientQuery(favoritesBySpace[1] ?? "");
+    const messageText = cleanMessageText(favoritesBySpace[2] ?? "");
+    if (recipientQuery && messageText) {
+      return {
+        recipientQuery,
+        messageText,
+      };
+    }
+  }
+
+  const looseIntent = parseLooseSendIntent(working);
+  if (looseIntent) {
+    return looseIntent;
+  }
+
+  if (consumedVerb?.leadingText && isLikelyRecipientLead(consumedVerb.leadingText)) {
+    const mergedIntent = parseLooseSendIntent(
+      `${consumedVerb.leadingText} ${working}`.trim()
+    );
+    if (mergedIntent) {
+      return mergedIntent;
+    }
+  }
+
   return null;
 }
 
@@ -502,7 +950,7 @@ function extractSendIntents(
   language: "en" | "ru"
 ): SendIntent[] {
   const trimmed = input.trim();
-  if (!trimmed || !SEND_COMMAND_START_REGEX.test(trimmed)) {
+  if (!trimmed || !isLikelySendCommandStart(trimmed)) {
     return [];
   }
 
@@ -517,6 +965,17 @@ function extractSendIntents(
     intents.push(parsed);
     if (intents.length >= MAX_AUTOMATION_TARGETS) {
       break;
+    }
+  }
+
+  if (intents.length === 0) {
+    const consumedVerb =
+      consumeLeadingSendVerb(trimmed) || consumeSendVerbNearStart(trimmed);
+    if (consumedVerb) {
+      const fallbackIntent = parseLooseSendIntent(consumedVerb.rest);
+      if (fallbackIntent) {
+        intents.push(fallbackIntent);
+      }
     }
   }
 
@@ -647,66 +1106,101 @@ function hasAliasStemHit(stemSet: Set<string>, aliasStems: Set<string>): boolean
   return false;
 }
 
-function scoreRecipientCandidate(
+function scoreRecipientIdentity(
+  candidate: RecipientCandidate,
+  queryNormalized: string,
+  queryTokens: string[]
+): { score: number; exact: boolean; tokenHits: number } {
+  let score = 0;
+  let exact = false;
+  let tokenHits = 0;
+
+  if (!queryNormalized || queryTokens.length === 0) {
+    return { score, exact, tokenHits };
+  }
+
+  const queryWithoutAt = queryNormalized.replace(/^@+/, "");
+
+  if (
+    candidate.nameNormalized === queryNormalized ||
+    candidate.usernameNormalized === queryWithoutAt
+  ) {
+    score += 320;
+    exact = true;
+  }
+
+  if (queryNormalized.length >= 3 && candidate.nameNormalized.startsWith(queryNormalized)) {
+    score += 150;
+  }
+  if (
+    queryWithoutAt.length >= 2 &&
+    candidate.usernameNormalized.startsWith(queryWithoutAt)
+  ) {
+    score += 165;
+  }
+  if (
+    queryNormalized.length >= 4 &&
+    !candidate.nameNormalized.startsWith(queryNormalized) &&
+    candidate.nameNormalized.includes(queryNormalized)
+  ) {
+    score += 55;
+  }
+  if (
+    queryWithoutAt.length >= 3 &&
+    !candidate.usernameNormalized.startsWith(queryWithoutAt) &&
+    candidate.usernameNormalized.includes(queryWithoutAt)
+  ) {
+    score += 65;
+  }
+
+  for (const token of queryTokens) {
+    if (candidate.nameTokenStems.has(token)) {
+      score += 95;
+      tokenHits += 1;
+    }
+    if (candidate.usernameTokenStems.has(token)) {
+      score += 105;
+      tokenHits += 1;
+    }
+  }
+
+  if (candidate.hasDirectThread) {
+    score += 8;
+  }
+
+  return { score, exact, tokenHits };
+}
+
+function scoreRecipientContext(
   candidate: RecipientCandidate,
   queryNormalized: string,
   queryTokens: string[],
   relationKeys: string[]
-): { score: number; exact: boolean } {
+): number {
   let score = 0;
-  let exact = false;
 
   if (!queryNormalized || queryTokens.length === 0) {
-    return { score, exact };
+    return score;
   }
 
-  if (
-    candidate.nameNormalized === queryNormalized ||
-    candidate.usernameNormalized === queryNormalized ||
-    `@${candidate.usernameNormalized}` === queryNormalized
-  ) {
-    score += 280;
-    exact = true;
-  }
-
-  if (candidate.nameNormalized.includes(queryNormalized)) {
-    score += 150;
-  }
-  if (
-    candidate.usernameNormalized.includes(queryNormalized) ||
-    `@${candidate.usernameNormalized}`.includes(queryNormalized)
-  ) {
-    score += 150;
-  }
   if (candidate.bioNormalized.includes(queryNormalized)) {
     score += 70;
   }
 
   for (const token of queryTokens) {
-    if (candidate.nameTokenStems.has(token)) {
-      score += 75;
-    }
-    if (candidate.usernameTokenStems.has(token)) {
-      score += 65;
-    }
     if (candidate.bioTokenStems.has(token)) {
-      score += 40;
+      score += 42;
     }
     if (candidate.userMessageTokenStems.has(token)) {
-      score += 45;
+      score += 34;
     }
     if (candidate.peerMessageTokenStems.has(token)) {
-      score += 28;
+      score += 24;
     }
     if (candidate.allMessageTokenStems.has(token)) {
-      score += 12;
+      score += 10;
     }
   }
-
-  if (candidate.hasDirectThread) {
-    score += 14;
-  }
-  score += Math.min(candidate.sharedThreadIds.length, 3) * 5;
 
   for (const relationKey of relationKeys) {
     const aliasStems = RELATION_ALIAS_STEMS[relationKey];
@@ -731,7 +1225,12 @@ function scoreRecipientCandidate(
     }
   }
 
-  return { score, exact };
+  if (candidate.hasDirectThread) {
+    score += 4;
+  }
+  score += Math.min(candidate.sharedThreadIds.length, 3) * 3;
+
+  return score;
 }
 
 function resolveRecipient(
@@ -748,9 +1247,10 @@ function resolveRecipient(
     };
   }
 
-  const scored = candidates
+  const scoredBase = candidates
     .map((candidate) => {
-      const scoreData = scoreRecipientCandidate(
+      const identityData = scoreRecipientIdentity(candidate, queryNormalized, queryTokens);
+      const contextScore = scoreRecipientContext(
         candidate,
         queryNormalized,
         queryTokens,
@@ -758,46 +1258,121 @@ function resolveRecipient(
       );
       return {
         candidate,
-        score: scoreData.score,
-        exact: scoreData.exact,
+        identityScore: identityData.score,
+        identityExact: identityData.exact,
+        identityTokenHits: identityData.tokenHits,
+        contextScore,
       };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score);
+    });
 
-  const minimumScore = relationKeys.length > 0 ? 55 : 70;
-  const top = scored[0];
-  const second = scored[1];
+  const hasIdentityCandidates = scoredBase.some(
+    (item) =>
+      item.identityExact ||
+      item.identityTokenHits > 0 ||
+      item.identityScore >= 170
+  );
+  const allowPureContextMode =
+    !hasIdentityCandidates &&
+    (relationKeys.length > 0 || queryTokens.length >= 2);
 
-  if (!top || top.score < minimumScore) {
+  if (!hasIdentityCandidates && !allowPureContextMode) {
     return {
       status: "not_found",
     };
   }
 
+  const scored = scoredBase
+    .map((item) => {
+      if (hasIdentityCandidates) {
+        if (item.identityScore <= 0) {
+          return null;
+        }
+        const allowContextTieBreaker =
+          relationKeys.length > 0 || queryTokens.length > 1;
+        const contextBonus = allowContextTieBreaker
+          ? Math.min(item.contextScore, 45)
+          : 0;
+        return {
+          ...item,
+          totalScore: item.identityScore + contextBonus,
+        };
+      }
+
+      const totalScore = item.contextScore + Math.min(item.identityScore, 40);
+      if (totalScore <= 0) {
+        return null;
+      }
+      return {
+        ...item,
+        totalScore,
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is (typeof scoredBase)[number] & {
+        totalScore: number;
+      } => item !== null
+    )
+    .sort((a, b) => b.totalScore - a.totalScore);
+
+  const minimumScore = hasIdentityCandidates
+    ? 78
+    : relationKeys.length > 0
+      ? 72
+      : 95;
+  const top = scored[0];
+  const second = scored[1];
+
+  if (!top || top.totalScore < minimumScore) {
+    return {
+      status: "not_found",
+    };
+  }
+
+  if (
+    hasIdentityCandidates &&
+    !top.identityExact &&
+    top.identityTokenHits === 0 &&
+    top.identityScore < 170
+  ) {
+    return {
+      status: "not_found",
+    };
+  }
+
+  const hasClearlyExactTop =
+    top.identityExact &&
+    top.identityScore >= 250 &&
+    (!second || second.identityExact === false);
+
   const shouldAskClarification =
-    !top.exact &&
+    !hasClearlyExactTop &&
     Boolean(
       second &&
-        second.score >= minimumScore &&
-        top.score - second.score < 18 &&
-        second.score >= Math.floor(top.score * 0.82)
+        second.totalScore >= minimumScore &&
+        (top.totalScore - second.totalScore <
+          (hasIdentityCandidates ? 28 : 20) ||
+          second.totalScore >= Math.floor(top.totalScore * 0.88))
     );
 
   if (shouldAskClarification) {
     return {
       status: "ambiguous",
-      alternatives: [top.candidate, second!.candidate].filter(
-        (candidate, index, all) =>
-          all.findIndex((item) => item.userId === candidate.userId) === index
-      ),
+      alternatives: scored
+        .slice(0, 3)
+        .map((item) => item.candidate)
+        .filter(
+          (candidate, index, all) =>
+            all.findIndex((item) => item.userId === candidate.userId) === index
+        ),
     };
   }
 
   return {
     status: "resolved",
     candidate: top.candidate,
-    score: top.score,
+    score: top.totalScore,
   };
 }
 
@@ -980,10 +1555,132 @@ function buildSendParseErrorReply(language: "en" | "ru"): string {
   ].join("\n");
 }
 
+async function rewriteSendMessageText(
+  language: "en" | "ru",
+  rawMessageText: string
+): Promise<string> {
+  const locallyCleaned = cleanMessageText(rawMessageText);
+  if (!locallyCleaned) {
+    return "";
+  }
+
+  let providerConfig: ReturnType<typeof getAiProviderConfig> | null = null;
+  try {
+    providerConfig = getAiProviderConfig();
+  } catch {
+    return locallyCleaned;
+  }
+
+  const { apiKey, baseUrl, model: modelFromEnv } = providerConfig;
+  const modelCandidates = buildModelCandidates(modelFromEnv, false).slice(0, 1);
+  if (modelCandidates.length === 0) {
+    return locallyCleaned;
+  }
+
+  const systemPrompt =
+    language === "ru"
+      ? [
+          "Ты редактор исходящих сообщений в мессенджере.",
+          "Исправь орфографию, пунктуацию и регистр.",
+          "Сохрани смысл и лицо (я/ты/мы), ничего не выдумывай.",
+          "Верни только финальный текст без пояснений и кавычек.",
+        ].join(" ")
+      : [
+          "You are an outgoing-message editor for a messenger app.",
+          "Fix spelling, punctuation, and casing.",
+          "Preserve meaning and perspective (I/you/we), do not invent facts.",
+          "Return only the final edited text without quotes or explanations.",
+        ].join(" ");
+
+  for (const model of modelCandidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      SEND_MESSAGE_REWRITE_TIMEOUT_MS
+    );
+
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: "system" as const,
+              content: systemPrompt,
+            },
+            {
+              role: "user" as const,
+              content: locallyCleaned,
+            },
+          ],
+          max_tokens: Math.min(220, Math.max(40, Math.ceil(locallyCleaned.length * 0.9))),
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const payload = (await response.json().catch(() => null)) as unknown;
+      const rewrittenRaw =
+        extractChatCompletionText(payload) || extractResponseText(payload);
+      const rewritten = cleanMessageText(rewrittenRaw);
+      if (!rewritten) {
+        continue;
+      }
+
+      const minAllowedLength = Math.max(1, Math.floor(locallyCleaned.length * 0.35));
+      const maxAllowedLength = Math.max(12, Math.ceil(locallyCleaned.length * 2.6));
+      if (rewritten.length < minAllowedLength || rewritten.length > maxAllowedLength) {
+        return locallyCleaned;
+      }
+
+      return rewritten;
+    } catch {
+      // Ignore provider rewrite errors and fall back to locally cleaned text.
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  return locallyCleaned;
+}
+
+async function prepareSendIntent(
+  intent: SendIntent,
+  language: "en" | "ru"
+): Promise<SendIntent | null> {
+  const recipientQuery = cleanRecipientQuery(intent.recipientQuery);
+  if (!recipientQuery) {
+    return null;
+  }
+
+  const messageText = await rewriteSendMessageText(language, intent.messageText);
+  if (!messageText) {
+    return null;
+  }
+
+  return {
+    recipientQuery,
+    messageText,
+  };
+}
+
 async function executeSendIntents(
   userId: string,
+  language: "en" | "ru",
   intents: SendIntent[]
 ): Promise<SendActionSummary> {
+  const preparedIntents = (
+    await Promise.all(intents.map((intent) => prepareSendIntent(intent, language)))
+  ).filter((intent): intent is SendIntent => intent !== null);
+
   return updateStore<SendActionSummary>((store) => {
     const sender = store.users.find((user) => user.id === userId);
     if (!sender) {
@@ -995,10 +1692,37 @@ async function executeSendIntents(
     const outcomes: SendActionOutcome[] = [];
     let sentMessages = 0;
 
-    for (const intent of intents) {
-      const recipientQuery = cleanRecipientQuery(intent.recipientQuery);
-      const messageText = cleanMessageText(intent.messageText);
-      if (!recipientQuery || !messageText) {
+    for (const intent of preparedIntents) {
+      const recipientQuery = intent.recipientQuery;
+      const messageText = intent.messageText;
+
+      if (isFavoritesRecipientQuery(recipientQuery)) {
+        const createdAt = Date.now() + sentMessages;
+        const nextMessage: StoredChatMessage = {
+          id: createEntityId("msg"),
+          chatId: FAVORITES_CHAT_ID,
+          authorId: userId,
+          text: messageText,
+          attachments: [],
+          replyToMessageId: "",
+          createdAt,
+          editedAt: 0,
+          savedBy: {
+            [userId]: createdAt,
+          },
+        };
+
+        store.messages.push(nextMessage);
+        sentMessages += 1;
+
+        outcomes.push({
+          recipientQuery,
+          messageText,
+          status: "sent",
+          resolvedName: /[а-яё]/iu.test(recipientQuery)
+            ? "Избранное"
+            : "Favorites",
+        });
         continue;
       }
 
@@ -1245,7 +1969,7 @@ export async function POST(request: Request) {
     }
 
     const latestUserPrompt = messages[messages.length - 1]?.content ?? "";
-    const isSendCommand = SEND_COMMAND_START_REGEX.test(latestUserPrompt.trim());
+    const isSendCommand = isLikelySendCommandStart(latestUserPrompt);
     const sendIntents = extractSendIntents(latestUserPrompt, language);
     if (isSendCommand && sendIntents.length === 0) {
       return NextResponse.json({
@@ -1254,7 +1978,7 @@ export async function POST(request: Request) {
       });
     }
     if (sendIntents.length > 0) {
-      const sendSummary = await executeSendIntents(userId, sendIntents);
+      const sendSummary = await executeSendIntents(userId, language, sendIntents);
       const message = buildSendActionReply(language, sendSummary);
       return NextResponse.json({
         message,
