@@ -92,12 +92,25 @@ type SendActionSummary = {
   sentMessages: number;
 };
 
+type PlannedSendIntentPayload = {
+  recipientQuery?: unknown;
+  recipient?: unknown;
+  to?: unknown;
+  messageText?: unknown;
+  message?: unknown;
+  text?: unknown;
+  content?: unknown;
+};
+
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_LENGTH = 4000;
 const RESPONSE_TIMEOUT_MS = 12_000;
-const SEND_MESSAGE_REWRITE_TIMEOUT_MS = 2_500;
+const SEND_AI_PLANNER_TIMEOUT_MS = 9_000;
+const SEND_AI_COMPOSE_TIMEOUT_MS = 9_000;
+const MAX_SEND_AI_USER_CONTEXT_MESSAGES = 5;
 const MAX_AUTOMATION_TARGETS = 8;
 const MAX_CONTEXT_MESSAGES_PER_CANDIDATE = 160;
+const MAX_SEND_AI_CONTACTS = 140;
 const FAVORITES_CHAT_ID = "__favorites__";
 
 const FAVORITES_RECIPIENT_ALIASES = new Set(
@@ -1901,49 +1914,217 @@ function buildSendParseErrorReply(language: "en" | "ru"): string {
   ].join("\n");
 }
 
-async function rewriteSendMessageText(
+function extractFirstJsonObject(raw: string): string | null {
+  const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/iu);
+  if (fencedMatch?.[1]) {
+    const fenced = fencedMatch[1].trim();
+    if (fenced.length > 0) {
+      return fenced;
+    }
+  }
+
+  const startIndex = raw.indexOf("{");
+  if (startIndex < 0) {
+    return null;
+  }
+
+  let depth = 0;
+  let insideString = false;
+  let escaping = false;
+  for (let index = startIndex; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (!char) {
+      continue;
+    }
+    if (insideString) {
+      if (escaping) {
+        escaping = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaping = true;
+        continue;
+      }
+      if (char === '"') {
+        insideString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      insideString = true;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return raw.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizePlannedSendIntents(payload: unknown): SendIntent[] {
+  const asRecord =
+    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const rawActions = Array.isArray(payload)
+    ? payload
+    : Array.isArray(asRecord?.actions)
+      ? asRecord.actions
+      : Array.isArray(asRecord?.intents)
+        ? asRecord.intents
+        : [];
+
+  const intents: SendIntent[] = [];
+  for (const item of rawActions) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const action = item as PlannedSendIntentPayload;
+    const recipientRaw = [
+      action.recipientQuery,
+      action.recipient,
+      action.to,
+    ].find((value) => typeof value === "string") as string | undefined;
+    const messageRaw = [
+      action.messageText,
+      action.message,
+      action.text,
+      action.content,
+    ].find((value) => typeof value === "string") as string | undefined;
+
+    const recipientQuery = cleanRecipientQuery(recipientRaw ?? "");
+    const messageText = cleanMessageText(messageRaw ?? "");
+    if (!recipientQuery || !messageText) {
+      continue;
+    }
+    intents.push({
+      recipientQuery,
+      messageText,
+    });
+    if (intents.length >= MAX_AUTOMATION_TARGETS) {
+      break;
+    }
+  }
+
+  return intents;
+}
+
+function wantsDetailedSendMessage(text: string): boolean {
+  return /(?:подроб|деталь|распиш|развернут|разверни|expand|elaborate|detailed|in detail)/iu.test(
+    text
+  );
+}
+
+function collectRecentUserMessages(
+  messages: NormalizedAiChatMessage[],
+  limit = MAX_SEND_AI_USER_CONTEXT_MESSAGES
+): string[] {
+  if (limit <= 0) {
+    return [];
+  }
+  return messages
+    .filter((message) => message.role === "user" && message.content.trim().length > 0)
+    .map((message) => message.content.trim().slice(0, MAX_MESSAGE_LENGTH))
+    .slice(-limit);
+}
+
+function containsQuestionRequest(text: string): boolean {
+  const compact = text.trim();
+  if (!compact) {
+    return false;
+  }
+  if (/[?？]/u.test(compact)) {
+    return true;
+  }
+  return /(?:спроси|спросить|задай вопрос|вопрос|ask|ask him|ask her|question|inquire)/iu.test(
+    compact
+  );
+}
+
+function isLikelySendAiRefusal(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return /(?:пожалуйста.*уважитель|давай.*уважитель|не могу помочь|не могу выполнить|извини|как ai|как ии|as an ai|i can't help|i cannot help|i can't assist|i cannot assist|i'm unable|i am unable)/iu.test(
+    normalized
+  );
+}
+async function planSendIntentsWithAi(
+  store: StoreData,
+  userId: string,
   language: "en" | "ru",
-  rawMessageText: string
-): Promise<string> {
-  const locallyCleaned = cleanMessageText(rawMessageText);
-  if (!locallyCleaned) {
-    return "";
+  userCommand: string,
+  recentUserMessages: string[]
+): Promise<SendIntent[]> {
+  const cleanedCommand = userCommand.trim().slice(0, MAX_MESSAGE_LENGTH);
+  if (!cleanedCommand) {
+    return [];
   }
 
   let providerConfig: ReturnType<typeof getAiProviderConfig> | null = null;
   try {
     providerConfig = getAiProviderConfig();
   } catch {
-    return locallyCleaned;
+    return [];
   }
+
+  const candidates = buildRecipientCandidates(store, userId);
+  const contactsCatalog = [...candidates]
+    .sort((left, right) => {
+      const directDiff = Number(right.hasDirectThread) - Number(left.hasDirectThread);
+      if (directDiff !== 0) {
+        return directDiff;
+      }
+      const sharedDiff = right.sharedThreadIds.length - left.sharedThreadIds.length;
+      if (sharedDiff !== 0) {
+        return sharedDiff;
+      }
+      return right.name.localeCompare(left.name);
+    })
+    .slice(0, MAX_SEND_AI_CONTACTS)
+    .map((candidate) => {
+      const name = candidate.name.trim() || candidate.userId;
+      const username = candidate.username.trim().replace(/^@+/, "");
+      return username ? `- ${name} (@${username})` : `- ${name}`;
+    })
+    .join("\n");
 
   const { apiKey, baseUrl, model: modelFromEnv } = providerConfig;
-  const modelCandidates = buildModelCandidates(modelFromEnv, false).slice(0, 1);
-  if (modelCandidates.length === 0) {
-    return locallyCleaned;
-  }
-
+  const modelCandidates = buildModelCandidates(modelFromEnv, false).slice(0, 2);
   const systemPrompt =
     language === "ru"
       ? [
-          "Ты редактор исходящих сообщений в мессенджере.",
-          "Исправь орфографию, пунктуацию и регистр.",
-          "Сохрани смысл и лицо (я/ты/мы), ничего не выдумывай.",
-          "Верни только финальный текст без пояснений и кавычек.",
+          "Ты AI-оркестратор команды send в мессенджере.",
+          "На входе команда пользователя и список известных контактов.",
+          "Нужно вернуть только JSON без markdown и без пояснений.",
+          "Формат строго: {\"actions\":[{\"recipientQuery\":\"...\",\"messageText\":\"...\"}]}",
+          "recipientQuery должен быть из команды и по возможности с точным @username из списка.",
+          "Если текст похож на задачу для написания сообщения, сам сгенерируй финальное сообщение.",
+          "Если просят подробно, сообщение должно быть развернутым и конкретным.",
+          `Максимум действий: ${MAX_AUTOMATION_TARGETS}.`,
         ].join(" ")
       : [
-          "You are an outgoing-message editor for a messenger app.",
-          "Fix spelling, punctuation, and casing.",
-          "Preserve meaning and perspective (I/you/we), do not invent facts.",
-          "Return only the final edited text without quotes or explanations.",
+          "You are the send-command orchestrator in a messenger app.",
+          "Input includes user command plus known contacts.",
+          "Return JSON only, with no markdown and no explanations.",
+          'Strict format: {"actions":[{"recipientQuery":"...","messageText":"..."}]}',
+          "recipientQuery should use the exact contact identifier, preferably @username from the catalog.",
+          "If user text is an instruction, generate the final outgoing message.",
+          "If user asks for details, make the message detailed and concrete.",
+          `Maximum actions: ${MAX_AUTOMATION_TARGETS}.`,
         ].join(" ");
 
   for (const model of modelCandidates) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      SEND_MESSAGE_REWRITE_TIMEOUT_MS
-    );
+    const timeoutId = setTimeout(() => controller.abort(), SEND_AI_PLANNER_TIMEOUT_MS);
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -1961,10 +2142,18 @@ async function rewriteSendMessageText(
             },
             {
               role: "user" as const,
-              content: locallyCleaned,
+              content: [
+                `Command: ${cleanedCommand}`,
+                "Recent user messages (last 5):",
+                recentUserMessages.length > 0
+                  ? recentUserMessages.map((message, index) => `${index + 1}. ${message}`).join("\n")
+                  : "(none)",
+                "Known contacts:",
+                contactsCatalog || "(none)",
+              ].join("\n"),
             },
           ],
-          max_tokens: Math.min(220, Math.max(40, Math.ceil(locallyCleaned.length * 0.9))),
+          max_tokens: 850,
         }),
         signal: controller.signal,
       });
@@ -1974,22 +2163,146 @@ async function rewriteSendMessageText(
       }
 
       const payload = (await response.json().catch(() => null)) as unknown;
-      const rewrittenRaw =
+      const raw =
         extractChatCompletionText(payload) || extractResponseText(payload);
-      const rewritten = cleanMessageText(rewrittenRaw);
-      if (!rewritten) {
+      if (!raw.trim()) {
         continue;
       }
 
-      const minAllowedLength = Math.max(1, Math.floor(locallyCleaned.length * 0.35));
-      const maxAllowedLength = Math.max(12, Math.ceil(locallyCleaned.length * 2.6));
-      if (rewritten.length < minAllowedLength || rewritten.length > maxAllowedLength) {
-        return locallyCleaned;
+      const jsonText = extractFirstJsonObject(raw) ?? raw.trim();
+      const parsed = JSON.parse(jsonText) as unknown;
+      const planned = normalizePlannedSendIntents(parsed);
+      if (planned.length > 0) {
+        return planned;
+      }
+    } catch {
+      // Ignore planner errors and fallback to deterministic parser.
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  return [];
+}
+
+async function rewriteSendMessageText(
+  language: "en" | "ru",
+  rawMessageText: string,
+  recentUserMessages: string[]
+): Promise<string> {
+  const locallyCleaned = cleanMessageText(rawMessageText);
+  if (!locallyCleaned) {
+    return "";
+  }
+
+  let providerConfig: ReturnType<typeof getAiProviderConfig> | null = null;
+  try {
+    providerConfig = getAiProviderConfig();
+  } catch {
+    return locallyCleaned;
+  }
+
+  const wantsDetailed = wantsDetailedSendMessage(locallyCleaned);
+  const { apiKey, baseUrl, model: modelFromEnv } = providerConfig;
+  const modelCandidates = buildModelCandidates(modelFromEnv, false).slice(0, 2);
+  if (modelCandidates.length === 0) {
+    return locallyCleaned;
+  }
+
+  const systemPrompt =
+    language === "ru"
+      ? [
+          "Ты редактор/автор исходящих сообщений.",
+          "На вход подается текст-команда или черновик.",
+          "Верни только финальный текст сообщения, который нужно отправить.",
+          "Сохраняй замысел пользователя и не придумывай факты вне запроса.",
+          "Если в тексте просьба написать подробно, сделай развернутое сообщение (минимум 5 предложений).",
+          "Не добавляй морализаторство, вежливые отказы и советы в стиле ассистента.",
+          "Никаких пояснений, заголовков, markdown или кавычек вокруг всего ответа.",
+        ].join(" ")
+      : [
+          "You are an outgoing-message writer/editor.",
+          "Input can be an instruction or a draft.",
+          "Return only the final outgoing message text.",
+          "Preserve user intent and do not invent unrelated facts.",
+          "If user asks for detail, produce a detailed message (at least 5 sentences).",
+          "Do not add assistant-style refusals, moralizing, or safety lectures.",
+          "No explanations, no markdown, no wrapper quotes.",
+        ].join(" ");
+
+  const minLength = wantsDetailed
+    ? Math.max(160, Math.floor(locallyCleaned.length * 1.1))
+    : Math.max(8, Math.floor(locallyCleaned.length * 0.5));
+  const sourceHasQuestionRequest = containsQuestionRequest(locallyCleaned);
+  const maxLengthWithoutDetail = Math.max(
+    60,
+    Math.ceil(locallyCleaned.length * 1.8)
+  );
+
+  for (const model of modelCandidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SEND_AI_COMPOSE_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: "system" as const,
+              content: systemPrompt,
+            },
+            {
+              role: "user" as const,
+              content: [
+                "Recent user messages (last 5):",
+                recentUserMessages.length > 0
+                  ? recentUserMessages.map((message, index) => `${index + 1}. ${message}`).join("\n")
+                  : "(none)",
+                "Current send instruction:",
+                locallyCleaned,
+              ].join("\n"),
+            },
+          ],
+          max_tokens: Math.min(
+            900,
+            Math.max(120, Math.ceil(locallyCleaned.length * (wantsDetailed ? 2.2 : 1.6)))
+          ),
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        continue;
       }
 
-      return rewritten;
+      const payload = (await response.json().catch(() => null)) as unknown;
+      const generatedRaw =
+        extractChatCompletionText(payload) || extractResponseText(payload);
+      const generated = cleanMessageText(generatedRaw);
+      if (!generated) {
+        continue;
+      }
+      if (isLikelySendAiRefusal(generated)) {
+        continue;
+      }
+      if (!sourceHasQuestionRequest && /[?？]/u.test(generated)) {
+        continue;
+      }
+      if (generated.length < minLength) {
+        continue;
+      }
+      if (!wantsDetailed && generated.length > maxLengthWithoutDetail) {
+        continue;
+      }
+      return generated;
     } catch {
-      // Ignore provider rewrite errors and fall back to locally cleaned text.
+      // Ignore generation errors and fallback to local text.
     } finally {
       clearTimeout(timeoutId);
     }
@@ -2000,14 +2313,19 @@ async function rewriteSendMessageText(
 
 async function prepareSendIntent(
   intent: SendIntent,
-  language: "en" | "ru"
+  language: "en" | "ru",
+  recentUserMessages: string[]
 ): Promise<SendIntent | null> {
   const recipientQuery = cleanRecipientQuery(intent.recipientQuery);
   if (!recipientQuery) {
     return null;
   }
 
-  const messageText = await rewriteSendMessageText(language, intent.messageText);
+  const messageText = await rewriteSendMessageText(
+    language,
+    intent.messageText,
+    recentUserMessages
+  );
   if (!messageText) {
     return null;
   }
@@ -2021,10 +2339,13 @@ async function prepareSendIntent(
 async function executeSendIntents(
   userId: string,
   language: "en" | "ru",
-  intents: SendIntent[]
+  intents: SendIntent[],
+  recentUserMessages: string[]
 ): Promise<SendActionSummary> {
   const preparedIntents = (
-    await Promise.all(intents.map((intent) => prepareSendIntent(intent, language)))
+    await Promise.all(
+      intents.map((intent) => prepareSendIntent(intent, language, recentUserMessages))
+    )
   ).filter((intent): intent is SendIntent => intent !== null);
 
   return updateStore<SendActionSummary>((store) => {
@@ -2315,8 +2636,30 @@ export async function POST(request: Request) {
     }
 
     const latestUserPrompt = messages[messages.length - 1]?.content ?? "";
+    const recentUserMessages = collectRecentUserMessages(messages);
     const isSendCommand = isLikelySendCommandStart(latestUserPrompt);
-    const sendIntents = extractSendIntents(latestUserPrompt, language);
+    const parsedSendIntents = extractSendIntents(latestUserPrompt, language);
+    let sendIntents = parsedSendIntents;
+    if (isSendCommand) {
+      const aiPlannedIntents = await planSendIntentsWithAi(
+        store,
+        userId,
+        language,
+        latestUserPrompt,
+        recentUserMessages
+      );
+      if (aiPlannedIntents.length > 0) {
+        const usableAiIntents = aiPlannedIntents.filter(
+          (intent) => !isLikelySendAiRefusal(intent.messageText)
+        );
+        sendIntents =
+          usableAiIntents.length > 0
+            ? usableAiIntents
+            : parsedSendIntents.length > 0
+              ? parsedSendIntents
+              : aiPlannedIntents;
+      }
+    }
     if (isSendCommand && sendIntents.length === 0) {
       return NextResponse.json({
         message: buildSendParseErrorReply(language),
@@ -2324,7 +2667,12 @@ export async function POST(request: Request) {
       });
     }
     if (sendIntents.length > 0) {
-      const sendSummary = await executeSendIntents(userId, language, sendIntents);
+      const sendSummary = await executeSendIntents(
+        userId,
+        language,
+        sendIntents,
+        recentUserMessages
+      );
       const message = buildSendActionReply(language, sendSummary);
       return NextResponse.json({
         message,
@@ -2350,4 +2698,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status });
   }
 }
+
 

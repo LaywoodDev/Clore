@@ -133,7 +133,7 @@
       "avatarAllowedUserIds": [],
       "bioAllowedUserIds": [],
       "birthdayAllowedUserIds": [],
-      "lastSeenAt": 1772104408901,
+      "lastSeenAt": 1772106117017,
       "avatarUrl": "",
       "bannerUrl": ""
     },
@@ -155,7 +155,7 @@
       "avatarAllowedUserIds": [],
       "bioAllowedUserIds": [],
       "birthdayAllowedUserIds": [],
-      "lastSeenAt": 1772104408874,
+      "lastSeenAt": 1772106116970,
       "avatarUrl": "",
       "bannerUrl": ""
     }
@@ -205,9 +205,9 @@
       "bannerUrl": "",
       "createdById": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
       "createdAt": 1772099312874,
-      "updatedAt": 1772103470657,
+      "updatedAt": 1772105056289,
       "readBy": {
-        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772103470907,
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772105056289,
         "u-69e38a42-7c7c-42c8-a75f-469a164b64d6": 1772103470657
       },
       "pinnedBy": {},
@@ -228,9 +228,9 @@
       "bannerUrl": "",
       "createdById": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
       "createdAt": 1772102894168,
-      "updatedAt": 1772102904792,
+      "updatedAt": 1772104968235,
       "readBy": {
-        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772103433490,
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772104968235,
         "u-e95fb0a8-ab8c-4e72-874b-f59fba0fb90e": 0
       },
       "pinnedBy": {},
@@ -251,9 +251,9 @@
       "bannerUrl": "",
       "createdById": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
       "createdAt": 1772104404203,
-      "updatedAt": 1772104404679,
+      "updatedAt": 1772106102951,
       "readBy": {
-        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772104404679,
+        "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482": 1772106102951,
         "f8df4529-1344-48c8-b34c-c735aec80568": 0
       },
       "pinnedBy": {},
@@ -396,6 +396,193 @@
       "attachments": [],
       "replyToMessageId": "",
       "createdAt": 1772104404679,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-b96174a2-8e5e-4ece-b7c5-632b684b22da",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772104410584,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-074aa5ca-37dd-4ce1-94ec-3b17c1ff35b5",
+      "chatId": "chat-0888703b-84e4-4f22-a0aa-308425671113",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "иди нахуй",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772104968235,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-df96ea26-467b-4981-a4e2-76cac6dc21e1",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "привет",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772104992937,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-49edc0e6-5646-4562-8df9-9c0e3541e30c",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "пока",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772104992938,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-d87d551a-b154-4c55-a172-9dd0f3bf563d",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "он гондон",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105016305,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-7eb23970-afcb-469c-83ff-86007af7d7d9",
+      "chatId": "chat-b1da9134-dd7e-4f40-bd03-a591dc026962",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "гондон",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105056289,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-288a8f67-75ba-4b48-aeb8-bb0444cd23e7",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Я понимаю, что ты испытываешь негативные эмоции, и мне важно знать, что тебя беспокоит. Если ты хочешь обсудить конкретные ситуации или причины, которые привели к этому чувству, пожалуйста, расскажи мне подробнее. Я готов выслушать и постараться понять твою точку зрения. Общение — это важный шаг к разрешению конфликтов. Надеюсь, мы сможем найти общий язык.",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105303581,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-25de8126-1494-4615-bf5e-1f3284121182",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Пожалуйста, избегайте использования оскорбительных выражений. Если у вас есть конкретный вопрос или проблема, с которой я могу помочь, дайте знать!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105347959,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-8e671931-a675-4dd9-9ddb-7c684f636ad4",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Пожалуйста, давай общаться в более уважительном ключе. Если у тебя есть какие-то проблемы или переживания, я готов выслушать и помочь по возможности.",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105359082,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-6e19f79e-6fa9-42c8-b624-f56a3432de5a",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет! Как дела? Чем могу помочь?",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105372601,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-02f69c7e-a638-4cf4-8c84-87911ea33f7a",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Давайте общаться более конструктивно. Если вы хотите поделиться своими мыслями или задать вопрос, не стесняйтесь.",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105673701,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-955e70b8-741f-410b-bd70-838b6648230d",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет! У меня все хорошо, спасибо. А как у тебя дела? Надеюсь, у тебя всё хорошо!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105683245,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-535e73ba-af68-4348-bd6c-9c4c251c2472",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет! Как дела? Чем могу помочь?",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105790972,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-51dba08b-fb3f-4287-82df-83c72aa38c23",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет! Как дела? Что тебя интересует сегодня?",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772105804416,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-ce28c6d1-1633-4649-bc7e-52b71de8e1d3",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772106051470,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-d6d559a4-f0fa-4dc9-9da6-559f725531a5",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Купи, пожалуйста, морковку, когда будешь ехать домой.",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772106074694,
+      "editedAt": 0,
+      "savedBy": {}
+    },
+    {
+      "id": "msg-f09218d2-df28-4c5d-8150-3b7d40d9aa67",
+      "chatId": "chat-c7bb5292-ded1-4882-9397-f86c26738697",
+      "authorId": "u-2c872e17-cd1e-4e5f-bc47-88fc206a4482",
+      "text": "Привет, Дауна!",
+      "attachments": [],
+      "replyToMessageId": "",
+      "createdAt": 1772106102951,
       "editedAt": 0,
       "savedBy": {}
     }
