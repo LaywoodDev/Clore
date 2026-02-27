@@ -672,6 +672,7 @@ const AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX =
   "clore_ai_assistant_search_mode_v1_";
 const AI_ASSISTANT_AGENT_MODE_STORAGE_KEY_PREFIX =
   "clore_ai_assistant_agent_mode_v1_";
+const EMOJI_USAGE_STORAGE_KEY_PREFIX = "clore_emoji_usage_v1_";
 const INCOMING_MESSAGE_SOUND_PATH = "/sounds/meet-message-sound-1.mp3";
 const INCOMING_CALL_RINGTONE_PATH =
   "/sounds/zapsplat_multimedia_ringtone_smartphone_mallet_musical_001_79295.mp3";
@@ -703,6 +704,8 @@ const GROUP_USERNAME_REGEX = /^[a-z0-9_]{3,32}$/;
 const GROUP_INVITE_USAGE_LIMIT_MAX = Number.MAX_SAFE_INTEGER;
 const GROUP_INVITE_USAGE_PRESET_VALUES = [0, 1, 5] as const;
 const MAX_AI_ASSISTANT_HISTORY_MESSAGES = 40;
+const MAX_TRACKED_EMOJI_USAGE_ITEMS = 300;
+const MAX_HOVER_MENU_EMOJIS = 20;
 const BUILT_IN_ASSISTANT_USER_ID = "bot-chatgpt";
 const FAVORITES_CHAT_ID = "__favorites__";
 const PREVIEW_CHAT_ID_PREFIX = "__preview__";
@@ -723,6 +726,7 @@ const translations = {
     groupMembers: "Group members",
     groupChat: "Group chat",
     members: "members",
+    subscribers: "subscribers",
     participants: "Participants",
     creator: "Creator",
     owner: "Owner",
@@ -1038,6 +1042,8 @@ const translations = {
     joinGroupAlreadyMember: "You are already a member of this group",
     joinGroupAction: "Join",
     joinGroupToWrite: "Join this group to send messages.",
+    channelReadOnlyPlaceholder: "Only admins can post in this channel.",
+    channelPostingRestricted: "Only channel owner or admins can post messages.",
     joiningGroup: "Joining...",
     inviteUsageLimit: "Invite link usage limit",
     inviteUsageLimitHint: "0 means unlimited. For one-time link use 1.",
@@ -1073,6 +1079,7 @@ const translations = {
     groupMembers: "Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†РІР‚С™Р’В¬Р В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р В Р вЂ№Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СљР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В¦Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎСљР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СљР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р В Р вЂ№Р В Р Р‹Р Р†Р вЂљРЎС™Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РІР‚вЂњ",
     groupChat: "Р В Р’В Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р РЋРЎв„ўР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р В Р вЂ№Р В Р Р‹Р Р†Р вЂљРЎС™Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В Р вЂ Р Р†Р вЂљРЎвЂєР Р†Р вЂљРІР‚Сљ Р В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р В Р вЂ№Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћ",
     members: "Р В Р’В Р В Р вЂ№Р В Р Р‹Р Р†Р вЂљРЎС™Р В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р В Р вЂ№Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СљР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В¦Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎСљР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В ",
+    subscribers: "РџРѕРґРїРёСЃС‡РёРєРё",
     participants: "Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†РІР‚С™Р’В¬Р В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р В Р вЂ№Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СљР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В¦Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎСљР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’В",
     creator: "Р В Р’В Р вЂ™Р’В Р В Р’В Р В РІР‚в„–Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В·Р В Р’В Р вЂ™Р’В Р В РЎС›Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’ВµР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В»Р В Р’В Р В Р вЂ№Р В Р’В Р В РІР‚В°",
     owner: "Р В Р’В Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РЎС›Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В»Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р вЂ™Р’В Р В РЎС›Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’ВµР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В»Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’ВµР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р вЂ™Р’В ",
@@ -1391,6 +1398,8 @@ const translations = {
     joinGroupAlreadyMember: "Р В РІР‚в„ўР РЋРІР‚в„– Р РЋРЎвЂњР В Р’В¶Р В Р’Вµ Р РЋР С“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р В РЎвЂўР В РЎвЂР РЋРІР‚С™Р В Р’Вµ Р В Р вЂ  Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РІвЂћвЂ“ Р В РЎвЂ“Р РЋР вЂљР РЋРЎвЂњР В РЎвЂ”Р В РЎвЂ”Р В Р’Вµ",
     joinGroupAction: "Присоединиться",
     joinGroupToWrite: "Вступите в эту группу, чтобы отправлять сообщения.",
+    channelReadOnlyPlaceholder: "В этом канале писать могут только админы.",
+    channelPostingRestricted: "Только владелец и админы канала могут писать сообщения.",
     joiningGroup: "Вступаем...",
     inviteUsageLimit: "Лимит использований ссылки",
     inviteUsageLimitHint: "0 — без ограничений. Для одноразовой ссылки укажите 1.",
@@ -1963,6 +1972,10 @@ function getThreadRoleForUser(thread: StoredChatThread, userId: string): GroupRo
   return normalizeGroupRole(thread.groupRoles?.[userId], "member");
 }
 
+function canRolePostInChannel(role: GroupRole | null): boolean {
+  return role === "owner" || role === "admin";
+}
+
 function isThreadContentProtectionEnabled(
   thread: StoredChatThread | null | undefined
 ): boolean {
@@ -1986,21 +1999,243 @@ const ORDERED_FORMATTING_ACTIONS: TextFormattingAction[] = [
   "quote",
   "list",
 ];
-const CHAT_SMILEY_EMOJIS = [
+type EmojiCategoryId =
+  | "smileys"
+  | "people"
+  | "animals"
+  | "food"
+  | "travel"
+  | "activities"
+  | "objects"
+  | "symbols"
+  | "flags";
+
+type EmojiRange = readonly [number, number];
+
+type EmojiCategory = {
+  id: EmojiCategoryId;
+  label: string;
+  emojis: string[];
+};
+
+function createEmojiRange(start: number, end: number): string[] {
+  const emojis: string[] = [];
+  for (let codePoint = start; codePoint <= end; codePoint += 1) {
+    emojis.push(String.fromCodePoint(codePoint));
+  }
+  return emojis;
+}
+
+function createEmojiCategory(
+  ranges: readonly EmojiRange[],
+  extras: readonly string[] = []
+): string[] {
+  const rangeEmojis = ranges.flatMap(([start, end]) => createEmojiRange(start, end));
+  return Array.from(new Set([...rangeEmojis, ...extras]));
+}
+
+function createRegionalIndicatorFlags(): string[] {
+  const flags: string[] = [];
+  for (let first = 0x1f1e6; first <= 0x1f1ff; first += 1) {
+    for (let second = 0x1f1e6; second <= 0x1f1ff; second += 1) {
+      flags.push(String.fromCodePoint(first, second));
+    }
+  }
+  return flags;
+}
+
+const CHAT_EMOJI_CATEGORIES: EmojiCategory[] = [
+  {
+    id: "smileys",
+    label: "Смайлы",
+    emojis: createEmojiCategory([
+      [0x1f600, 0x1f64f],
+      [0x1f910, 0x1f92f],
+      [0x1f970, 0x1f97b],
+      [0x1fae0, 0x1fae8],
+    ]),
+  },
+  {
+    id: "people",
+    label: "Люди",
+    emojis: createEmojiCategory(
+      [
+        [0x1f44a, 0x1f487],
+        [0x1f48f, 0x1f491],
+        [0x1f574, 0x1f57a],
+        [0x1f590, 0x1f596],
+        [0x1f645, 0x1f64f],
+        [0x1f6a3, 0x1f6b6],
+        [0x1f9b0, 0x1f9b3],
+        [0x1f9cd, 0x1f9dd],
+      ],
+      [
+        "\u{1F9D1}\u{200D}\u{1F4BB}",
+        "\u{1F9D1}\u{200D}\u{1F3EB}",
+        "\u{1F9D1}\u{200D}\u{1F33E}",
+        "\u{1F9D1}\u{200D}\u{2695}\u{FE0F}",
+        "\u{1F9D1}\u{200D}\u{1F680}",
+        "\u{1F9D1}\u{200D}\u{1F692}",
+        "\u{1F9D1}\u{200D}\u{1F52C}",
+        "\u{1F9D1}\u{200D}\u{1F3A8}",
+        "\u{1F9D1}\u{200D}\u{1F373}",
+        "\u{1F9D1}\u{200D}\u{1F9AF}",
+      ]
+    ),
+  },
+  {
+    id: "animals",
+    label: "Животные и природа",
+    emojis: createEmojiCategory([
+      [0x1f400, 0x1f43e],
+      [0x1f980, 0x1f997],
+      [0x1f998, 0x1f9ae],
+      [0x1f331, 0x1f34a],
+      [0x1f30a, 0x1f320],
+    ]),
+  },
+  {
+    id: "food",
+    label: "Еда и напитки",
+    emojis: createEmojiCategory([
+      [0x1f345, 0x1f37f],
+      [0x1f950, 0x1f96f],
+      [0x1fad0, 0x1fadb],
+    ]),
+  },
+  {
+    id: "travel",
+    label: "Путешествия и места",
+    emojis: createEmojiCategory([
+      [0x1f680, 0x1f6c5],
+      [0x1f6e0, 0x1f6ec],
+      [0x1f6f3, 0x1f6fc],
+      [0x1f5fa, 0x1f5ff],
+      [0x1f3d4, 0x1f3df],
+      [0x1f3e0, 0x1f3f0],
+      [0x1f30d, 0x1f30f],
+    ]),
+  },
+  {
+    id: "activities",
+    label: "Активности",
+    emojis: createEmojiCategory([
+      [0x1f383, 0x1f3c4],
+      [0x1f3c6, 0x1f3d3],
+      [0x1f3f8, 0x1f3fa],
+      [0x1f93a, 0x1f94f],
+    ]),
+  },
+  {
+    id: "objects",
+    label: "Предметы",
+    emojis: createEmojiCategory([
+      [0x1f4a1, 0x1f4ff],
+      [0x1f507, 0x1f56b],
+      [0x1f5a5, 0x1f5fa],
+      [0x1f9f0, 0x1f9ff],
+      [0x1fa70, 0x1fa7c],
+      [0x1fa80, 0x1fa89],
+      [0x1fa90, 0x1fa9c],
+      [0x1faa0, 0x1faaf],
+    ]),
+  },
+  {
+    id: "symbols",
+    label: "Символы",
+    emojis: createEmojiCategory(
+      [
+        [0x1f300, 0x1f321],
+        [0x1f500, 0x1f53d],
+        [0x1f546, 0x1f54f],
+        [0x1f55b, 0x1f567],
+        [0x1f570, 0x1f573],
+        [0x1f5a4, 0x1f5a4],
+        [0x1f5e8, 0x1f5ef],
+      ],
+      [
+        "\u{2764}\u{FE0F}",
+        "\u{1F90D}",
+        "\u{1F90E}",
+        "\u{1F90F}",
+        "\u{1F9E1}",
+        "\u{1F49B}",
+        "\u{1F49A}",
+        "\u{1F499}",
+        "\u{1F49C}",
+        "\u{1F5A4}",
+        "\u{262E}\u{FE0F}",
+        "\u{262A}\u{FE0F}",
+        "\u{262F}\u{FE0F}",
+        "\u{271D}\u{FE0F}",
+        "\u{2638}\u{FE0F}",
+        "\u{2620}\u{FE0F}",
+        "\u{26A0}\u{FE0F}",
+        "\u{26D4}",
+        "\u{2757}",
+        "\u{2753}",
+        "\u{2754}",
+        "\u{203C}\u{FE0F}",
+        "\u{2049}\u{FE0F}",
+        "\u{303D}\u{FE0F}",
+      ]
+    ),
+  },
+  {
+    id: "flags",
+    label: "Флаги",
+    emojis: createEmojiCategory([], [
+      ...createRegionalIndicatorFlags(),
+      "\u{1F3F3}\u{FE0F}\u{200D}\u{1F308}",
+      "\u{1F3F3}\u{FE0F}\u{200D}\u{26A7}\u{FE0F}",
+      "\u{1F3F4}\u{200D}\u{2620}\u{FE0F}",
+      "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
+      "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}",
+      "\u{1F3F4}\u{E0067}\u{E0062}\u{E0077}\u{E006C}\u{E0073}\u{E007F}",
+    ]),
+  },
+];
+
+const CHAT_HOVER_EMOJIS = [
   "\u{1F600}", "\u{1F603}", "\u{1F604}", "\u{1F601}", "\u{1F606}", "\u{1F605}",
   "\u{1F602}", "\u{1F923}", "\u{1F60A}", "\u{1F609}", "\u{1F60D}", "\u{1F618}",
-  "\u{1F617}", "\u{1F61A}", "\u{1F61C}", "\u{1F61D}", "\u{1F60E}", "\u{1F973}",
-  "\u{1F914}", "\u{1F928}", "\u{1F644}", "\u{1F62E}", "\u{1F62F}", "\u{1F632}",
-  "\u{1F60F}", "\u{1F610}", "\u{1F611}", "\u{1F636}", "\u{1F62C}", "\u{1F634}",
-  "\u{1F62A}", "\u{1F924}", "\u{1F915}", "\u{1F912}", "\u{1F922}", "\u{1F92E}",
-  "\u{1F92F}", "\u{1F975}", "\u{1F976}", "\u{1F630}", "\u{1F628}", "\u{1F627}",
-  "\u{1F622}", "\u{1F62D}", "\u{1F621}", "\u{1F620}", "\u{1F92C}", "\u{1F479}",
-  "\u{1F47B}", "\u{1F47D}", "\u{1F916}", "\u{1F4A9}", "\u{1F63A}", "\u{1F638}",
-  "\u{1F639}", "\u{1F63B}", "\u{1F63C}", "\u{1F63D}", "\u{1F640}", "\u{1F63F}",
-  "\u{1F63E}", "\u{1F64C}", "\u{1F44D}", "\u{1F44E}", "\u{1F44F}", "\u{1F64F}",
-  "\u{1F91D}", "\u{1F525}", "\u{1F4AF}", "\u{2764}\u{FE0F}", "\u{1FAE1}",
-  "\u{1F48E}", "\u{1F389}", "\u{1F381}", "\u{1F381}", "\u{1F381}", "\u{1F680}",
+  "\u{1F61A}", "\u{1F61C}", "\u{1F61D}", "\u{1F60E}", "\u{1F914}", "\u{1F928}",
+  "\u{1F644}", "\u{1F62E}", "\u{1F62F}", "\u{1F632}", "\u{1F60F}", "\u{1F610}",
+  "\u{1F611}", "\u{1F636}", "\u{1F62C}", "\u{1F634}", "\u{1F62A}", "\u{1F924}",
+  "\u{1F915}", "\u{1F912}", "\u{1F922}", "\u{1F92E}", "\u{1F92F}", "\u{1F975}",
+  "\u{1F976}", "\u{1F630}", "\u{1F628}", "\u{1F627}", "\u{1F622}", "\u{1F62D}",
+  "\u{1F621}", "\u{1F620}", "\u{1F92C}", "\u{1F479}", "\u{1F47B}", "\u{1F47D}",
+  "\u{1F916}", "\u{1F4A9}", "\u{1F63A}", "\u{1F638}", "\u{1F639}", "\u{1F63B}",
+  "\u{1F63C}", "\u{1F63D}", "\u{1F640}", "\u{1F63F}", "\u{1F63E}", "\u{1F64C}",
+  "\u{1F44D}", "\u{1F44E}", "\u{1F44F}", "\u{1F64F}", "\u{1F91D}", "\u{1F525}",
+  "\u{1F4AF}", "\u{2764}\u{FE0F}", "\u{1FAE1}", "\u{1F48E}", "\u{1F389}",
+  "\u{1F381}", "\u{1F680}", "\u{1F31F}", "\u{1F308}", "\u{1F973}", "\u{1F60B}",
 ] as const;
+
+function parseEmojiUsageCounts(rawValue: string | null): Record<string, number> {
+  if (!rawValue) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    const normalized: Record<string, number> = {};
+    for (const [emoji, value] of Object.entries(parsed)) {
+      const count = typeof value === "number" ? value : Number(value);
+      if (!Number.isFinite(count) || count <= 0) {
+        continue;
+      }
+      normalized[emoji] = Math.floor(count);
+    }
+    return normalized;
+  } catch {
+    return {};
+  }
+}
 
 function extractUrls(text: string): string[] {
   return text.match(URL_PATTERN) ?? [];
@@ -2713,6 +2948,10 @@ export function WebMessenger({
   const composerRef = useRef<HTMLDivElement | null>(null);
   const chatPersonalizationDialogContentRef = useRef<HTMLDivElement | null>(null);
   const emojiMenuRef = useRef<HTMLDivElement | null>(null);
+  const emojiScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const emojiCategorySectionRefs = useRef<Map<EmojiCategoryId, HTMLElement | null>>(
+    new Map()
+  );
   const emojiCloseTimerRef = useRef<number | null>(null);
   const messageSoundRef = useRef<HTMLAudioElement | null>(null);
   const incomingCallRingtoneRef = useRef<HTMLAudioElement | null>(null);
@@ -2939,6 +3178,7 @@ export function WebMessenger({
   const [groupCreationKind, setGroupCreationKind] = useState<"group" | "channel">(
     "group"
   );
+  const [groupCreationUsernameDraft, setGroupCreationUsernameDraft] = useState("");
   const [isCreateThreadTypeMenuOpen, setIsCreateThreadTypeMenuOpen] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -3013,6 +3253,18 @@ export function WebMessenger({
     y: number;
   } | null>(null);
   const [isEmojiMenuOpen, setIsEmojiMenuOpen] = useState(false);
+  const [isEmojiSidebarOpen, setIsEmojiSidebarOpen] = useState(false);
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState<EmojiCategoryId>(
+    CHAT_EMOJI_CATEGORIES[0].id
+  );
+  const [emojiUsageCounts, setEmojiUsageCounts] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+    return parseEmojiUsageCounts(
+      window.localStorage.getItem(`${EMOJI_USAGE_STORAGE_KEY_PREFIX}${currentUser.id}`)
+    );
+  });
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [viewerImageId, setViewerImageId] = useState<string | null>(null);
   const [viewerSource, setViewerSource] = useState<"chat" | "profile" | "profile-avatar">(
@@ -3298,6 +3550,17 @@ export function WebMessenger({
     if (typeof window === "undefined") {
       return;
     }
+    setEmojiUsageCounts(
+      parseEmojiUsageCounts(
+        window.localStorage.getItem(`${EMOJI_USAGE_STORAGE_KEY_PREFIX}${currentUser.id}`)
+      )
+    );
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     window.localStorage.setItem(
       `${CHAT_CLEAR_HISTORY_STORAGE_PREFIX}${currentUser.id}`,
       JSON.stringify(clearedChatAtById)
@@ -3313,6 +3576,15 @@ export function WebMessenger({
       JSON.stringify(draftsByChatId)
     );
   }, [draftsByChatId, currentUser.id]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      `${EMOJI_USAGE_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      JSON.stringify(emojiUsageCounts)
+    );
+  }, [emojiUsageCounts, currentUser.id]);
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -4190,6 +4462,7 @@ export function WebMessenger({
 
   useEffect(() => {
     setIsEmojiMenuOpen(false);
+    setIsEmojiSidebarOpen(false);
   }, [activeChatId]);
 
   useEffect(() => {
@@ -4217,6 +4490,72 @@ export function WebMessenger({
       emojiCloseTimerRef.current = null;
     }, 140);
   };
+
+  const toggleEmojiSidebar = useCallback(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 1023px)").matches
+    ) {
+      setIsEmojiMenuOpen((prev) => !prev);
+      return;
+    }
+
+    setIsEmojiMenuOpen(false);
+    setIsActiveChatProfileSidebarOpen(false);
+    setIsEmojiSidebarOpen((prev) => !prev);
+  }, []);
+
+  const syncActiveEmojiCategoryWithScroll = useCallback(() => {
+    const container = emojiScrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const containerTop = container.getBoundingClientRect().top;
+    let closestCategoryId = CHAT_EMOJI_CATEGORIES[0].id;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    for (const category of CHAT_EMOJI_CATEGORIES) {
+      const section = emojiCategorySectionRefs.current.get(category.id);
+      if (!section) {
+        continue;
+      }
+
+      const distance = Math.abs(section.getBoundingClientRect().top - containerTop);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestCategoryId = category.id;
+      }
+    }
+
+    setActiveEmojiCategory((prev) => (prev === closestCategoryId ? prev : closestCategoryId));
+  }, []);
+
+  const scrollToEmojiCategory = useCallback((categoryId: EmojiCategoryId) => {
+    setActiveEmojiCategory(categoryId);
+    const section = emojiCategorySectionRefs.current.get(categoryId);
+    if (!section) {
+      return;
+    }
+    section.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+      inline: "nearest",
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isEmojiSidebarOpen) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      syncActiveEmojiCategoryWithScroll();
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [isEmojiSidebarOpen, syncActiveEmojiCategoryWithScroll]);
 
   const handleBirthdayPartChange = (
     part: keyof BirthdayParts,
@@ -4636,7 +4975,9 @@ export function WebMessenger({
         const displayUsername = isGroup
           ? groupAccess === "public" && groupUsername
             ? `@${groupUsername}`
-            : `${groupMembers.length + 1} ${t("members")}`
+            : `${groupMembers.length + 1} ${
+                groupKind === "channel" ? t("subscribers") : t("members")
+              }`
           : (directMember?.username ?? "deleted");
         const displayAvatarUrl = isGroup
           ? thread.avatarUrl
@@ -4929,6 +5270,18 @@ export function WebMessenger({
       activeChat.groupAccess === "public" &&
       isValidGroupUsername(activeChat.groupUsername)
   );
+  const isActiveChannelReadOnly = Boolean(
+    activeChat &&
+      !activeChat.isFavorites &&
+      !activeChat.isPreview &&
+      activeChat.isGroup &&
+      activeChat.groupKind === "channel" &&
+      !canRolePostInChannel(activeChat.myGroupRole)
+  );
+  const activeChatAudienceLabel =
+    activeChat?.isGroup && activeChat.groupKind === "channel"
+      ? t("subscribers")
+      : t("members");
   const activeChatPersonalization = useMemo<ChatPersonalization>(() => {
     if (!activeChat) {
       return { ...DEFAULT_CHAT_PERSONALIZATION };
@@ -5007,6 +5360,9 @@ export function WebMessenger({
 
     const activeThread = threads.find((thread) => thread.id === activeChat.id);
     if (!activeThread) {
+      return "";
+    }
+    if (activeChat.isGroup && activeChat.groupKind === "channel") {
       return "";
     }
 
@@ -6370,10 +6726,14 @@ export function WebMessenger({
       const replyTarget = message.replyToMessageId
         ? messagesById.get(message.replyToMessageId) ?? null
         : null;
+      const isChannelThread = activeChat.groupKind === "channel";
+      const isOwnMessage = message.authorId === currentUser.id;
       const replyAuthorName = replyTarget
-        ? replyTarget.authorId === currentUser.id
-          ? t("you")
-          : (usersById.get(replyTarget.authorId)?.name ?? t("unknownUser"))
+        ? isChannelThread
+          ? activeChat.name
+          : replyTarget.authorId === currentUser.id
+            ? t("you")
+            : (usersById.get(replyTarget.authorId)?.name ?? t("unknownUser"))
         : "";
       const replyPreviewText = replyTarget
         ? replyTarget.text.trim() ||
@@ -6394,17 +6754,20 @@ export function WebMessenger({
         id: message.id,
         chatId: message.chatId,
         authorId: message.authorId,
-        author: message.authorId === currentUser.id ? "me" : "them",
-        authorLabel:
-          message.authorId === currentUser.id
+        author: isOwnMessage ? "me" : "them",
+        authorLabel: isChannelThread
+          ? activeChat.name
+          : isOwnMessage
             ? t("you")
             : (usersById.get(message.authorId)?.name ?? t("unknownUser")),
-        authorUsername:
-          message.authorId === currentUser.id
+        authorUsername: isChannelThread
+          ? ""
+          : isOwnMessage
             ? currentUser.username
             : (usersById.get(message.authorId)?.username ?? ""),
-        authorAvatarUrl:
-          message.authorId === currentUser.id
+        authorAvatarUrl: isChannelThread
+          ? ""
+          : isOwnMessage
             ? currentUser.avatarUrl
             : (usersById.get(message.authorId)?.avatarUrl ?? ""),
         text: message.text,
@@ -6738,6 +7101,7 @@ export function WebMessenger({
     setGroupMemberQueryDraft("");
     setGroupNameDraft("");
     setGroupMemberIdsDraft([]);
+    setGroupCreationUsernameDraft("");
   }, []);
   const openGroupCreationDialog = useCallback(() => {
     setIsCreateThreadTypeMenuOpen(true);
@@ -7105,7 +7469,11 @@ export function WebMessenger({
 
   useEffect(() => {
     const chatId =
-      activeChat && !activeChat.isFavorites && !activeChat.isPreview
+      activeChat &&
+      !activeChat.isFavorites &&
+      !activeChat.isPreview &&
+      !isActiveChannelReadOnly &&
+      !(activeChat.isGroup && activeChat.groupKind === "channel")
         ? activeChat.id
         : null;
     const previousChatId = lastTypingChatIdRef.current;
@@ -7132,11 +7500,14 @@ export function WebMessenger({
       void sendTypingState(chatId, false);
       isTypingStateSentRef.current = false;
     }
-  }, [activeChat, draft, sendTypingState]);
+  }, [activeChat, draft, isActiveChannelReadOnly, sendTypingState]);
 
   useEffect(() => {
     const chatId =
-      activeChat && !activeChat.isFavorites && !activeChat.isPreview
+      activeChat &&
+      !activeChat.isFavorites &&
+      !activeChat.isPreview &&
+      !isActiveChannelReadOnly
         ? activeChat.id
         : null;
     if (!chatId) {
@@ -7159,7 +7530,7 @@ export function WebMessenger({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeChat, sendTypingState]);
+  }, [activeChat, isActiveChannelReadOnly, sendTypingState]);
 
   useEffect(() => {
     return () => {
@@ -7835,14 +8206,29 @@ export function WebMessenger({
 
   const createGroupChat = async () => {
     const kind: GroupKind = groupCreationKind === "channel" ? "channel" : "group";
+    const accessType: GroupAccessType = kind === "channel" ? "public" : "private";
+    const username =
+      kind === "channel" ? normalizeGroupUsername(groupCreationUsernameDraft) : "";
     const memberIds = kind === "channel" ? [] : groupMemberIdsDraft;
     const title = groupNameDraft.trim().replace(/\s+/g, " ");
     if (title.length < GROUP_TITLE_MIN_LENGTH) {
-      showToast(t("groupNameMinError"));
+      showToast(
+        kind === "channel"
+          ? `Channel name must be at least ${GROUP_TITLE_MIN_LENGTH} characters`
+          : t("groupNameMinError")
+      );
       return;
     }
     if (title.length > GROUP_TITLE_MAX_LENGTH) {
-      showToast(t("groupNameMaxError"));
+      showToast(
+        kind === "channel"
+          ? `Channel name must be at most ${GROUP_TITLE_MAX_LENGTH} characters`
+          : t("groupNameMaxError")
+      );
+      return;
+    }
+    if (kind === "channel" && !isValidGroupUsername(username)) {
+      showToast(t("invalidGroupUsername"));
       return;
     }
     if (memberIds.length + 1 > GROUP_MAX_MEMBERS) {
@@ -7861,6 +8247,8 @@ export function WebMessenger({
             title,
             memberIds,
             kind,
+            accessType,
+            username,
           }),
         }
       );
@@ -8387,6 +8775,18 @@ export function WebMessenger({
   }, [activeSidebar, isVoiceRecording, stopVoiceRecording]);
 
   const insertEmojiToDraft = (emoji: string) => {
+    setEmojiUsageCounts((prev) => {
+      const next = {
+        ...prev,
+        [emoji]: (prev[emoji] ?? 0) + 1,
+      };
+      const entries = Object.entries(next).sort((left, right) => right[1] - left[1]);
+      if (entries.length <= MAX_TRACKED_EMOJI_USAGE_ITEMS) {
+        return next;
+      }
+      return Object.fromEntries(entries.slice(0, MAX_TRACKED_EMOJI_USAGE_ITEMS));
+    });
+
     const input = messageInputRef.current;
     if (!input) {
       setDraft((prev) => `${prev}${emoji}`);
@@ -8578,6 +8978,10 @@ export function WebMessenger({
     if (isVoiceRecording) {
       return;
     }
+    if (isActiveChannelReadOnly) {
+      showToast(t("channelPostingRestricted"));
+      return;
+    }
 
     if (editingTarget) {
       const hasContentAfterEdit = text.length > 0 || editingTarget.attachments.length > 0;
@@ -8641,7 +9045,11 @@ export function WebMessenger({
         activeChat.groupAccess === "public" &&
         isValidGroupUsername(activeChat.groupUsername)
       ) {
-        showToast(t("joinGroupToWrite"));
+        showToast(
+          activeChat.groupKind === "channel"
+            ? "Join this channel to send messages."
+            : t("joinGroupToWrite")
+        );
         return;
       }
       if (!activeChat.memberId) {
@@ -8798,7 +9206,11 @@ export function WebMessenger({
       const groupBio =
         selectedGroupChat.description.trim().length > 0
           ? selectedGroupChat.description
-          : `${selectedGroupChat.memberIds.length} ${t("members")}`;
+          : `${selectedGroupChat.memberIds.length} ${
+              selectedGroupChat.groupKind === "channel"
+                ? t("subscribers")
+                : t("members")
+            }`;
       return {
         name: selectedGroupChat.name,
         username: "",
@@ -9444,11 +9856,13 @@ export function WebMessenger({
     if (!prepareActiveChatProfileTarget()) {
       return;
     }
+    setIsEmojiSidebarOpen(false);
     setIsActiveChatProfileSidebarOpen(false);
     setActiveSidebar("profile");
   }, [prepareActiveChatProfileTarget]);
 
   const toggleActiveChatProfileSidebar = useCallback(() => {
+    setIsEmojiSidebarOpen(false);
     if (isActiveChatProfileSidebarOpen) {
       setIsActiveChatProfileSidebarOpen(false);
       return;
@@ -9713,7 +10127,7 @@ export function WebMessenger({
           description: nextDescription,
         }),
       });
-      showToast(t("groupRenamedToast"));
+      showToast(isSelectedChannel ? "Channel updated" : t("groupRenamedToast"));
     } catch (error) {
       await loadChatData({ forceFullSync: true });
       showToast(getRequestErrorMessage(error));
@@ -9795,7 +10209,7 @@ export function WebMessenger({
             : thread
         )
       );
-      showToast(t("groupTypeSavedToast"));
+      showToast(isSelectedChannel ? "Channel type updated" : t("groupTypeSavedToast"));
     } catch (error) {
       await loadChatData({ forceFullSync: true });
       showToast(getRequestErrorMessage(error));
@@ -10397,6 +10811,38 @@ export function WebMessenger({
           : false;
   const isCompactActiveChatProfileSidebar =
     activeSidebar === "home" && isActiveChatProfileSidebarOpen;
+  const isCompactEmojiSidebar = activeSidebar === "home" && isEmojiSidebarOpen;
+  const shouldShowEmojiSidebar = isCompactEmojiSidebar;
+  const hoverMenuEmojis = useMemo(() => {
+    const frequent = Object.entries(emojiUsageCounts)
+      .filter(([, count]) => count > 0)
+      .sort((left, right) => right[1] - left[1])
+      .map(([emoji]) => emoji);
+
+    const next: string[] = [];
+    const seen = new Set<string>();
+    for (const emoji of frequent) {
+      if (!seen.has(emoji)) {
+        seen.add(emoji);
+        next.push(emoji);
+      }
+      if (next.length >= MAX_HOVER_MENU_EMOJIS) {
+        return next;
+      }
+    }
+
+    for (const emoji of CHAT_HOVER_EMOJIS) {
+      if (!seen.has(emoji)) {
+        seen.add(emoji);
+        next.push(emoji);
+      }
+      if (next.length >= MAX_HOVER_MENU_EMOJIS) {
+        break;
+      }
+    }
+
+    return next;
+  }, [emojiUsageCounts]);
   const shouldShowProfileSidebar =
     activeSidebar === "profile" || isCompactActiveChatProfileSidebar;
   const shouldShowMobileNavigation =
@@ -10739,7 +11185,9 @@ export function WebMessenger({
                     <AlertDialogDescription className="text-zinc-400">
                       {groupCreationKind !== "channel" && groupCreationStep === "members"
                         ? `${t("groupMembers")}: ${groupMemberIdsDraft.length + 1}/${GROUP_MAX_MEMBERS}`
-                        : `${t("groupName")}: ${groupNameDraft.trim().replace(/\s+/g, " ").length}/${GROUP_TITLE_MAX_LENGTH}`}
+                        : `${
+                            groupCreationKind === "channel" ? "Channel name" : t("groupName")
+                          }: ${groupNameDraft.trim().replace(/\s+/g, " ").length}/${GROUP_TITLE_MAX_LENGTH}`}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
 
@@ -10838,27 +11286,46 @@ export function WebMessenger({
                         value={groupNameDraft}
                         maxLength={GROUP_TITLE_MAX_LENGTH}
                         onChange={(event) => setGroupNameDraft(event.target.value)}
-                        placeholder={t("groupName")}
+                        placeholder={
+                          groupCreationKind === "channel" ? "Channel name" : t("groupName")
+                        }
                         className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400"
                       />
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
-                        <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
-                          {`${t("groupMembers")} (${groupMemberIdsDraft.length + 1})`}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200">
-                            {currentUser.name} {t("youLabel")}
-                          </span>
-                          {selectedGroupDraftMembers.map((member) => (
-                            <span
-                              key={`group-member-preview-${member.id}`}
-                              className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200"
-                            >
-                              {member.name}
-                            </span>
-                          ))}
+                      {groupCreationKind === "channel" ? (
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+                          <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
+                            {t("groupUsernameLabel")}
+                          </p>
+                          <Input
+                            value={groupCreationUsernameDraft}
+                            onChange={(event) =>
+                              setGroupCreationUsernameDraft(event.target.value)
+                            }
+                            className="mt-2 h-9 rounded-lg border-zinc-600 bg-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-500"
+                            placeholder="my_channel"
+                          />
+                          <p className="mt-2 text-xs text-zinc-500">{t("groupUsernameHint")}</p>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+                          <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
+                            {`${t("groupMembers")} (${groupMemberIdsDraft.length + 1})`}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200">
+                              {currentUser.name} {t("youLabel")}
+                            </span>
+                            {selectedGroupDraftMembers.map((member) => (
+                              <span
+                                key={`group-member-preview-${member.id}`}
+                                className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200"
+                              >
+                                {member.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -10906,6 +11373,10 @@ export function WebMessenger({
                               GROUP_TITLE_MIN_LENGTH ||
                             groupNameDraft.trim().replace(/\s+/g, " ").length >
                               GROUP_TITLE_MAX_LENGTH ||
+                            (groupCreationKind === "channel" &&
+                              !isValidGroupUsername(
+                                normalizeGroupUsername(groupCreationUsernameDraft)
+                              )) ||
                             (groupCreationKind !== "channel" &&
                               groupMemberIdsDraft.length + 1 > GROUP_MAX_MEMBERS)
                           }
@@ -10962,7 +11433,11 @@ export function WebMessenger({
                                 } ${chat.accent}`}
                               >
                                 {chat.isGroup ? (
-                                  <Users className="size-4" />
+                                  chat.groupKind === "channel" ? (
+                                    <MessageCircle className="size-4" />
+                                  ) : (
+                                    <Users className="size-4" />
+                                  )
                                 ) : chat.isFavorites ? (
                                   <Bookmark className="size-4" />
                                 ) : (
@@ -11162,7 +11637,8 @@ export function WebMessenger({
                                   {group.title}
                                 </p>
                                 <p className="truncate text-xs text-zinc-400">
-                                  @{group.username} · {Math.max(1, group.memberCount)} {t("members")}
+                                  @{group.username} · {Math.max(1, group.memberCount)}{" "}
+                                  {group.groupKind === "channel" ? t("subscribers") : t("members")}
                                 </p>
                               </span>
                             </div>
@@ -11263,7 +11739,11 @@ export function WebMessenger({
                           } ${activeChat.accent}`}
                         >
                           {activeChat.isGroup ? (
-                            <Users className="size-4" />
+                            activeChat.groupKind === "channel" ? (
+                              <MessageCircle className="size-4" />
+                            ) : (
+                              <Users className="size-4" />
+                            )
                           ) : activeChat.isFavorites ? (
                             <Bookmark className="size-4" />
                           ) : (
@@ -11301,9 +11781,9 @@ export function WebMessenger({
                             ? t("savedMessages")
                             : activeChat.isGroup
                               ? `${Math.max(
-                                  2,
+                                  activeChat.groupKind === "channel" ? 1 : 2,
                                   activeChat.memberCount || activeChat.memberIds.length
-                                )} ${t("members")}`
+                                )} ${activeChatAudienceLabel}`
                               : activeChatLastSeenText)}
                       </p>
                       </span>
@@ -11562,6 +12042,10 @@ export function WebMessenger({
                         activeChat.isGroup &&
                         !activeChat.isFavorites &&
                         message.author !== "me";
+                      const isChannelMessage =
+                        activeChat.isGroup && activeChat.groupKind === "channel";
+                      const shouldShowIncomingAuthorIdentity =
+                        isGroupIncomingMessage && !isChannelMessage;
                       const authorInitials = message.authorLabel
                         .split(" ")
                         .filter(Boolean)
@@ -11587,7 +12071,7 @@ export function WebMessenger({
                         !activeChat.isPreview &&
                         message.author !== "me";
                       const canOpenMessageAuthorProfile =
-                        isGroupIncomingMessage &&
+                        shouldShowIncomingAuthorIdentity &&
                         isFirstMessageInAuthorSequence &&
                         Boolean(message.authorId) &&
                         message.authorId !== BUILT_IN_ASSISTANT_USER_ID;
@@ -11641,12 +12125,12 @@ export function WebMessenger({
                               >
                                 <div
                                   className={`flex min-w-0 items-end ${
-                                    isGroupIncomingMessage
+                                    shouldShowIncomingAuthorIdentity
                                       ? "max-w-[90%] gap-2 sm:max-w-[76%]"
                                       : "max-w-[85%] sm:max-w-[70%]"
                                   }`}
                                 >
-                                  {isGroupIncomingMessage ? (
+                                  {shouldShowIncomingAuthorIdentity ? (
                                     isFirstMessageInAuthorSequence ? (
                                       canOpenMessageAuthorProfile ? (
                                         <button
@@ -11728,7 +12212,7 @@ export function WebMessenger({
                                         }
                                       : undefined
                                   }
-                                  className={`${isGroupIncomingMessage ? "min-w-0 flex-1" : ""} ${uiRadiusBubbleClass} ring-1 ring-white/5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7)] ${
+                                  className={`${shouldShowIncomingAuthorIdentity ? "min-w-0 flex-1" : ""} ${uiRadiusBubbleClass} ring-1 ring-white/5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7)] ${
                                     uiDensity === "compact" ? "px-3 py-1.5" : "px-4 py-2"
                                   } ${
                                     animatingMessageIds.has(message.id)
@@ -11744,7 +12228,7 @@ export function WebMessenger({
                                       : "border border-zinc-600 bg-zinc-700 text-zinc-100"
                                   } ${isMessageContentProtected ? "select-none" : ""}`}
                                 >
-                                {isGroupIncomingMessage &&
+                                {shouldShowIncomingAuthorIdentity &&
                                 isFirstMessageInAuthorSequence ? (
                                   <p className="mb-1 truncate text-[11px] font-semibold leading-tight text-primary/90">
                                     {message.authorLabel}
@@ -12379,7 +12863,11 @@ export function WebMessenger({
                       ) : null}
                       {isActivePublicGroupPreview ? (
                         <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-600 bg-zinc-800/80 px-3 py-2">
-                          <p className="text-xs text-zinc-300">{t("joinGroupToWrite")}</p>
+                          <p className="text-xs text-zinc-300">
+                            {activeChat?.groupKind === "channel"
+                              ? "Join this channel to send messages."
+                              : t("joinGroupToWrite")}
+                          </p>
                           <Button
                             type="button"
                             className="h-8 rounded-lg bg-primary px-3 text-xs text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -12392,6 +12880,13 @@ export function WebMessenger({
                               ? t("joiningGroup")
                               : t("joinGroupAction")}
                           </Button>
+                        </div>
+                      ) : isActiveChannelReadOnly ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-zinc-600 bg-zinc-800/80 px-3 py-2">
+                          <MessageCircle className="size-4 shrink-0 text-zinc-400" />
+                          <p className="text-xs text-zinc-300">
+                            {t("channelReadOnlyPlaceholder")}
+                          </p>
                         </div>
                       ) : isVoiceRecording ? (
                         <div className="flex items-center justify-between gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">
@@ -12433,7 +12928,7 @@ export function WebMessenger({
                           </Button>
                           <div className="relative flex-1">
                             <div
-                              className={`absolute bottom-12 right-0 z-50 w-[min(360px,calc(100vw-3rem))] rounded-xl border border-zinc-800/90 bg-zinc-950/85 p-2 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl transition-all duration-150 ${
+                              className={`absolute bottom-12 right-0 z-50 w-[min(360px,calc(100vw-3rem))] rounded-xl border border-zinc-800/90 bg-zinc-950/90 p-2 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl transition-all duration-150 ${
                                 isEmojiMenuOpen
                                   ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
                                   : "pointer-events-none translate-y-2 scale-95 opacity-0"
@@ -12443,7 +12938,7 @@ export function WebMessenger({
                             >
                               <div className="max-h-64 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500">
                                 <div className="grid grid-cols-8 gap-1">
-                                  {CHAT_SMILEY_EMOJIS.map((emoji, index) => (
+                                  {hoverMenuEmojis.map((emoji, index) => (
                                     <button
                                       key={`${emoji}-${index}`}
                                       type="button"
@@ -12481,10 +12976,11 @@ export function WebMessenger({
                               size="icon"
                               aria-label="Emoji"
                               title="Emoji"
+                              aria-expanded={isEmojiSidebarOpen || isEmojiMenuOpen}
                               className={`absolute top-1/2 -translate-y-1/2 rounded-md border-0 bg-transparent p-0 text-zinc-300 shadow-none hover:bg-transparent hover:text-primary focus-visible:ring-0 ${
                                 uiDensity === "compact" ? "right-1.5 h-6 w-6" : "right-2 h-7 w-7"
                               }`}
-                              onClick={() => setIsEmojiMenuOpen((prev) => !prev)}
+                              onClick={toggleEmojiSidebar}
                               onMouseEnter={openEmojiMenu}
                               onMouseLeave={scheduleCloseEmojiMenu}
                             >
@@ -12551,6 +13047,80 @@ export function WebMessenger({
               )}
                 </div>
               </>
+            ) : null}
+            {shouldShowEmojiSidebar ? (
+              <div
+                className={`hidden w-[360px] max-w-[42vw] shrink-0 border-l border-zinc-800/90 lg:flex lg:flex-col ${
+                  uiTheme === "light"
+                    ? "bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(241,245,249,0.88)_100%)]"
+                    : "bg-[linear-gradient(180deg,rgba(39,39,42,0.62)_0%,rgba(24,24,27,0.5)_100%)]"
+                } backdrop-blur-xl`}
+              >
+                <div className="flex items-center justify-between border-b border-zinc-800/90 px-4 py-3 sm:px-5">
+                  <p className="text-sm font-semibold text-zinc-100">Emoji</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("closeViewer")}
+                    onClick={() => setIsEmojiSidebarOpen(false)}
+                    className="h-8 w-8 rounded-md border border-zinc-600 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+                <div className="p-3 sm:p-4">
+                  <div className="mb-2 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600">
+                    {CHAT_EMOJI_CATEGORIES.map((category) => (
+                      <button
+                        key={`emoji-category-tab-sidebar-${category.id}`}
+                        type="button"
+                        onClick={() => scrollToEmojiCategory(category.id)}
+                        className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                          activeEmojiCategory === category.id
+                            ? "border-primary/60 bg-primary/20 text-primary"
+                            : "border-zinc-700 bg-zinc-900/80 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+                        }`}
+                      >
+                        {category.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    ref={emojiScrollContainerRef}
+                    onScroll={syncActiveEmojiCategoryWithScroll}
+                    className="max-h-[calc(100vh-14rem)] overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500"
+                  >
+                    <div className="space-y-2">
+                      {CHAT_EMOJI_CATEGORIES.map((category) => (
+                        <section
+                          key={`emoji-category-section-sidebar-${category.id}`}
+                          ref={(element) => {
+                            emojiCategorySectionRefs.current.set(category.id, element);
+                          }}
+                          className="space-y-1"
+                        >
+                          <p className="sticky top-0 z-10 rounded bg-zinc-950/90 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 backdrop-blur">
+                            {category.label}
+                          </p>
+                          <div className="grid grid-cols-8 gap-1 pb-1">
+                            {category.emojis.map((emoji, index) => (
+                              <button
+                                key={`${category.id}-${emoji}-${index}`}
+                                type="button"
+                                onClick={() => insertEmojiToDraft(emoji)}
+                                className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-zinc-700"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : null}
             {AI_FEATURE_ENABLED && activeSidebar === "assistant" ? (
               <div
@@ -13173,7 +13743,8 @@ export function WebMessenger({
                             <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
                               <div className="flex items-center justify-between gap-2">
                                 <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
-                                  {t("participants")} ({groupParticipants.length})
+                                  {isSelectedChannel ? t("subscribers") : t("participants")} (
+                                  {groupParticipants.length})
                                 </p>
                                 <Button
                                   type="button"
@@ -14661,7 +15232,7 @@ export function WebMessenger({
         <AlertDialogContent className="!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 w-[min(94vw,760px)] max-w-none border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-zinc-100">
-              {language === "ru" ? "Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’ВµР В Р’В Р вЂ™Р’В Р В РЎС›Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎСљР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В¦Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’Вµ Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СљР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р В Р вЂ№Р В Р Р‹Р Р†Р вЂљРЎС™Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РІР‚вЂњ" : "Group editing"}
+              {isSelectedChannel ? "Channel settings" : "Group settings"}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400">
               {selectedGroupChat?.name ?? ""}
@@ -14710,7 +15281,7 @@ export function WebMessenger({
                       {selectedGroupChat?.name ?? ""}
                     </p>
                     <p className="text-xs text-zinc-500">
-                      {language === "ru" ? "Р В Р’В Р вЂ™Р’В Р В Р Р‹Р РЋРЎСџР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІР‚С”Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В»Р В Р’В Р В Р вЂ№Р В Р’В Р В РІР‚В° Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СљР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р В Р вЂ№Р В Р Р‹Р Р†Р вЂљРЎС™Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РІР‚вЂњ" : "Group profile"}
+                      {isSelectedChannel ? "Channel profile" : "Group profile"}
                     </p>
                   </div>
                 </div>
@@ -14720,14 +15291,14 @@ export function WebMessenger({
                     maxLength={GROUP_TITLE_MAX_LENGTH}
                     onChange={(event) => setGroupRenameDraft(event.target.value)}
                     className="h-9 border-zinc-600 bg-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-400"
-                    placeholder={t("groupName")}
+                    placeholder={isSelectedChannel ? "Channel name" : t("groupName")}
                   />
                   <Textarea
                     value={groupDescriptionDraft}
                     maxLength={GROUP_DESCRIPTION_MAX_LENGTH}
                     onChange={(event) => setGroupDescriptionDraft(event.target.value)}
                     className="min-h-24 border-zinc-600 bg-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-400"
-                    placeholder={language === "ru" ? "Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎвЂќР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СљР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В¦Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’Вµ Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СљР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р В Р вЂ№Р В Р Р‹Р Р†Р вЂљРЎС™Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РІР‚вЂњ" : "Group description"}
+                    placeholder={isSelectedChannel ? "Channel description" : "Group description"}
                   />
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] text-zinc-500">
@@ -14765,10 +15336,12 @@ export function WebMessenger({
                   <Users className="size-4 shrink-0 text-primary" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-zinc-100">
-                      {language === "ru" ? "Тип группы" : "Group type"}
+                      {isSelectedChannel ? "Channel type" : "Group type"}
                     </span>
                     <span className="block truncate text-xs text-zinc-500">
-                      {`${t("groupTypePrivate")} / ${t("groupTypePublic")}`}
+                      {isSelectedChannel
+                        ? "Private channel / Public channel"
+                        : `${t("groupTypePrivate")} / ${t("groupTypePublic")}`}
                     </span>
                   </span>
                 </span>
@@ -14845,8 +15418,14 @@ export function WebMessenger({
                     : "border-zinc-700 bg-zinc-800 hover:border-zinc-600 hover:bg-zinc-700"
                 }`}
               >
-                <p className="text-sm font-medium text-zinc-100">{t("groupTypePrivate")}</p>
-                <p className="mt-1 text-xs text-zinc-400">{t("groupTypePrivateDescription")}</p>
+                <p className="text-sm font-medium text-zinc-100">
+                  {isSelectedChannel ? "Private channel" : t("groupTypePrivate")}
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {isSelectedChannel
+                    ? "Join by invite link or when added by owner/admin."
+                    : t("groupTypePrivateDescription")}
+                </p>
               </button>
               <button
                 type="button"
@@ -14857,8 +15436,14 @@ export function WebMessenger({
                     : "border-zinc-700 bg-zinc-800 hover:border-zinc-600 hover:bg-zinc-700"
                 }`}
               >
-                <p className="text-sm font-medium text-zinc-100">{t("groupTypePublic")}</p>
-                <p className="mt-1 text-xs text-zinc-400">{t("groupTypePublicDescription")}</p>
+                <p className="text-sm font-medium text-zinc-100">
+                  {isSelectedChannel ? "Public channel" : t("groupTypePublic")}
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {isSelectedChannel
+                    ? "Anyone can join using the public @username link."
+                    : t("groupTypePublicDescription")}
+                </p>
               </button>
             </div>
             {groupAccessTypeDraft === "public" ? (
@@ -14896,7 +15481,11 @@ export function WebMessenger({
                 <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
                   {t("groupInviteLink")}
                 </p>
-                <p className="mt-1 text-xs text-zinc-500">{t("groupTypePrivateDescription")}</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {isSelectedChannel
+                    ? "Join by invite link or when added by owner/admin."
+                    : t("groupTypePrivateDescription")}
+                </p>
                 <div className="mt-2 flex items-center gap-2">
                   <Input
                     value={selectedGroupInviteLink}
@@ -14965,7 +15554,7 @@ export function WebMessenger({
                   {`${t("yourRole")}: ${selectedGroupMyRole === "owner" ? t("owner") : selectedGroupMyRole === "admin" ? t("admin") : t("member")}`}
                 </span>
                 <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">
-                  {`${t("groupMembers")}: ${groupParticipants.length}`}
+                  {`${isSelectedChannel ? t("subscribers") : t("groupMembers")}: ${groupParticipants.length}`}
                 </span>
               </div>
             </div>
@@ -14992,7 +15581,8 @@ export function WebMessenger({
             <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 backdrop-blur-lg">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">
-                  {t("participants")} ({groupParticipants.length})
+                  {isSelectedChannel ? t("subscribers") : t("participants")} (
+                  {groupParticipants.length})
                 </p>
                 <Button
                   type="button"
@@ -16219,6 +16809,8 @@ export function WebMessenger({
     </>
   );
 }
+
+
 
 
 

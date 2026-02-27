@@ -63,7 +63,13 @@ export async function POST(request: Request) {
   const title = normalizeGroupTitle(body?.title ?? "");
   const kind: "group" | "channel" = body?.kind === "channel" ? "channel" : "group";
   const accessType: "private" | "public" =
-    body?.accessType === "public" ? "public" : "private";
+    body?.accessType === "public"
+      ? "public"
+      : body?.accessType === "private"
+        ? "private"
+        : kind === "channel"
+          ? "public"
+          : "private";
   const username = normalizeGroupUsername(body?.username ?? "");
   const memberIdsRaw = Array.isArray(body?.memberIds) ? body.memberIds : [];
   const memberIds = [

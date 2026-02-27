@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { updateStore } from "@/lib/server/store";
+import { canUserPostInThread, updateStore } from "@/lib/server/store";
 
 type EditMessagePayload = {
   userId?: string;
@@ -31,6 +31,9 @@ export async function POST(request: Request) {
       );
       if (!thread) {
         throw new Error("Chat not found.");
+      }
+      if (!canUserPostInThread(thread, userId)) {
+        throw new Error("Only channel owner or admins can edit messages.");
       }
 
       const targetMessage = store.messages.find(
@@ -65,9 +68,10 @@ export async function POST(request: Request) {
         ? 404
         : message === "Message not found."
           ? 404
-          : message === "Only message author can edit this message."
+        : message === "Only message author can edit this message."
+          || message === "Only channel owner or admins can edit messages."
             ? 403
-            : 400;
+          : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

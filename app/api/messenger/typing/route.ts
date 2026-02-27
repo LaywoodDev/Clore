@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { updateStore } from "@/lib/server/store";
+import { canUserPostInThread, updateStore } from "@/lib/server/store";
 
 type TypingPayload = {
   userId?: string;
@@ -28,6 +28,14 @@ export async function POST(request: Request) {
       );
       if (!thread) {
         throw new Error("Chat not found.");
+      }
+      if (!canUserPostInThread(thread, userId)) {
+        if (!(userId in thread.typingBy)) {
+          return;
+        }
+        const { [userId]: _removed, ...restTypingBy } = thread.typingBy;
+        thread.typingBy = restTypingBy;
+        return;
       }
 
       const now = Date.now();

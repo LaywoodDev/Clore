@@ -572,6 +572,24 @@ export function canModerateGroup(
   return role === "owner" || role === "admin";
 }
 
+export function canUserPostInThread(
+  thread: StoredChatThread,
+  userId: string
+): boolean {
+  if (!thread.memberIds.includes(userId)) {
+    return false;
+  }
+  if (thread.threadType !== "group") {
+    return true;
+  }
+  if (thread.groupKind !== "channel") {
+    return true;
+  }
+
+  const role = getGroupRole(thread, userId);
+  return role === "owner" || role === "admin";
+}
+
 export function canRemoveGroupMember(
   thread: StoredChatThread,
   actorUserId: string,

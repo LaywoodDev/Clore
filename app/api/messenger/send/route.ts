@@ -4,6 +4,7 @@ import { getAiProviderConfig } from "@/lib/server/ai-provider";
 import { assertUserCanSendMessages } from "@/lib/server/admin";
 import {
   BOT_USER_ID,
+  canUserPostInThread,
   canUserMessagesBeForwardedBy,
   createEntityId,
   isBotUserId,
@@ -286,6 +287,9 @@ export async function POST(request: Request) {
         if (!thread) {
           throw new Error("Chat not found.");
         }
+        if (!canUserPostInThread(thread, userId)) {
+          throw new Error("Only channel owner or admins can post messages.");
+        }
         if (thread.threadType === "direct") {
           const peerUserId = thread.memberIds.find((memberId) => memberId !== userId) ?? "";
           if (peerUserId) {
@@ -459,6 +463,7 @@ export async function POST(request: Request) {
       message === "Forward source not found."
         ? 404
         : message === "Cannot send message because one of users is blocked." ||
+            message === "Only channel owner or admins can post messages." ||
             message === "User does not allow forwarding their messages." ||
             message === "Forwarding is disabled for this group." ||
             message.startsWith("You are muted until") ||
