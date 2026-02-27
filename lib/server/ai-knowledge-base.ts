@@ -19,14 +19,27 @@ type BuildResponseGuidanceOptions = {
   language: SupportedLanguage;
 };
 
-const KNOWLEDGE_BASE_VERSION = "2026-02-26";
-const DEFAULT_MAX_SECTIONS = 4;
-const DEFAULT_MAX_CHARS = 2_600;
+const KNOWLEDGE_BASE_VERSION = "2026-02-27-ui2";
+const DEFAULT_MAX_SECTIONS = 7;
+const DEFAULT_MAX_CHARS = 5_800;
 const DEFAULT_ENTRY_IDS = [
   "app-overview",
   "ui-navigation-basics",
-  "messenger-data-model",
+  "ui-home-layout",
+  "ui-settings-map",
+  "ui-ai-assistant-screen",
   "assistant-routing",
+] as const;
+const UI_PRIORITY_ENTRY_IDS = [
+  "ui-navigation-basics",
+  "ui-home-layout",
+  "ui-chat-header-actions",
+  "ui-chat-search-flow",
+  "ui-chat-personalization",
+  "ui-profile-screen",
+  "ui-settings-map",
+  "ui-ai-assistant-screen",
+  "ui-group-settings",
 ] as const;
 
 const STOP_WORDS = new Set([
@@ -116,6 +129,85 @@ const KNOWLEDGE_ENTRIES: KnowledgeEntry[] = [
       "Main sections are Home, AI, Profile, Settings. Desktop uses the left sidebar for these tabs. Mobile uses bottom navigation tabs with the same sections.",
   },
   {
+    id: "ui-home-layout",
+    title: "Home screen layout and discovery",
+    tags: [
+      "home",
+      "chat list",
+      "search",
+      "public groups",
+      "new group",
+      "sidebar",
+      "discover",
+      "\u0433\u043b\u0430\u0432\u043d\u0430\u044f",
+      "\u0447\u0430\u0442\u044b",
+      "\u043f\u043e\u0438\u0441\u043a",
+      "\u043f\u0443\u0431\u043b\u0438\u0447\u043d\u044b\u0435 \u0433\u0440\u0443\u043f\u043f\u044b",
+      "\u043d\u043e\u0432\u0430\u044f \u0433\u0440\u0443\u043f\u043f\u0430",
+    ],
+    content:
+      "Home is the main messenger workspace. Desktop shows a left chat list and the active conversation pane. The list has global search, can surface chats, users, and public groups, and includes the New group flow. Global search placeholder is Search across messenger and supports filters like from:@username, has:attachment|image|video|audio|file, on:YYYY-MM-DD, before:YYYY-MM-DD, after:YYYY-MM-DD. Right-clicking a chat exposes Pin/Unpin, Mute/Unmute, Delete chat/Delete group/Delete channel, or Leave group/Unsubscribe when the user is not the owner. On mobile, Home switches between list and chat views instead of showing both columns at once.",
+  },
+  {
+    id: "ui-chat-header-actions",
+    title: "Open chat header actions",
+    tags: [
+      "chat header",
+      "search in chat",
+      "call",
+      "chat profile",
+      "menu",
+      "clear history",
+      "personalization",
+      "\u043c\u0435\u043d\u044e",
+      "\u043f\u043e\u0438\u0441\u043a \u0432 \u0447\u0430\u0442\u0435",
+      "\u0437\u0432\u043e\u043d\u043e\u043a",
+      "\u043f\u0440\u043e\u0444\u0438\u043b\u044c \u0447\u0430\u0442\u0430",
+      "\u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u0438\u0441\u0442\u043e\u0440\u0438\u044e",
+    ],
+    content:
+      "When a chat is open, the header shows Search in chat, Call/End call, Chat profile (desktop), and a three-dot Menu. The Menu contains Personalization, Clear history for me, and Delete chat (or Delete favorites in Saved messages). Clicking the header itself opens the current chat profile.",
+  },
+  {
+    id: "ui-chat-search-flow",
+    title: "Search inside a chat",
+    tags: [
+      "search",
+      "search in chat",
+      "jump to date",
+      "date",
+      "filter",
+      "messages",
+      "\u043f\u043e\u0438\u0441\u043a",
+      "\u043f\u043e\u0438\u0441\u043a \u0432 \u0447\u0430\u0442\u0435",
+      "\u043f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0434\u0430\u0442\u0435",
+      "\u0434\u0430\u0442\u0430",
+    ],
+    content:
+      "Search in chat opens a top filter bar inside the conversation. It includes a text field plus a Date button that opens a Jump to date calendar. Users can pick a date to jump to messages from that day, clear the date, or close the search bar to reset the active in-chat search query.",
+  },
+  {
+    id: "ui-message-actions",
+    title: "Message actions and quick tools",
+    tags: [
+      "message",
+      "reply",
+      "edit",
+      "delete message",
+      "forward",
+      "favorites",
+      "copy",
+      "\u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435",
+      "\u043e\u0442\u0432\u0435\u0442\u0438\u0442\u044c",
+      "\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c",
+      "\u0443\u0434\u0430\u043b\u0438\u0442\u044c \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435",
+      "\u043f\u0435\u0440\u0435\u0441\u043b\u0430\u0442\u044c",
+      "\u0438\u0437\u0431\u0440\u0430\u043d\u043d\u043e\u0435",
+    ],
+    content:
+      "Message-level actions in chats include Copy, Reply, Edit, Delete message, Forward, Save to favorites, Remove from favorites, Copy attachment link, and Read by / message views where applicable. The composer supports formatting tools, attachments, voice messages, Enter to send, and Shift+Enter for a new line.",
+  },
+  {
     id: "ui-delete-chat-flow",
     title: "How to delete a chat",
     tags: [
@@ -148,7 +240,7 @@ const KNOWLEDGE_ENTRIES: KnowledgeEntry[] = [
       "фон чата",
     ],
     content:
-      "Path: Settings -> Appearance -> Chat wallpaper. Choose one option: None, Color Bends, Pixel Blast, Plasma, or Dither. This changes default wallpaper for chats globally.",
+      "Path: Settings -> Appearance -> Chat wallpaper. Choose one option: None, Color Bends, Pixel Blast, Plasma, Dither, or Gradient Blinds. This changes default wallpaper for chats globally.",
   },
   {
     id: "ui-chat-wallpaper-flow",
@@ -164,7 +256,199 @@ const KNOWLEDGE_ENTRIES: KnowledgeEntry[] = [
       "наследовать",
     ],
     content:
-      "Open target chat -> three-dot Menu -> Personalization -> Chat wallpaper. Pick Inherit global to use global wallpaper or choose a specific wallpaper for only this chat.",
+      "Open target chat -> three-dot Menu -> Personalization -> Chat wallpaper. Pick Inherit global to use global wallpaper or choose a specific wallpaper for only this chat. Available per-chat wallpaper choices are Inherit global, None, Color Bends, Pixel Blast, Plasma, Dither, and Gradient Blinds.",
+  },
+  {
+    id: "ui-chat-personalization",
+    title: "Chat personalization dialog",
+    tags: [
+      "chat personalization",
+      "mute this chat",
+      "chat font size",
+      "auto-load media",
+      "per chat settings",
+      "\u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u0447\u0430\u0442\u0430",
+      "\u0437\u0430\u0433\u043b\u0443\u0448\u0438\u0442\u044c \u0447\u0430\u0442",
+      "\u0440\u0430\u0437\u043c\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430 \u0447\u0430\u0442\u0430",
+      "\u0430\u0432\u0442\u043e\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u043c\u0435\u0434\u0438\u0430",
+    ],
+    content:
+      "Open chat -> Menu -> Personalization opens a chat-specific settings dialog. It contains Mute this chat, Chat wallpaper, Chat font size, and Auto-load media. Chat wallpaper and Chat font size both support Inherit global, so users can either follow global settings or override only the current chat.",
+  },
+  {
+    id: "ui-profile-screen",
+    title: "Profile and chat profile panels",
+    tags: [
+      "profile",
+      "edit profile",
+      "chat profile",
+      "avatar",
+      "banner",
+      "favorites",
+      "\u043f\u0440\u043e\u0444\u0438\u043b\u044c",
+      "\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043f\u0440\u043e\u0444\u0438\u043b\u044c",
+      "\u0430\u0432\u0430\u0442\u0430\u0440",
+      "\u0431\u0430\u043d\u043d\u0435\u0440",
+    ],
+    content:
+      "Profile is shown in the Profile tab and also as a compact Chat profile panel from an open conversation. The profile UI displays banner, avatar, name, username, bio, birthday, and media/audio/links activity tabs when viewing another user. For the current user, the main actions are Edit profile, Favorites, and Share contact. Editing allows changing avatar, banner, name, username, bio, and birthday fields.",
+  },
+  {
+    id: "ui-settings-map",
+    title: "Settings screen map",
+    tags: [
+      "settings",
+      "privacy",
+      "security",
+      "appearance",
+      "language",
+      "theme",
+      "sound",
+      "\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438",
+      "\u043f\u0440\u0438\u0432\u0430\u0442\u043d\u043e\u0441\u0442\u044c",
+      "\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u044c",
+      "\u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435",
+      "\u044f\u0437\u044b\u043a",
+      "\u0442\u0435\u043c\u0430",
+    ],
+    content:
+      "Settings is split into three top sections: Privacy, Security, and Appearance. Privacy controls visibility for last seen, avatar, bio, birthday, who can add to groups, who can call, and who can forward messages, each with Everyone / Selected people / Nobody. Security includes Push notifications, account info, app version, and Log out. Appearance includes Language, Theme, UI density, Corner radius, Font size, Font family, global Chat wallpaper, Message sound, Send sound, and a desktop-only Sidebar visibility toggle.",
+  },
+  {
+    id: "ui-ai-assistant-screen",
+    title: "AI assistant screen controls",
+    tags: [
+      "ai",
+      "assistant",
+      "search mode",
+      "agent mode",
+      "clear chat",
+      "chatgpt",
+      "\u0438\u0438",
+      "\u0430\u0441\u0441\u0438\u0441\u0442\u0435\u043d\u0442",
+      "\u043f\u043e\u0438\u0441\u043a",
+      "\u0430\u0433\u0435\u043d\u0442",
+      "\u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u0447\u0430\u0442",
+    ],
+    content:
+      "The AI tab is a dedicated ChatGPT conversation screen. It has a Search toggle for web-enabled answers, an Agent toggle for messenger actions, a Clear chat button, a multiline input, and a Send button. Pressing Enter sends the prompt and Shift+Enter inserts a new line. Enabling Agent opens a warning dialog because Agent can execute messenger actions such as send, delete, create groups, invite/remove members, update groups, and change roles.",
+  },
+  {
+    id: "ui-onboarding",
+    title: "First-run personalization onboarding",
+    tags: ["onboarding", "personalize your messenger", "defaults", "first run"],
+    content:
+      "New users can see a Personalize your messenger dialog. It lets them choose Language, Theme, UI density, and Message sound before pressing Apply. The same choices can be changed later from Settings.",
+  },
+  {
+    id: "ui-new-group-flow",
+    title: "Create group and channel flows",
+    tags: [
+      "new group",
+      "create group",
+      "create channel",
+      "group members",
+      "group name",
+      "channel name",
+      "\u043d\u043e\u0432\u0430\u044f \u0433\u0440\u0443\u043f\u043f\u0430",
+      "\u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0433\u0440\u0443\u043f\u043f\u0443",
+      "\u0441\u043e\u0437\u0434\u0430\u0442\u044c \u043a\u0430\u043d\u0430\u043b",
+    ],
+    content:
+      "Users start from New group in Home. Group creation is a two-step flow: first choose members, then review Group name and create. Channel creation uses a single details step with Channel name plus Username for a public link. Group member selection uses chat/user search, and the creator is always included automatically.",
+  },
+  {
+    id: "ui-favorites-and-forwarding",
+    title: "Saved messages, favorites, and forwarding",
+    tags: [
+      "favorites",
+      "saved messages",
+      "forward",
+      "share contact",
+      "open original chat",
+      "\u0438\u0437\u0431\u0440\u0430\u043d\u043d\u043e\u0435",
+      "\u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043d\u044b\u0435",
+      "\u043f\u0435\u0440\u0435\u0441\u043b\u0430\u0442\u044c",
+      "\u043f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f \u043a\u043e\u043d\u0442\u0430\u043a\u0442\u043e\u043c",
+    ],
+    content:
+      "Clore has a dedicated Favorites / Saved messages chat. Messages can be saved there from message actions. Forwarding opens a Forward message dialog with Select chats to forward. Saved items can later be removed from favorites, opened in the original chat, or the entire favorites chat can be deleted separately.",
+  },
+  {
+    id: "ui-calls-and-voice",
+    title: "Calls and voice message controls",
+    tags: [
+      "call",
+      "audio call",
+      "incoming call",
+      "voice message",
+      "recording",
+      "microphone",
+      "\u0437\u0432\u043e\u043d\u043e\u043a",
+      "\u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435",
+      "\u0437\u0430\u043f\u0438\u0441\u044c",
+      "\u043c\u0438\u043a\u0440\u043e\u0444\u043e\u043d",
+    ],
+    content:
+      "Open chat header includes a Call button. During calls, the UI can show Accept, Decline, End call, Mute mic, Mute sound, Share screen, Stop sharing, Open fullscreen, and Exit fullscreen. Separate voice message controls in the composer include Start recording, Stop recording, and Cancel recording. Audio calls are available only in direct chats.",
+  },
+  {
+    id: "ui-privacy-settings-details",
+    title: "Privacy settings details",
+    tags: [
+      "privacy",
+      "last seen",
+      "avatar visibility",
+      "bio visibility",
+      "birthday visibility",
+      "call visibility",
+      "forward visibility",
+      "group add visibility",
+      "\u043f\u0440\u0438\u0432\u0430\u0442\u043d\u043e\u0441\u0442\u044c",
+      "\u0431\u044b\u043b \u0432 \u0441\u0435\u0442\u0438",
+      "\u043a\u0442\u043e \u043c\u043e\u0436\u0435\u0442 \u0437\u0432\u043e\u043d\u0438\u0442\u044c",
+    ],
+    content:
+      "Settings -> Privacy exposes per-field visibility controls for last seen, avatar, bio, birthday, group invites, calls, and message forwarding. Each field uses Everyone, Selected people, or Nobody. When Selected people is chosen, the UI opens a picker so the user can define an allowlist for that specific field.",
+  },
+  {
+    id: "ui-appearance-customization",
+    title: "Appearance customization details",
+    tags: [
+      "appearance",
+      "language",
+      "theme",
+      "ui density",
+      "corner radius",
+      "font size",
+      "font family",
+      "sidebar",
+      "\u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435",
+      "\u043f\u043b\u043e\u0442\u043d\u043e\u0441\u0442\u044c \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430",
+      "\u0440\u0430\u0434\u0438\u0443\u0441 \u0443\u0433\u043b\u043e\u0432",
+      "\u0448\u0440\u0438\u0444\u0442",
+    ],
+    content:
+      "Settings -> Appearance lets users adjust Language, Theme, UI density (Comfortable or Compact), Corner radius (Sharp, Normal, Rounded), Font size (Small, Default, Large), and Font family (Default, Modern, Readable, Comfortaa). It also controls global Chat wallpaper, Message sound, Send sound, and on desktop the Sidebar visibility switch.",
+  },
+  {
+    id: "ui-group-settings",
+    title: "Group and channel management screens",
+    tags: [
+      "group settings",
+      "channel settings",
+      "permissions",
+      "invite link",
+      "group type",
+      "members",
+      "\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u0433\u0440\u0443\u043f\u043f\u044b",
+      "\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u043a\u0430\u043d\u0430\u043b\u0430",
+      "\u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u044f",
+      "\u0441\u0441\u044b\u043b\u043a\u0430-\u043f\u0440\u0438\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0435",
+      "\u0442\u0438\u043f \u0433\u0440\u0443\u043f\u043f\u044b",
+    ],
+    content:
+      "For groups and channels, the profile panel can open Group settings or Channel settings. The settings modal lets managers edit avatar, banner, name, and description, then open Type and Permissions. Type can switch between private and public access, manage the public @username or invite link, and toggle Restrict copying. Permissions lists participants with role badges and action menus for Make admin, Remove admin, Transfer ownership, and Remove member. Groups also have an Invitations dialog where private invite links can use limits such as Unlimited, One-time, 5 uses, or a custom number, and new members can be added from search.",
   },
   {
     id: "auth-and-session",
@@ -275,6 +559,37 @@ function scoreEntry(tokens: Set<string>, queryTokens: string[]): number {
   return score;
 }
 
+function isUiEntry(entry: KnowledgeEntry): boolean {
+  return entry.id.startsWith("ui-");
+}
+
+function getEntriesByIds(ids: readonly string[]): KnowledgeEntry[] {
+  const result: KnowledgeEntry[] = [];
+  for (const id of ids) {
+    const entry = KNOWLEDGE_ENTRIES.find((candidate) => candidate.id === id);
+    if (entry) {
+      result.push(entry);
+    }
+  }
+  return result;
+}
+
+function appendUniqueEntries(
+  target: KnowledgeEntry[],
+  additions: Iterable<KnowledgeEntry>,
+  maxSections: number
+): void {
+  for (const entry of additions) {
+    if (target.some((candidate) => candidate.id === entry.id)) {
+      continue;
+    }
+    target.push(entry);
+    if (target.length >= maxSections) {
+      break;
+    }
+  }
+}
+
 function getDefaultEntries(maxSections: number): KnowledgeEntry[] {
   const defaults: KnowledgeEntry[] = [];
   for (const id of DEFAULT_ENTRY_IDS) {
@@ -301,10 +616,34 @@ function getDefaultEntries(maxSections: number): KnowledgeEntry[] {
   return defaults;
 }
 
+function getUiDefaultEntries(maxSections: number): KnowledgeEntry[] {
+  const defaults: KnowledgeEntry[] = [];
+  appendUniqueEntries(defaults, getEntriesByIds(UI_PRIORITY_ENTRY_IDS), maxSections);
+  if (defaults.length < maxSections) {
+    appendUniqueEntries(defaults, getDefaultEntries(maxSections), maxSections);
+  }
+  if (defaults.length < maxSections) {
+    appendUniqueEntries(
+      defaults,
+      KNOWLEDGE_ENTRIES.filter((entry) => isUiEntry(entry)),
+      maxSections
+    );
+  }
+  return defaults;
+}
+
+const UI_QUERY_REGEX =
+  /(ui|interface|screen|layout|flow|menu|button|tab|profile|settings?|home|chat|message|group|channel|call|search|wallpaper|personalization|privacy|appearance|assistant|agent|onboarding|\u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441|\u044d\u043a\u0440\u0430\u043d|\u043c\u0435\u043d\u044e|\u043a\u043d\u043e\u043f\u043a|\u0432\u043a\u043b\u0430\u0434\u043a|\u043f\u0440\u043e\u0444\u0438\u043b|\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a|\u0447\u0430\u0442|\u0441\u043e\u043e\u0431\u0449\u0435\u043d|\u0433\u0440\u0443\u043f\u043f|\u043a\u0430\u043d\u0430\u043b|\u0437\u0432\u043e\u043d|\u043f\u043e\u0438\u0441\u043a|\u043e\u0431\u043e\u0438|\u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u0438\u0437|\u043f\u0440\u0438\u0432\u0430\u0442\u043d|\u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d|\u0430\u0441\u0441\u0438\u0441\u0442\u0435\u043d\u0442|\u0430\u0433\u0435\u043d\u0442)/iu;
+
+function isUiQuery(query: string): boolean {
+  return UI_QUERY_REGEX.test(query);
+}
+
 function selectEntries(query: string, maxSections: number): KnowledgeEntry[] {
   const queryTokens = tokenize(query).slice(0, 20);
+  const uiQuery = isUiQuery(query);
   if (queryTokens.length === 0) {
-    return getDefaultEntries(maxSections);
+    return uiQuery ? getUiDefaultEntries(maxSections) : getDefaultEntries(maxSections);
   }
 
   const ranked = ENTRY_INDEX.map(({ entry, tokens }) => ({
@@ -312,10 +651,41 @@ function selectEntries(query: string, maxSections: number): KnowledgeEntry[] {
     score: scoreEntry(tokens, queryTokens),
   }))
     .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score);
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+      if (uiQuery && isUiEntry(left.entry) !== isUiEntry(right.entry)) {
+        return isUiEntry(left.entry) ? -1 : 1;
+      }
+      return 0;
+    });
 
   if (ranked.length === 0) {
-    return getDefaultEntries(maxSections);
+    return uiQuery ? getUiDefaultEntries(maxSections) : getDefaultEntries(maxSections);
+  }
+
+  if (uiQuery) {
+    const selected: KnowledgeEntry[] = [];
+    appendUniqueEntries(
+      selected,
+      ranked.filter((item) => isUiEntry(item.entry)).map((item) => item.entry),
+      maxSections
+    );
+    if (selected.length < maxSections) {
+      appendUniqueEntries(selected, getUiDefaultEntries(maxSections), maxSections);
+    }
+    if (selected.length < maxSections) {
+      appendUniqueEntries(
+        selected,
+        ranked.map((item) => item.entry),
+        maxSections
+      );
+    }
+    if (selected.length < maxSections) {
+      appendUniqueEntries(selected, getDefaultEntries(maxSections), maxSections);
+    }
+    return selected;
   }
 
   const selected = ranked.slice(0, maxSections).map((item) => item.entry);
@@ -350,6 +720,7 @@ export function buildAiResponseGuidance({
   language,
 }: BuildResponseGuidanceOptions): string {
   const isUiHowTo = UI_HOW_TO_QUERY_REGEX.test(query);
+  const uiQuery = isUiQuery(query);
 
   if (language === "ru") {
     if (isUiHowTo) {
@@ -371,6 +742,10 @@ export function buildAiResponseGuidance({
       "If desktop and mobile flows differ, provide both.",
       "Call out confirmation dialogs and undo windows when applicable.",
     ].join(" ");
+  }
+
+  if (uiQuery) {
+    return "For Clore interface questions, rely on the internal UI knowledge, use exact screen and control labels, and do not invent missing buttons, menus, or flows.";
   }
 
   return "For Clore app questions, rely on internal knowledge context and avoid inventing UI controls or API behavior.";

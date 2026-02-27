@@ -26,6 +26,127 @@ type AuthResponse = {
   error?: string;
 };
 
+function SkeletonBlock({
+  className,
+}: {
+  className: string;
+}) {
+  return <div className={`clore-skeleton ${className}`} aria-hidden="true" />;
+}
+
+function AppLoadingSkeleton({
+  uiTheme,
+}: {
+  uiTheme: "light" | "dark";
+}) {
+  return (
+    <main
+      className={`h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${
+        uiTheme === "light"
+          ? "bg-[radial-gradient(circle_at_12%_10%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(160deg,#f8fbff_0%,#f1f6fd_58%,#ebf1fa_100%)]"
+          : "bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,0.16),transparent_34%),linear-gradient(160deg,#18181b_0%,#232326_60%,#2f2f35_100%)]"
+      } pt-[env(safe-area-inset-top)] text-zinc-100`}
+    >
+      <section className="grid h-full w-full md:grid-cols-[1.1fr_0.9fr]">
+        <div className="hidden border-r border-zinc-700/70 bg-zinc-900/40 p-10 md:flex md:flex-col md:justify-between">
+          <div>
+            <SkeletonBlock className="h-3 w-14 rounded-full" />
+            <div className="mt-4 space-y-3">
+              <SkeletonBlock className="h-10 w-full max-w-xl rounded-2xl" />
+              <SkeletonBlock className="h-10 w-4/5 max-w-lg rounded-2xl" />
+            </div>
+            <div className="mt-5 space-y-2">
+              <SkeletonBlock className="h-3 w-48 rounded-full" />
+              <SkeletonBlock className="h-3 w-40 rounded-full" />
+            </div>
+          </div>
+          <SkeletonBlock className="h-3 w-36 rounded-full" />
+        </div>
+
+        <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto p-5 sm:p-8">
+          <div className="w-full max-w-md">
+            <div className="mb-6 space-y-3 md:hidden">
+              <SkeletonBlock className="h-3 w-14 rounded-full" />
+              <SkeletonBlock className="h-8 w-40 rounded-2xl" />
+            </div>
+
+            <div className="rounded-3xl border border-zinc-700/70 bg-zinc-900/55 p-4 shadow-2xl backdrop-blur-sm sm:p-5">
+              <div className="mb-5 flex gap-2 rounded-xl bg-zinc-800/70 p-1">
+                <SkeletonBlock className="h-10 flex-1 rounded-lg" />
+                <SkeletonBlock className="h-10 flex-1 rounded-lg" />
+              </div>
+
+              <div className="space-y-3">
+                <SkeletonBlock className="h-11 w-full rounded-lg" />
+                <SkeletonBlock className="h-11 w-full rounded-lg" />
+                <SkeletonBlock className="h-3 w-2/3 rounded-full" />
+                <SkeletonBlock className="h-11 w-full rounded-lg" />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <SkeletonBlock className="h-3 w-1/2 rounded-full" />
+                <SkeletonBlock className="h-3 w-1/3 rounded-full md:hidden" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function MessengerLoadingSkeleton() {
+  return (
+    <main className="flex h-[100dvh] min-h-[100dvh] w-full bg-zinc-950 pt-[env(safe-area-inset-top)] text-zinc-100">
+      <aside className="hidden w-[84px] border-r border-zinc-800/90 bg-zinc-900/90 px-3 py-4 lg:flex lg:flex-col lg:items-center lg:gap-3">
+        <SkeletonBlock className="h-11 w-11 rounded-2xl" />
+        <SkeletonBlock className="h-11 w-11 rounded-2xl" />
+        <SkeletonBlock className="h-11 w-11 rounded-2xl" />
+        <SkeletonBlock className="mt-auto h-11 w-11 rounded-2xl" />
+      </aside>
+
+      <aside className="hidden w-[320px] border-r border-zinc-800/90 bg-zinc-900/60 p-4 md:flex md:flex-col">
+        <SkeletonBlock className="h-12 w-full rounded-2xl" />
+        <div className="mt-4 space-y-3">
+          <SkeletonBlock className="h-[4.5rem] w-full rounded-2xl" />
+          <SkeletonBlock className="h-[4.5rem] w-full rounded-2xl" />
+          <SkeletonBlock className="h-[4.5rem] w-full rounded-2xl" />
+          <SkeletonBlock className="h-[4.5rem] w-full rounded-2xl" />
+          <SkeletonBlock className="h-[4.5rem] w-full rounded-2xl" />
+        </div>
+      </aside>
+
+      <section className="flex min-h-0 flex-1 flex-col bg-zinc-950/80 p-4 sm:p-5">
+        <div className="flex items-center gap-3 rounded-3xl border border-zinc-800/90 bg-zinc-900/70 px-4 py-3">
+          <SkeletonBlock className="h-10 w-10 rounded-2xl" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <SkeletonBlock className="h-4 w-32 rounded-full" />
+            <SkeletonBlock className="h-3 w-20 rounded-full" />
+          </div>
+          <SkeletonBlock className="h-10 w-10 rounded-2xl" />
+        </div>
+
+        <div className="flex-1 px-1 py-5">
+          <div className="space-y-4">
+            <SkeletonBlock className="h-[4.5rem] w-[72%] rounded-3xl" />
+            <SkeletonBlock className="ml-auto h-16 w-[48%] rounded-3xl" />
+            <SkeletonBlock className="h-24 w-[64%] rounded-3xl" />
+            <SkeletonBlock className="ml-auto h-14 w-[38%] rounded-3xl" />
+            <SkeletonBlock className="h-16 w-[44%] rounded-3xl" />
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-zinc-800/90 bg-zinc-900/70 p-3">
+          <div className="flex items-center gap-3">
+            <SkeletonBlock className="h-10 flex-1 rounded-2xl" />
+            <SkeletonBlock className="h-10 w-10 rounded-2xl" />
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 const LEGACY_USERS_STORAGE_KEY = "clore_auth_users_v1";
 const SESSION_STORAGE_KEY = "clore_auth_session_v1";
 const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
@@ -33,11 +154,7 @@ const WebMessenger = dynamic(
   () => import("@/components/web-messenger").then((module) => module.WebMessenger),
   {
     ssr: false,
-    loading: () => (
-      <main className="flex h-[100dvh] min-h-[100dvh] w-full items-center justify-center bg-zinc-900 pt-[env(safe-area-inset-top)] text-zinc-400">
-        Loading messenger...
-      </main>
-    ),
+    loading: () => <MessengerLoadingSkeleton />,
   }
 );
 
@@ -172,13 +289,7 @@ export function AuthGate() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState("");
   const [suspensionMessage, setSuspensionMessage] = useState("");
-  const [uiTheme] = useState<"light" | "dark">(() => {
-    if (typeof window === "undefined") {
-      return "light";
-    }
-    const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
-    return stored === "dark" ? "dark" : "light";
-  });
+  const [uiTheme, setUiTheme] = useState<"light" | "dark">("light");
 
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
@@ -225,6 +336,17 @@ export function AuthGate() {
     registerPassword === registerConfirmPassword &&
     isValidUsername(registerUsername) &&
     isValidEmail(registerEmail);
+
+  useEffect(() => {
+    const rootTheme = document.documentElement.getAttribute("data-clore-theme");
+    if (rootTheme === "dark" || rootTheme === "light") {
+      setUiTheme(rootTheme);
+      return;
+    }
+
+    const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
+    setUiTheme(stored === "dark" ? "dark" : "light");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -565,11 +687,7 @@ export function AuthGate() {
   };
 
   if (loading) {
-    return (
-      <main className="flex h-[100dvh] min-h-[100dvh] w-full items-center justify-center bg-zinc-900 pt-[env(safe-area-inset-top)] text-zinc-400">
-        Loading...
-      </main>
-    );
+    return <AppLoadingSkeleton uiTheme={uiTheme} />;
   }
 
   if (currentUser) {

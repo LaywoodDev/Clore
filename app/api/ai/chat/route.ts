@@ -292,16 +292,26 @@ const FAVORITES_RECIPIENT_ALIASES = new Set(
 );
 
 const SEND_COMMAND_START_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|передай|сообщи|скажи|уведоми|запланир(?:уй|уйте|овать)|send|text|message|write|tell|notify|schedule|поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:отправ(?:ь|ьте)|напиш(?:и|ите)|переда(?:й|йте)|сообщ(?:и|ите)|скажи(?:те)?|уведом(?:и|ите)|уточн(?:и|ите)|узна(?:й|йте)|спрос(?:и|ите)|запланир(?:уй|уйте|овать)|send|text|message|write|tell|notify|schedule|ping|поздрав(?:ь|ьте)|congratulate)(?=\s|$|[,.!?;:])/iu;
 const SEND_VERB_DEFINITIONS: Array<{ value: string; kind: SendVerbKind }> = [
   { value: "отправь", kind: "send" },
   { value: "отправьте", kind: "send" },
   { value: "напиши", kind: "send" },
   { value: "напишите", kind: "send" },
   { value: "передай", kind: "send" },
+  { value: "передайте", kind: "send" },
   { value: "сообщи", kind: "send" },
+  { value: "сообщите", kind: "send" },
   { value: "скажи", kind: "send" },
+  { value: "скажите", kind: "send" },
   { value: "уведоми", kind: "send" },
+  { value: "уведомите", kind: "send" },
+  { value: "уточни", kind: "send" },
+  { value: "уточните", kind: "send" },
+  { value: "узнай", kind: "send" },
+  { value: "узнайте", kind: "send" },
+  { value: "спроси", kind: "send" },
+  { value: "спросите", kind: "send" },
   { value: "запланируй", kind: "send" },
   { value: "запланируйте", kind: "send" },
   { value: "send", kind: "send" },
@@ -311,34 +321,35 @@ const SEND_VERB_DEFINITIONS: Array<{ value: string; kind: SendVerbKind }> = [
   { value: "tell", kind: "send" },
   { value: "notify", kind: "send" },
   { value: "schedule", kind: "send" },
+  { value: "ping", kind: "send" },
   { value: "поздравь", kind: "congratulate" },
   { value: "поздравьте", kind: "congratulate" },
   { value: "congratulate", kind: "congratulate" },
 ];
 const DELETE_COMMAND_START_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:удали(?:ть)?|delete|remove|erase)(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:удали(?:ть)?|убери(?:те)?|сотри(?:те)?|очисти(?:те)?|delete|remove|erase|clear)(?=\s|$|[,.!?;:])/iu;
 const DELETE_COMMAND_SEGMENT_SEPARATOR_REGEX =
-  /\s+(?:и|а|или|and|or)\s+(?=(?:пожалуйста\s+|please\s+|ну\s+)?(?:удали(?:ть)?|delete|remove|erase))/giu;
+  /\s+(?:и|а|или|and|or)\s+(?=(?:пожалуйста\s+|please\s+|ну\s+)?(?:удали(?:ть)?|убери(?:те)?|сотри(?:те)?|очисти(?:те)?|delete|remove|erase|clear))/giu;
 const CREATE_GROUP_COMMAND_START_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:(?:create|make|start|созда(?:й|йте|ть)|сдела(?:й|йте|ть))\s+(?:new\s+|нов(?:ую|ая|ой)?\s+)?(?:group|групп(?:у|а|ы)?|group\s+chat)|(?:new\s+group|нов(?:ая|ую)\s+групп(?:а|у)?))(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:(?:create|make|start|assemble|set\s+up|созда(?:й|йте|ть)|сдела(?:й|йте|ть)|собер(?:и|ите)|организ(?:уй|уйте))\s+(?:new\s+|нов(?:ую|ая|ой)?\s+)?(?:group|групп(?:у|а|ы)?|group\s+chat)|(?:new\s+group|нов(?:ая|ую)\s+групп(?:а|у)?))(?=\s|$|[,.!?;:])/iu;
 const CREATE_GROUP_PREFIX_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:(?:create|make|start|созда(?:й|йте|ть)|сдела(?:й|йте|ть))\s+(?:new\s+|нов(?:ую|ая|ой)?\s+)?(?:group|групп(?:у|а|ы)?|group\s+chat)|(?:new\s+group|нов(?:ая|ую)\s+групп(?:а|у)?))\s*/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:(?:create|make|start|assemble|set\s+up|созда(?:й|йте|ть)|сдела(?:й|йте|ть)|собер(?:и|ите)|организ(?:уй|уйте))\s+(?:new\s+|нов(?:ую|ая|ой)?\s+)?(?:group|групп(?:у|а|ы)?|group\s+chat)|(?:new\s+group|нов(?:ая|ую)\s+групп(?:а|у)?))\s*/iu;
 const INVITE_TO_GROUP_COMMAND_START_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:invite|add|приглас(?:и|ите|ить)|добав(?:ь|ьте|ить)|закинь|закиньте)(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:invite|add|include|приглас(?:и|ите|ить)|добав(?:ь|ьте|ить)|закинь|закиньте|позов(?:и|ите)|подключ(?:и|ите)|включ(?:и|ите))(?=\s|$|[,.!?;:])/iu;
 const INVITE_TO_GROUP_PREFIX_REGEX =
-  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:invite|add|приглас(?:и|ите|ить)|добав(?:ь|ьте|ить)|закинь|закиньте)\s+/iu;
+  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:invite|add|include|приглас(?:и|ите|ить)|добав(?:ь|ьте|ить)|закинь|закиньте|позов(?:и|ите)|подключ(?:и|ите)|включ(?:и|ите))\s+/iu;
 const REMOVE_FROM_GROUP_COMMAND_START_REGEX =
-  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)?(?:remove|kick|exclude|drop|\u0443\u0434\u0430\u043b(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0438\u0441\u043a\u043b\u044e\u0447(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043a\u0438\u043a(?:\u043d\u0438|\u043d\u0438\u0442\u0435|\u043d\u0443\u0442\u044c)?)(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)?(?:remove|kick|exclude|drop|\u0443\u0434\u0430\u043b(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0438\u0441\u043a\u043b\u044e\u0447(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043a\u0438\u043a(?:\u043d\u0438|\u043d\u0438\u0442\u0435|\u043d\u0443\u0442\u044c)?|\u0443\u0431\u0435\u0440(?:\u0438|\u0438\u0442\u0435)|\u0432\u044b\u0433\u043e\u043d(?:\u0438|\u0438\u0442\u0435)|\u0432\u044b\u043a\u0438\u043d(?:\u044c|\u044c\u0442\u0435))(?=\s|$|[,.!?;:])/iu;
 const REMOVE_FROM_GROUP_PREFIX_REGEX =
-  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)*(?:remove|kick|exclude|drop|\u0443\u0434\u0430\u043b(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0438\u0441\u043a\u043b\u044e\u0447(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043a\u0438\u043a(?:\u043d\u0438|\u043d\u0438\u0442\u0435|\u043d\u0443\u0442\u044c)?)\s+/iu;
+  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)*(?:remove|kick|exclude|drop|\u0443\u0434\u0430\u043b(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0438\u0441\u043a\u043b\u044e\u0447(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043a\u0438\u043a(?:\u043d\u0438|\u043d\u0438\u0442\u0435|\u043d\u0443\u0442\u044c)?|\u0443\u0431\u0435\u0440(?:\u0438|\u0438\u0442\u0435)|\u0432\u044b\u0433\u043e\u043d(?:\u0438|\u0438\u0442\u0435)|\u0432\u044b\u043a\u0438\u043d(?:\u044c|\u044c\u0442\u0435))\s+/iu;
 const UPDATE_GROUP_DATA_COMMAND_START_REGEX =
-  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)?(?:rename|update|change|edit|set|\u043f\u0435\u0440\u0435\u0438\u043c\u0435\u043d(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c)|\u0438\u0437\u043c\u0435\u043d(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043e\u0431\u043d\u043e\u0432(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c))(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)?(?:rename|update|change|edit|set|\u043f\u0435\u0440\u0435\u0438\u043c\u0435\u043d(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c)|\u0438\u0437\u043c\u0435\u043d(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043e\u0431\u043d\u043e\u0432(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c)|\u043f\u043e\u043c\u0435\u043d\u044f(?:\u0439|\u0439\u0442\u0435|\u0442\u044c)|\u0438\u0441\u043f\u0440\u0430\u0432(?:\u044c|\u044c\u0442\u0435)|\u0437\u0430\u0434\u0430(?:\u0439|\u0439\u0442\u0435))(?=\s|$|[,.!?;:])/iu;
 const UPDATE_GROUP_DATA_PREFIX_REGEX =
-  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)*(?:rename|update|change|edit|set|\u043f\u0435\u0440\u0435\u0438\u043c\u0435\u043d(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c)|\u0438\u0437\u043c\u0435\u043d(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043e\u0431\u043d\u043e\u0432(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c))\s+/iu;
+  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)*(?:rename|update|change|edit|set|\u043f\u0435\u0440\u0435\u0438\u043c\u0435\u043d(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c)|\u0438\u0437\u043c\u0435\u043d(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u043e\u0431\u043d\u043e\u0432(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440(?:\u0443\u0439|\u0443\u0439\u0442\u0435|\u043e\u0432\u0430\u0442\u044c)|\u043f\u043e\u043c\u0435\u043d\u044f(?:\u0439|\u0439\u0442\u0435|\u0442\u044c)|\u0438\u0441\u043f\u0440\u0430\u0432(?:\u044c|\u044c\u0442\u0435)|\u0437\u0430\u0434\u0430(?:\u0439|\u0439\u0442\u0435))\s+/iu;
 const SET_GROUP_MEMBER_ACCESS_COMMAND_START_REGEX =
-  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)?(?:set|make|promote|demote|grant|revoke|\u043d\u0430\u0437\u043d\u0430\u0447(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u0432\u044b\u0441(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u043d\u0438\u0437(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u0441\u043d\u0438\u043c(?:\u0438|\u0438\u0442\u0435)|\u0434\u0430\u0439(?:\u0442\u0435)?)(?=\s|$|[,.!?;:])/iu;
+  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)?(?:set|make|promote|demote|grant|revoke|\u043d\u0430\u0437\u043d\u0430\u0447(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u0432\u044b\u0441(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u043d\u0438\u0437(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u0441\u043d\u0438\u043c(?:\u0438|\u0438\u0442\u0435)|\u0434\u0430\u0439(?:\u0442\u0435)?|\u0441\u0434\u0435\u043b\u0430(?:\u0439|\u0439\u0442\u0435))(?=\s|$|[,.!?;:])/iu;
 const SET_GROUP_MEMBER_ACCESS_PREFIX_REGEX =
-  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)*(?:set|make|promote|demote|grant|revoke|\u043d\u0430\u0437\u043d\u0430\u0447(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u0432\u044b\u0441(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u043d\u0438\u0437(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u0441\u043d\u0438\u043c(?:\u0438|\u0438\u0442\u0435)|\u0434\u0430\u0439(?:\u0442\u0435)?)\s+/iu;
+  /^(?:please\s+|\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430\s+|\u043d\u0443\s+)*(?:set|make|promote|demote|grant|revoke|\u043d\u0430\u0437\u043d\u0430\u0447(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u0432\u044b\u0441(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u043f\u043e\u043d\u0438\u0437(?:\u044c|\u044c\u0442\u0435|\u0438\u0442\u044c)|\u0441\u043d\u0438\u043c(?:\u0438|\u0438\u0442\u0435)|\u0434\u0430\u0439(?:\u0442\u0435)?|\u0441\u0434\u0435\u043b\u0430(?:\u0439|\u0439\u0442\u0435))\s+/iu;
 const DELETE_ALL_RECIPIENT_QUERY = "__all_chats__";
 const DELETE_ALL_QUERY_ALIASES = new Set(
   [
@@ -828,7 +839,11 @@ function isLikelyDeleteCommandStart(value: string): boolean {
     return false;
   }
   const normalized = normalizeForMatching(trimmed);
-  if (/^(?:удали(?:ть)?|delete|remove|erase)\s*$/iu.test(normalized)) {
+  if (
+    /^(?:удали(?:ть)?|убери(?:те)?|сотри(?:те)?|очисти(?:те)?|delete|remove|erase|clear)\s*$/iu.test(
+      normalized
+    )
+  ) {
     return true;
   }
   if (/(?:^|\s)(?:all|все|everything)(?:\s|$)/iu.test(normalized)) {
@@ -889,7 +904,7 @@ function parseDeleteIntentSegment(
   }
 
   const consumedVerb = trimmed.match(
-    /^(?:(?:please|пожалуйста|ну)\s+)*(?:удали(?:ть)?|delete|remove|erase)\s+(.+)$/iu
+    /^(?:(?:please|пожалуйста|ну)\s+)*(?:удали(?:ть)?|убери(?:те)?|сотри(?:те)?|очисти(?:те)?|delete|remove|erase|clear)\s+(.+)$/iu
   );
   const working = consumedVerb?.[1]?.trim() ?? (isFirstSegment ? "" : trimmed);
   if (!working) {
@@ -943,7 +958,7 @@ function extractDeleteIntents(input: string): DeleteIntent[] {
   if (intents.length === 0) {
     const fallbackRecipient = cleanDeleteRecipientQuery(
       trimmed.replace(
-        /^(?:(?:please|пожалуйста|ну)\s+)*(?:удали(?:ть)?|delete|remove|erase)\s*/iu,
+        /^(?:(?:please|пожалуйста|ну)\s+)*(?:удали(?:ть)?|убери(?:те)?|сотри(?:те)?|очисти(?:те)?|delete|remove|erase|clear)\s*/iu,
         ""
       )
     );
@@ -1179,7 +1194,7 @@ function parseInviteToGroupIntent(input: string): InviteToGroupIntent | null {
   }
 
   const groupFirstPattern = working.match(
-    /^(?:в|во|to|into)\s+(?:group|groups|групп(?:у|а|е|ы)?)\s+(.+?)\s*(?::|-|\s+(?:add|invite|добав(?:ь|ьте|ить)|приглас(?:и|ите|ить)|members?|участники?)\s+)(.+)$/iu
+    /^(?:в|во|to|into)\s+(?:group|groups|групп(?:у|а|е|ы)?)\s+(.+?)\s*(?::|-|\s+(?:add|invite|include|добав(?:ь|ьте|ить)|приглас(?:и|ите|ить)|позов(?:и|ите)|подключ(?:и|ите)|включ(?:и|ите)|members?|участники?)\s+)(.+)$/iu
   );
   if (groupFirstPattern) {
     return {
@@ -1273,7 +1288,7 @@ function parseRemoveFromGroupIntent(input: string): RemoveFromGroupIntent | null
   }
 
   const groupFirstPattern = working.match(
-    /^(?:from|\u0438\u0437)\s+(?:group|groups|\u0433\u0440\u0443\u043f\u043f(?:\u0443|\u0430|\u0435|\u044b)?)\s+(.+?)\s*(?::|-|\s+(?:remove|kick|exclude|drop|members?|people|\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a(?:\u0430|\u043e\u0432)?|\u0443\u0434\u0430\u043b(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0438\u0441\u043a\u043b\u044e\u0447(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c))\s+)(.+)$/iu
+    /^(?:from|\u0438\u0437)\s+(?:group|groups|\u0433\u0440\u0443\u043f\u043f(?:\u0443|\u0430|\u0435|\u044b)?)\s+(.+?)\s*(?::|-|\s+(?:remove|kick|exclude|drop|members?|people|\u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a(?:\u0430|\u043e\u0432)?|\u0443\u0434\u0430\u043b(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0438\u0441\u043a\u043b\u044e\u0447(?:\u0438|\u0438\u0442\u0435|\u0438\u0442\u044c)|\u0443\u0431\u0435\u0440(?:\u0438|\u0438\u0442\u0435)|\u0432\u044b\u0433\u043e\u043d(?:\u0438|\u0438\u0442\u0435)|\u0432\u044b\u043a\u0438\u043d(?:\u044c|\u044c\u0442\u0435))\s+)(.+)$/iu
   );
   if (groupFirstPattern) {
     return {
@@ -1703,7 +1718,7 @@ function cleanRecipientQuery(value: string): string {
   return value
     .trim()
     .replace(/^["'«“]+|["'»”]+$/gu, "")
-    .replace(/^(?:для|к|в|во|to|for|into)\s+/iu, "")
+    .replace(/^(?:для|к|в|во|у|to|for|into)\s+/iu, "")
     .replace(/(?:^|\s)(?:пожалуйста|please)(?=\s|$)/giu, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -1959,7 +1974,7 @@ function parseLooseSendIntent(working: string): SendIntent | null {
 
   const firstWord = words[0] ?? "";
   const secondWord = words[1] ?? "";
-  const prepositionHead = /^(?:в|во|к|для|to|for|into)$/iu.test(firstWord);
+  const prepositionHead = /^(?:в|во|к|для|у|to|for|into)$/iu.test(firstWord);
   const recipientQuery = cleanRecipientQuery(prepositionHead ? secondWord : firstWord);
   const messageText = cleanMessageText(
     prepositionHead ? words.slice(2).join(" ") : words.slice(1).join(" ")
@@ -1980,7 +1995,7 @@ function splitIntoIntentSegments(input: string): string[] {
     return [];
   }
   const withCommandSeparators = compact.replace(
-    /\s+(?:и|а|или|and|or)\s+(?=(?:пожалуйста\s+|please\s+|ну\s+)?(?:отправ|напиш|передай|сообщи|скажи|уведоми|запланир|send|text|message|write|tell|notify|schedule|поздрав|congratulat))/giu,
+    /\s+(?:и|а|или|and|or)\s+(?=(?:пожалуйста\s+|please\s+|ну\s+)?(?:отправ|напиш|переда|сообщ|скажи|уведом|уточн|узна|спрос|запланир|send|text|message|write|tell|notify|schedule|ping|поздрав|congratulat))/giu,
     ", "
   );
   const withImplicitSeparators = withCommandSeparators.replace(
@@ -3193,7 +3208,7 @@ function removeMemberFromGroupThread(
 
 function formatGroupRoleLabel(role: SetGroupMemberAccessRole, language: "en" | "ru"): string {
   if (language === "ru") {
-    return role === "admin" ? "Р°РґРјРёРЅ" : "СѓС‡Р°СЃС‚РЅРёРє";
+    return role === "admin" ? "админ" : "участник";
   }
   return role;
 }
@@ -5284,7 +5299,7 @@ async function executeRemoveFromGroupIntents(
 
     for (const intent of preparedIntents) {
       const groupQuery =
-        intent.groupQuery || (language === "ru" ? "РїРѕСЃР»РµРґРЅСЏСЏ РіСЂСѓРїРїР°" : "latest group");
+        intent.groupQuery || (language === "ru" ? "последняя группа" : "latest group");
       const memberQueries = intent.memberQueries;
 
       if (memberQueries.length === 0) {
@@ -5443,7 +5458,7 @@ async function executeUpdateGroupDataIntents(
 
     for (const intent of preparedIntents) {
       const groupQuery =
-        intent.groupQuery || (language === "ru" ? "РїРѕСЃР»РµРґРЅСЏСЏ РіСЂСѓРїРїР°" : "latest group");
+        intent.groupQuery || (language === "ru" ? "последняя группа" : "latest group");
       const title = intent.title;
       const description = intent.description;
 
@@ -5610,7 +5625,7 @@ async function executeSetGroupMemberAccessIntents(
 
     for (const intent of preparedIntents) {
       const groupQuery =
-        intent.groupQuery || (language === "ru" ? "РїРѕСЃР»РµРґРЅСЏСЏ РіСЂСѓРїРїР°" : "latest group");
+        intent.groupQuery || (language === "ru" ? "последняя группа" : "latest group");
       const role = intent.role;
       const memberQueries = intent.memberQueries;
 

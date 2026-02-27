@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     const result = await updateStore<{
       chatId: string;
       joined: boolean;
+      groupKind: "group" | "channel";
     }>((store) => {
       const userExists = store.users.some((candidate) => candidate.id === userId);
       if (!userExists) {
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
         return {
           chatId: thread.id,
           joined: false,
+          groupKind: thread.groupKind === "channel" ? "channel" : "group",
         };
       }
 
@@ -108,6 +110,7 @@ export async function POST(request: Request) {
       return {
         chatId: thread.id,
         joined: true,
+        groupKind: thread.groupKind === "channel" ? "channel" : "group",
       };
     });
 

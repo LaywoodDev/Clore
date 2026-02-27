@@ -394,6 +394,39 @@ html[data-clore-theme="light"] [class*="shadow-["] {
   }
 }
 
+@keyframes clore-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.clore-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: rgb(255 255 255 / 0.06);
+  background-image: linear-gradient(
+    110deg,
+    rgb(255 255 255 / 0.04) 20%,
+    rgb(255 255 255 / 0.14) 42%,
+    rgb(255 255 255 / 0.04) 64%
+  );
+  background-size: 200% 100%;
+  animation: clore-skeleton-shimmer 1.15s linear infinite;
+}
+
+html[data-clore-theme="light"] .clore-skeleton {
+  background-color: rgb(148 163 184 / 0.14);
+  background-image: linear-gradient(
+    110deg,
+    rgb(148 163 184 / 0.08) 20%,
+    rgb(255 255 255 / 0.78) 42%,
+    rgb(148 163 184 / 0.08) 64%
+  );
+}
+
 @keyframes clore-message-appear-once {
   0% {
     opacity: 0;
