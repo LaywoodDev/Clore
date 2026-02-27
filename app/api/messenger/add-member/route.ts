@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       if (!member) {
         throw new Error("User not found.");
       }
-      if (!canUserBeAddedToGroupBy(member, userId)) {
+      if (thread.groupAccess === "public" && !canUserBeAddedToGroupBy(member, userId)) {
         throw new Error("User does not allow adding to groups.");
       }
       if (thread.memberIds.length + 1 > GROUP_MAX_MEMBERS) {

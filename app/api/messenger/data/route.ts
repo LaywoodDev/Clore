@@ -9,6 +9,7 @@ import {
   toPublicUser,
   updateStore,
 } from "@/lib/server/store";
+import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
 
 type VisibilityScope = "everyone" | "contacts" | "nobody";
 type NextVisibilityScope = "everyone" | "selected" | "nobody";
@@ -92,6 +93,11 @@ export async function GET(request: Request) {
 
   const allThreads = store.threads
     .filter((thread) => thread.memberIds.includes(userId))
+    .filter((thread) =>
+      AI_FEATURE_ENABLED
+        ? true
+        : thread.threadType === "group" || !thread.memberIds.includes(BOT_USER_ID)
+    )
     .sort((a, b) => b.updatedAt - a.updatedAt);
   const contactIds = new Set<string>();
   for (const thread of allThreads) {
@@ -102,58 +108,60 @@ export async function GET(request: Request) {
     }
   }
 
-  const users = store.users.map((user) => {
-    const publicUser = toPublicUser(user);
-    const isSelf = user.id === userId;
-    const isContact = contactIds.has(user.id);
-    const canViewLastSeen = canViewByVisibility(
-      publicUser.lastSeenVisibility,
-      publicUser.lastSeenAllowedUserIds,
-      isSelf,
-      userId,
-      isContact
-    );
-    const canViewAvatar = canViewByVisibility(
-      publicUser.avatarVisibility,
-      publicUser.avatarAllowedUserIds,
-      isSelf,
-      userId,
-      isContact
-    );
-    const canViewBio = canViewByVisibility(
-      publicUser.bioVisibility,
-      publicUser.bioAllowedUserIds,
-      isSelf,
-      userId,
-      isContact
-    );
-    const canViewBirthday = canViewByVisibility(
-      publicUser.birthdayVisibility,
-      publicUser.birthdayAllowedUserIds,
-      isSelf,
-      userId,
-      isContact
-    );
+  const users = store.users
+    .filter((user) => AI_FEATURE_ENABLED || user.id !== BOT_USER_ID)
+    .map((user) => {
+      const publicUser = toPublicUser(user);
+      const isSelf = user.id === userId;
+      const isContact = contactIds.has(user.id);
+      const canViewLastSeen = canViewByVisibility(
+        publicUser.lastSeenVisibility,
+        publicUser.lastSeenAllowedUserIds,
+        isSelf,
+        userId,
+        isContact
+      );
+      const canViewAvatar = canViewByVisibility(
+        publicUser.avatarVisibility,
+        publicUser.avatarAllowedUserIds,
+        isSelf,
+        userId,
+        isContact
+      );
+      const canViewBio = canViewByVisibility(
+        publicUser.bioVisibility,
+        publicUser.bioAllowedUserIds,
+        isSelf,
+        userId,
+        isContact
+      );
+      const canViewBirthday = canViewByVisibility(
+        publicUser.birthdayVisibility,
+        publicUser.birthdayAllowedUserIds,
+        isSelf,
+        userId,
+        isContact
+      );
 
-    return {
-      ...publicUser,
-      blockedUserIds: isSelf ? publicUser.blockedUserIds : [],
-      lastSeenAllowedUserIds: isSelf ? publicUser.lastSeenAllowedUserIds : [],
-      avatarAllowedUserIds: isSelf ? publicUser.avatarAllowedUserIds : [],
-      bioAllowedUserIds: isSelf ? publicUser.bioAllowedUserIds : [],
-      birthdayAllowedUserIds: isSelf ? publicUser.birthdayAllowedUserIds : [],
-      callAllowedUserIds: isSelf ? publicUser.callAllowedUserIds : [],
-      forwardAllowedUserIds: isSelf ? publicUser.forwardAllowedUserIds : [],
-      groupAddAllowedUserIds: isSelf ? publicUser.groupAddAllowedUserIds : [],
-      showLastSeen: canViewLastSeen && publicUser.showLastSeen,
-      lastSeenAt: canViewLastSeen ? publicUser.lastSeenAt : 0,
-      avatarUrl: canViewAvatar ? publicUser.avatarUrl : "",
-      bio: canViewBio ? publicUser.bio : "",
-      birthday: canViewBirthday ? publicUser.birthday : "",
-    };
-  });
+      return {
+        ...publicUser,
+        blockedUserIds: isSelf ? publicUser.blockedUserIds : [],
+        lastSeenAllowedUserIds: isSelf ? publicUser.lastSeenAllowedUserIds : [],
+        avatarAllowedUserIds: isSelf ? publicUser.avatarAllowedUserIds : [],
+        bioAllowedUserIds: isSelf ? publicUser.bioAllowedUserIds : [],
+        birthdayAllowedUserIds: isSelf ? publicUser.birthdayAllowedUserIds : [],
+        callAllowedUserIds: isSelf ? publicUser.callAllowedUserIds : [],
+        forwardAllowedUserIds: isSelf ? publicUser.forwardAllowedUserIds : [],
+        groupAddAllowedUserIds: isSelf ? publicUser.groupAddAllowedUserIds : [],
+        showLastSeen: canViewLastSeen && publicUser.showLastSeen,
+        lastSeenAt: canViewLastSeen ? publicUser.lastSeenAt : 0,
+        avatarUrl: canViewAvatar ? publicUser.avatarUrl : "",
+        bio: canViewBio ? publicUser.bio : "",
+        birthday: canViewBirthday ? publicUser.birthday : "",
+      };
+    });
 
-  if (!users.some((user) => user.id === BOT_USER_ID)) {
+  if (AI_FEATURE_ENABLED && !users.some((user) => user.id === BOT_USER_ID)) {
     users.push(getBotPublicUser());
   }
 

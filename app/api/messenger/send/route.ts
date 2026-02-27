@@ -11,6 +11,7 @@ import {
   type StoredChatMessage,
   updateStore,
 } from "@/lib/server/store";
+import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
 
 type SendAttachmentPayload = {
   name?: string;
@@ -309,6 +310,12 @@ export async function POST(request: Request) {
           const sourceThread = store.threads.find(
             (candidate) => candidate.id === sourceMessage.chatId
           );
+          if (
+            sourceThread?.threadType === "group" &&
+            sourceThread.contentProtectionEnabled === true
+          ) {
+            throw new Error("Forwarding is disabled for this group.");
+          }
           const canAccessSource =
             sourceMessage.authorId === userId ||
             (sourceThread?.memberIds.includes(userId) ?? false) ||
@@ -364,7 +371,10 @@ export async function POST(request: Request) {
               null)
             : null;
         const shouldAutoReply =
-          !isScheduledMessage && !isBotUserId(userId) && botUserId !== null;
+          AI_FEATURE_ENABLED &&
+          !isScheduledMessage &&
+          !isBotUserId(userId) &&
+          botUserId !== null;
         const usersById = new Map(store.users.map((user) => [user.id, user]));
         const chatMessages = store.messages
           .filter(
@@ -450,6 +460,7 @@ export async function POST(request: Request) {
         ? 404
         : message === "Cannot send message because one of users is blocked." ||
             message === "User does not allow forwarding their messages." ||
+            message === "Forwarding is disabled for this group." ||
             message.startsWith("You are muted until") ||
             message.startsWith("Your account is suspended until")
           ? 403

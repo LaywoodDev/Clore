@@ -65,12 +65,19 @@ export type PublicUser = {
 
 export type GroupRole = "owner" | "admin" | "member";
 export type GroupKind = "group" | "channel";
+export type GroupAccessType = "private" | "public";
 
 export type StoredChatThread = {
   id: string;
   memberIds: string[];
   threadType: "direct" | "group";
   groupKind?: GroupKind;
+  groupAccess?: GroupAccessType;
+  groupUsername?: string;
+  groupInviteToken?: string;
+  groupInviteUsageLimit?: number;
+  groupInviteUsedCount?: number;
+  contentProtectionEnabled?: boolean;
   title: string;
   description: string;
   avatarUrl: string;
@@ -342,6 +349,52 @@ function normalizeNumber(value: unknown, fallback: number): number {
 
 export function normalizeUsername(value: string): string {
   return value.trim().replace(/^@+/, "").toLowerCase();
+}
+
+const GROUP_USERNAME_REGEX = /^[a-z0-9_]{3,32}$/;
+const GROUP_INVITE_USAGE_LIMIT_MAX = Number.MAX_SAFE_INTEGER;
+
+export function normalizeGroupUsername(value: string): string {
+  return value.trim().replace(/^@+/, "").toLowerCase();
+}
+
+export function isValidGroupUsername(value: string): boolean {
+  return GROUP_USERNAME_REGEX.test(value);
+}
+
+export function getThreadInviteToken(
+  thread: Pick<StoredChatThread, "id" | "groupInviteToken">
+): string {
+  const candidate =
+    typeof thread.groupInviteToken === "string"
+      ? thread.groupInviteToken.trim()
+      : "";
+  return candidate || thread.id;
+}
+
+export function normalizeGroupInviteUsageLimit(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  const normalized = Math.trunc(value);
+  if (normalized <= 0) {
+    return 0;
+  }
+  return Math.min(normalized, GROUP_INVITE_USAGE_LIMIT_MAX);
+}
+
+export function normalizeGroupInviteUsedCount(
+  value: unknown,
+  usageLimit: number
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  const normalized = Math.max(0, Math.trunc(value));
+  if (usageLimit > 0) {
+    return Math.min(normalized, usageLimit);
+  }
+  return normalized;
 }
 
 export function normalizeEmail(value: string): string {
@@ -819,6 +872,7 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
   }
 
   const byId = new Map<string, StoredChatThread>();
+  const usedPublicGroupUsernames = new Set<string>();
 
   for (const rawThread of rawThreads) {
     const thread = asRecord(rawThread);
@@ -857,6 +911,48 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
         : thread.groupKind === "channel"
           ? "channel"
           : "group";
+    const rawGroupAccess =
+      typeof thread.groupAccess === "string" ? thread.groupAccess.trim() : "";
+    const normalizedGroupUsername = normalizeGroupUsername(
+      typeof thread.groupUsername === "string" ? thread.groupUsername : ""
+    );
+    const rawGroupInviteToken =
+      typeof thread.groupInviteToken === "string"
+        ? thread.groupInviteToken.trim()
+        : "";
+    const rawGroupInviteUsageLimit = normalizeGroupInviteUsageLimit(
+      (thread as Record<string, unknown>).groupInviteUsageLimit
+    );
+    const rawGroupInviteUsedCount = normalizeGroupInviteUsedCount(
+      (thread as Record<string, unknown>).groupInviteUsedCount,
+      rawGroupInviteUsageLimit
+    );
+    const rawContentProtectionEnabled =
+      (thread as Record<string, unknown>).contentProtectionEnabled === true;
+    let groupAccess: GroupAccessType | undefined;
+    let groupUsername: string | undefined;
+    let groupInviteToken: string | undefined;
+    let groupInviteUsageLimit: number | undefined;
+    let groupInviteUsedCount: number | undefined;
+    let contentProtectionEnabled: boolean | undefined;
+    if (threadType === "group") {
+      const canUsePublicUsername =
+        rawGroupAccess === "public" &&
+        isValidGroupUsername(normalizedGroupUsername) &&
+        !usedPublicGroupUsernames.has(normalizedGroupUsername);
+      if (canUsePublicUsername) {
+        groupAccess = "public";
+        groupUsername = normalizedGroupUsername;
+        usedPublicGroupUsernames.add(normalizedGroupUsername);
+      } else {
+        groupAccess = "private";
+        groupUsername = "";
+      }
+      groupInviteToken = rawGroupInviteToken || id;
+      groupInviteUsageLimit = rawGroupInviteUsageLimit;
+      groupInviteUsedCount = rawGroupInviteUsedCount;
+      contentProtectionEnabled = rawContentProtectionEnabled;
+    }
     const title = typeof thread.title === "string" ? thread.title.trim() : "";
     const description =
       typeof thread.description === "string" ? thread.description.trim() : "";
@@ -941,6 +1037,12 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       memberIds: uniqueMemberIds,
       threadType,
       groupKind,
+      groupAccess,
+      groupUsername,
+      groupInviteToken,
+      groupInviteUsageLimit,
+      groupInviteUsedCount,
+      contentProtectionEnabled,
       title,
       description,
       avatarUrl,

@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 
 import {
+  BOT_USER_ID,
   createEntityId,
   type StoredChatThread,
   updateStore,
 } from "@/lib/server/store";
+import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
 
 type OpenOrCreatePayload = {
   userId?: string;
@@ -24,6 +26,9 @@ export async function POST(request: Request) {
       { error: "Cannot create chat with yourself." },
       { status: 400 }
     );
+  }
+  if (!AI_FEATURE_ENABLED && targetUserId === BOT_USER_ID) {
+    return NextResponse.json({ error: "AI is disabled." }, { status: 403 });
   }
 
   try {

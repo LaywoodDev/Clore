@@ -21,6 +21,7 @@ import {
   type StoredChatThread,
   updateStore,
 } from "@/lib/server/store";
+import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
 
 type AiChatMessagePayload = {
   role?: string;
@@ -5023,6 +5024,11 @@ async function executeCreateGroupIntents(
         id: createEntityId("chat"),
         memberIds: [...memberSet],
         threadType: "group",
+        groupAccess: "private",
+        groupUsername: "",
+        groupInviteToken: createEntityId("invite"),
+        groupInviteUsageLimit: 0,
+        groupInviteUsedCount: 0,
         title,
         description: "",
         avatarUrl: "",
@@ -5918,6 +5924,10 @@ async function generateAssistantReply(
 }
 
 export async function POST(request: Request) {
+  if (!AI_FEATURE_ENABLED) {
+    return NextResponse.json({ error: "AI is disabled." }, { status: 503 });
+  }
+
   const body = (await request.json().catch(() => null)) as AiChatPayload | null;
   const userId = body?.userId?.trim() ?? "";
   const language: "en" | "ru" = body?.language === "ru" ? "ru" : "en";

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import {
   canUserBeAddedToGroupBy,
   createEntityId,
+  isValidGroupUsername,
+  normalizeGroupUsername,
   type StoredChatThread,
   updateStore,
 } from "@/lib/server/store";
@@ -12,11 +14,15 @@ type CreateGroupPayload = {
   title?: string;
   memberIds?: string[];
   kind?: "group" | "channel";
+  accessType?: "private" | "public";
+  username?: string;
 };
 
 const GROUP_TITLE_MIN_LENGTH = 3;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_MAX_MEMBERS = 50;
+const GROUP_USERNAME_VALIDATION_MESSAGE =
+  "Group username must use 3-32 characters: lowercase letters, numbers, underscore.";
 
 function normalizeGroupTitle(value: string): string {
   return value.trim().replace(/\s+/g, " ");
@@ -26,7 +32,9 @@ function getValidationError(
   userId: string,
   title: string,
   memberIds: string[],
-  kind: "group" | "channel"
+  kind: "group" | "channel",
+  accessType: "private" | "public",
+  username: string
 ): string | null {
   if (!userId) {
     return "Missing user ID.";
@@ -43,6 +51,9 @@ function getValidationError(
   if (memberIds.length + 1 > GROUP_MAX_MEMBERS) {
     return `Group cannot have more than ${GROUP_MAX_MEMBERS} members.`;
   }
+  if (accessType === "public" && !isValidGroupUsername(username)) {
+    return GROUP_USERNAME_VALIDATION_MESSAGE;
+  }
   return null;
 }
 
@@ -51,6 +62,9 @@ export async function POST(request: Request) {
   const userId = body?.userId?.trim() ?? "";
   const title = normalizeGroupTitle(body?.title ?? "");
   const kind: "group" | "channel" = body?.kind === "channel" ? "channel" : "group";
+  const accessType: "private" | "public" =
+    body?.accessType === "public" ? "public" : "private";
+  const username = normalizeGroupUsername(body?.username ?? "");
   const memberIdsRaw = Array.isArray(body?.memberIds) ? body.memberIds : [];
   const memberIds = [
     ...new Set(
@@ -60,7 +74,14 @@ export async function POST(request: Request) {
     ),
   ];
 
-  const validationError = getValidationError(userId, title, memberIds, kind);
+  const validationError = getValidationError(
+    userId,
+    title,
+    memberIds,
+    kind,
+    accessType,
+    username
+  );
   if (validationError) {
     return NextResponse.json(
       { error: validationError },
@@ -82,8 +103,19 @@ export async function POST(request: Request) {
         if (!member) {
           throw new Error("User not found.");
         }
-        if (!canUserBeAddedToGroupBy(member, userId)) {
+        if (accessType === "public" && !canUserBeAddedToGroupBy(member, userId)) {
           throw new Error("One or more users do not allow adding to groups.");
+        }
+      }
+      if (accessType === "public") {
+        const duplicateUsernameThread = store.threads.find(
+          (thread) =>
+            thread.threadType === "group" &&
+            thread.groupAccess === "public" &&
+            normalizeGroupUsername(thread.groupUsername ?? "") === username
+        );
+        if (duplicateUsernameThread) {
+          throw new Error("Group username is already taken.");
         }
       }
       const normalizedTitle = title.toLowerCase();
@@ -127,6 +159,12 @@ export async function POST(request: Request) {
         memberIds: [...memberSet],
         threadType: "group",
         groupKind: kind,
+        groupAccess: accessType,
+        groupUsername: accessType === "public" ? username : "",
+        groupInviteToken: createEntityId("invite"),
+        groupInviteUsageLimit: 0,
+        groupInviteUsedCount: 0,
+        contentProtectionEnabled: false,
         title,
         description: "",
         avatarUrl: "",
@@ -157,6 +195,10 @@ export async function POST(request: Request) {
           ? 422
         : message === "A group with the same title and members already exists."
           ? 409
+          : message === "Group username is already taken."
+            ? 409
+            : message === GROUP_USERNAME_VALIDATION_MESSAGE
+              ? 422
           : message.includes("Group title") || message.includes("members")
             ? 422
             : 400;
