@@ -3226,6 +3226,10 @@ export function WebMessenger({
       }
       const visibilityRecord = visibilityRaw as Record<string, unknown>;
       return SIDEBAR_ITEM_IDS.reduce<Record<SidebarItem["id"], boolean>>((acc, id) => {
+        if (id === "assistant" && AI_FEATURE_ENABLED) {
+          acc[id] = true;
+          return acc;
+        }
         acc[id] =
           typeof visibilityRecord[id] === "boolean"
             ? (visibilityRecord[id] as boolean)
