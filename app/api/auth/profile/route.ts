@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { isAvatarDecorationId } from "@/lib/shared/avatar-decorations";
 import {
+  canUseAvatarDecoration,
+  hasActivePrimeSubscription,
   normalizeUsername,
   toPublicUser,
   type StoredUser,
@@ -15,6 +18,7 @@ type ProfilePayload = {
   birthday?: string;
   avatarUrl?: string;
   bannerUrl?: string;
+  avatarDecoration?: string;
 };
 
 function isValidBirthday(value: string): boolean {
@@ -39,6 +43,10 @@ export async function PATCH(request: Request) {
   const birthday = body?.birthday?.trim() ?? "";
   const avatarUrl = body?.avatarUrl?.trim() ?? "";
   const bannerUrl = body?.bannerUrl?.trim() ?? "";
+  const avatarDecoration =
+    typeof body?.avatarDecoration === "string" && isAvatarDecorationId(body.avatarDecoration)
+      ? body.avatarDecoration
+      : "none";
 
   if (!userId || !name || !username) {
     return NextResponse.json({ error: "Missing profile fields." }, { status: 400 });
@@ -79,13 +87,28 @@ export async function PATCH(request: Request) {
       target.birthday = birthday;
       target.avatarUrl = avatarUrl;
       target.bannerUrl = bannerUrl;
+      if (avatarDecoration !== "none" && !canUseAvatarDecoration(target, avatarDecoration)) {
+        throw new Error(
+          "This avatar frame is available only with active Clore Prime or after individual purchase."
+        );
+      }
+      target.avatarDecoration =
+        hasActivePrimeSubscription(target) || canUseAvatarDecoration(target, avatarDecoration)
+          ? avatarDecoration
+          : "none";
       return target;
     });
 
     return NextResponse.json({ user: toPublicUser(updated) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save profile.";
-    const status = message === "User not found." ? 404 : 409;
+    const status =
+      message === "User not found."
+        ? 404
+        : message ===
+            "This avatar frame is available only with active Clore Prime or after individual purchase."
+          ? 403
+          : 409;
     return NextResponse.json({ error: message }, { status });
   }
 }

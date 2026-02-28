@@ -587,7 +587,10 @@ export function AuthGate() {
   };
 
   const handleProfileUpdate = async (
-    profile: Pick<AuthUser, "name" | "username" | "bio" | "birthday" | "avatarUrl" | "bannerUrl">
+    profile: Pick<
+      AuthUser,
+      "name" | "username" | "bio" | "birthday" | "avatarUrl" | "bannerUrl" | "avatarDecoration"
+    >
   ) => {
     const userId = currentUser?.id;
     if (!userId) {
@@ -617,6 +620,7 @@ export function AuthGate() {
           birthday: profile.birthday,
           avatarUrl: profile.avatarUrl,
           bannerUrl: profile.bannerUrl,
+          avatarDecoration: profile.avatarDecoration,
         }),
       });
       const payload = await parseAuthResponse(response);

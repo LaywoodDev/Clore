@@ -4,6 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { Pool } from "pg";
 
+import {
+  isAvatarDecorationId,
+  type AvatarDecorationId,
+} from "@/lib/shared/avatar-decorations";
 import { publishStoreUpdate } from "@/lib/server/realtime";
 
 export type StoredUser = {
@@ -33,6 +37,8 @@ export type StoredUser = {
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
+  avatarDecoration?: AvatarDecorationId;
+  purchasedAvatarDecorations?: AvatarDecorationId[];
   archiveLockEnabled?: boolean;
   archivePasscode?: string;
   primeStatus?: "inactive" | "pending" | "active" | "canceled";
@@ -69,6 +75,8 @@ export type PublicUser = {
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
+  avatarDecoration: AvatarDecorationId;
+  purchasedAvatarDecorations: AvatarDecorationId[];
   archiveLockEnabled: boolean;
   primeStatus: "inactive" | "pending" | "active" | "canceled";
   primeExpiresAt: number;
@@ -225,6 +233,8 @@ function createBotStoredUser(): StoredUser {
     lastSeenAt: now,
     avatarUrl: "",
     bannerUrl: "",
+    avatarDecoration: "none",
+    purchasedAvatarDecorations: [],
     archiveLockEnabled: false,
     archivePasscode: "",
     primeStatus: "inactive",
@@ -425,7 +435,58 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
+export function hasActivePrimeSubscription(
+  user: Pick<StoredUser, "primeStatus" | "primeExpiresAt">,
+  now = Date.now()
+): boolean {
+  const expiresAt =
+    typeof user.primeExpiresAt === "number" && Number.isFinite(user.primeExpiresAt)
+      ? Math.max(0, Math.trunc(user.primeExpiresAt))
+      : 0;
+  return user.primeStatus === "active" && expiresAt > now;
+}
+
+export function getPurchasedAvatarDecorations(
+  user: { purchasedAvatarDecorations?: unknown }
+): AvatarDecorationId[] {
+  const raw = Array.isArray(user.purchasedAvatarDecorations)
+    ? user.purchasedAvatarDecorations
+    : [];
+
+  const unique = new Set<AvatarDecorationId>();
+  for (const candidate of raw) {
+    if (typeof candidate === "string" && candidate !== "none" && isAvatarDecorationId(candidate)) {
+      unique.add(candidate);
+    }
+  }
+
+  return [...unique];
+}
+
+export function canUseAvatarDecoration(
+  user: Pick<
+    StoredUser,
+    "primeStatus" | "primeExpiresAt" | "purchasedAvatarDecorations"
+  >,
+  decoration: AvatarDecorationId,
+  now = Date.now()
+): boolean {
+  if (decoration === "none") {
+    return true;
+  }
+  if (hasActivePrimeSubscription(user, now)) {
+    return true;
+  }
+  return getPurchasedAvatarDecorations(user).includes(decoration);
+}
+
 export function toPublicUser(user: StoredUser): PublicUser {
+  const purchasedAvatarDecorations = getPurchasedAvatarDecorations(user);
+  const avatarDecoration =
+    typeof user.avatarDecoration === "string" && isAvatarDecorationId(user.avatarDecoration)
+      ? user.avatarDecoration
+      : "none";
+
   return {
     id: user.id,
     name: user.name,
@@ -452,6 +513,8 @@ export function toPublicUser(user: StoredUser): PublicUser {
     lastSeenAt: user.lastSeenAt,
     avatarUrl: user.avatarUrl,
     bannerUrl: user.bannerUrl,
+    avatarDecoration: canUseAvatarDecoration(user, avatarDecoration) ? avatarDecoration : "none",
+    purchasedAvatarDecorations,
     archiveLockEnabled: user.archiveLockEnabled === true,
     primeStatus:
       user.primeStatus === "pending" ||
@@ -911,6 +974,13 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       typeof user.avatarUrl === "string" ? user.avatarUrl.trim() : "";
     const bannerUrl =
       typeof user.bannerUrl === "string" ? user.bannerUrl.trim() : "";
+    const avatarDecoration =
+      typeof user.avatarDecoration === "string" && isAvatarDecorationId(user.avatarDecoration)
+        ? user.avatarDecoration
+        : "none";
+    const purchasedAvatarDecorations = getPurchasedAvatarDecorations({
+      purchasedAvatarDecorations: user.purchasedAvatarDecorations,
+    });
     const archiveLockEnabled = user.archiveLockEnabled === true;
     const archivePasscode =
       typeof user.archivePasscode === "string" ? user.archivePasscode : "";
@@ -960,6 +1030,8 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       lastSeenAt,
       avatarUrl,
       bannerUrl,
+      avatarDecoration,
+      purchasedAvatarDecorations,
       archiveLockEnabled,
       archivePasscode,
       primeStatus,

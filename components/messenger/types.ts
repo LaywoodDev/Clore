@@ -1,5 +1,8 @@
+import type { AvatarDecorationId } from "@/lib/shared/avatar-decorations";
+
 export type PrivacyVisibility = "everyone" | "selected" | "nobody";
 export type PrimeSubscriptionStatus = "inactive" | "pending" | "active" | "canceled";
+export type { AvatarDecorationId } from "@/lib/shared/avatar-decorations";
 
 export type AuthUser = {
   id: string;
@@ -27,6 +30,8 @@ export type AuthUser = {
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
+  avatarDecoration: AvatarDecorationId;
+  purchasedAvatarDecorations: AvatarDecorationId[];
   archiveLockEnabled: boolean;
   primeStatus: PrimeSubscriptionStatus;
   primeExpiresAt: number;

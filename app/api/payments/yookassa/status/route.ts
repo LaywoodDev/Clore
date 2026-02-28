@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { getStore } from "@/lib/server/store";
-import { getPrimePriceRub } from "@/lib/server/yookassa";
+import {
+  getAvatarDecorationPriceRub,
+  getPrimePriceRub,
+} from "@/lib/server/yookassa";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -37,6 +40,7 @@ export async function GET(request: Request) {
     autoRenew: user.primeAutoRenew === true,
     pendingPaymentId: typeof user.primePendingPaymentId === "string" ? user.primePendingPaymentId : "",
     priceRub: getPrimePriceRub(),
+    avatarDecorationPriceRub: getAvatarDecorationPriceRub(),
     isActive: effectiveStatus === "active" && expiresAt > now,
   });
 }

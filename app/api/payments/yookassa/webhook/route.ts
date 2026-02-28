@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { updateStore } from "@/lib/server/store";
+import { isAvatarDecorationId } from "@/lib/shared/avatar-decorations";
+import { getPurchasedAvatarDecorations, updateStore } from "@/lib/server/store";
 import {
+  AVATAR_DECORATION_PRODUCT_CODE,
   getYooKassaPayment,
   PRIME_PLAN_CODE,
   PRIME_SUBSCRIPTION_DURATION_MS,
@@ -26,7 +28,9 @@ export async function POST(request: Request) {
   try {
     const payment = await getYooKassaPayment(paymentId);
     const metadata = payment.metadata ?? {};
-    if (metadata.plan !== PRIME_PLAN_CODE) {
+    const isPrimePayment = metadata.plan === PRIME_PLAN_CODE;
+    const isAvatarDecorationPayment = metadata.product === AVATAR_DECORATION_PRODUCT_CODE;
+    if (!isPrimePayment && !isAvatarDecorationPayment) {
       return NextResponse.json({ ok: true, ignored: true });
     }
 
@@ -39,6 +43,28 @@ export async function POST(request: Request) {
       const user = store.users.find((candidate) => candidate.id === userId);
       if (!user) {
         throw new Error("User not found.");
+      }
+
+      if (isAvatarDecorationPayment) {
+        const avatarDecoration =
+          typeof metadata.avatarDecoration === "string" && isAvatarDecorationId(metadata.avatarDecoration)
+            ? metadata.avatarDecoration
+            : "none";
+        if (avatarDecoration === "none") {
+          throw new Error("YooKassa payment metadata is missing avatarDecoration.");
+        }
+
+        if (event === "payment.succeeded" && payment.status === "succeeded") {
+          const purchased = getPurchasedAvatarDecorations(user);
+          if (!purchased.includes(avatarDecoration)) {
+            user.purchasedAvatarDecorations = [...purchased, avatarDecoration];
+          } else {
+            user.purchasedAvatarDecorations = purchased;
+          }
+          return;
+        }
+
+        return;
       }
 
       if (event === "payment.succeeded" && payment.status === "succeeded") {

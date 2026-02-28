@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 const YOOKASSA_API_BASE = "https://api.yookassa.ru/v3";
 
 export const PRIME_PLAN_CODE = "clore_prime";
+export const AVATAR_DECORATION_PRODUCT_CODE = "avatar_decoration";
 export const PRIME_SUBSCRIPTION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type YooKassaPaymentStatus =
@@ -34,6 +35,12 @@ type CreateYooKassaPaymentArgs = {
   returnUrl?: string;
 };
 
+type CreateAvatarDecorationPaymentArgs = {
+  userId: string;
+  avatarDecoration: string;
+  returnUrl?: string;
+};
+
 type YooKassaRequestOptions = {
   method?: "GET" | "POST";
   path: string;
@@ -54,6 +61,16 @@ function getPrimePriceValue(): string {
   const normalized = raw.replace(",", ".");
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
     throw new Error("YOOKASSA_PRIME_PRICE_RUB must be a valid amount.");
+  }
+  const [whole, fraction = "00"] = normalized.split(".");
+  return `${whole}.${fraction.padEnd(2, "0").slice(0, 2)}`;
+}
+
+function getAvatarDecorationPriceValue(): string {
+  const raw = process.env.YOOKASSA_AVATAR_DECORATION_PRICE_RUB?.trim() ?? "49.90";
+  const normalized = raw.replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    throw new Error("YOOKASSA_AVATAR_DECORATION_PRICE_RUB must be a valid amount.");
   }
   const [whole, fraction = "00"] = normalized.split(".");
   return `${whole}.${fraction.padEnd(2, "0").slice(0, 2)}`;
@@ -107,6 +124,10 @@ export function getPrimePriceRub(): string {
   return getPrimePriceValue();
 }
 
+export function getAvatarDecorationPriceRub(): string {
+  return getAvatarDecorationPriceValue();
+}
+
 export function getYooKassaRecurringEnabled(): boolean {
   return isRecurringEnabled();
 }
@@ -114,6 +135,15 @@ export function getYooKassaRecurringEnabled(): boolean {
 export function getPrimeReturnUrl(): string {
   const appUrl = getRequiredEnv("APP_URL").replace(/\/+$/, "");
   return `${appUrl}/prime?payment=return`;
+}
+
+export function getAvatarDecorationReturnUrl(avatarDecoration: string): string {
+  const appUrl = getRequiredEnv("APP_URL").replace(/\/+$/, "");
+  const searchParams = new URLSearchParams({
+    payment: "return",
+    decoration: avatarDecoration,
+  });
+  return `${appUrl}/avatar-gallery?${searchParams.toString()}`;
 }
 
 export async function createPrimePayment({
@@ -148,6 +178,44 @@ export async function createPrimePayment({
   });
 
   return payment;
+}
+
+export async function createAvatarDecorationPayment({
+  userId,
+  avatarDecoration,
+  returnUrl,
+}: CreateAvatarDecorationPaymentArgs): Promise<YooKassaPayment> {
+  const normalizedUserId = userId.trim();
+  const normalizedAvatarDecoration = avatarDecoration.trim();
+  if (!normalizedUserId) {
+    throw new Error("Missing userId.");
+  }
+  if (!normalizedAvatarDecoration) {
+    throw new Error("Missing avatarDecoration.");
+  }
+
+  return yookassaRequest<YooKassaPayment>({
+    method: "POST",
+    path: "/payments",
+    body: {
+      amount: {
+        value: getAvatarDecorationPriceValue(),
+        currency: "RUB",
+      },
+      capture: true,
+      confirmation: {
+        type: "redirect",
+        return_url:
+          returnUrl?.trim() || getAvatarDecorationReturnUrl(normalizedAvatarDecoration),
+      },
+      description: `Clore avatar frame: ${normalizedAvatarDecoration}`,
+      metadata: {
+        product: AVATAR_DECORATION_PRODUCT_CODE,
+        userId: normalizedUserId,
+        avatarDecoration: normalizedAvatarDecoration,
+      },
+    },
+  });
 }
 
 export async function getYooKassaPayment(paymentId: string): Promise<YooKassaPayment> {

@@ -86,6 +86,8 @@ export async function POST(request: Request) {
         lastSeenAt: 0,
         avatarUrl: "",
         bannerUrl: "",
+        avatarDecoration: "none",
+        purchasedAvatarDecorations: [],
         archiveLockEnabled: false,
         archivePasscode: "",
         primeStatus: "inactive",

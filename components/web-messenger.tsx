@@ -117,7 +117,17 @@ import {
   type ModerationPanelSanction,
   type ModerationPanelSnapshot,
 } from "@/components/messenger/moderation-types";
-import { type AuthUser, type PrivacyVisibility } from "@/components/messenger/types";
+import {
+  type AuthUser,
+  type AvatarDecorationId,
+  type PrivacyVisibility,
+} from "@/components/messenger/types";
+import {
+  AVATAR_DECORATION_OPTIONS,
+  getAvatarDecorationFrameClassName,
+  getAvatarDecorationOverlayClassName,
+  getAvatarDecorationSurfaceClassName,
+} from "@/lib/shared/avatar-decorations";
 import { useRealtimeSync } from "@/components/messenger/use-realtime-sync";
 import { ADMIN_PANEL_USERNAME } from "@/lib/shared/admin";
 import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
@@ -499,6 +509,7 @@ type ProfileData = {
   birthday: string;
   avatarUrl: string;
   bannerUrl: string;
+  avatarDecoration: AvatarDecorationId;
 };
 
 type ProfileTabId = "media" | "audio" | "links";
@@ -543,6 +554,7 @@ type ArchivePullGestureState = {
 
 type AppLanguage = "en" | "ru";
 type UiTheme = "dark" | "light";
+type UiAccent = "violet" | "blue" | "emerald" | "rose" | "amber";
 type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
 type UiRadius = "sharp" | "normal" | "rounded";
@@ -1570,7 +1582,10 @@ type WebMessengerProps = {
   currentUser: AuthUser;
   onLogout: () => void;
   onProfileUpdate?: (
-    profile: Pick<AuthUser, "name" | "username" | "bio" | "birthday" | "avatarUrl" | "bannerUrl">
+    profile: Pick<
+      AuthUser,
+      "name" | "username" | "bio" | "birthday" | "avatarUrl" | "bannerUrl" | "avatarDecoration"
+    >
   ) => void | Promise<void>;
   onPrivacyUpdate?: (
     privacy: Pick<
@@ -1652,13 +1667,19 @@ const initialProfile: ProfileData = {
   birthday: "",
   avatarUrl: "",
   bannerUrl: "",
+  avatarDecoration: "none",
 };
+
+function getAvatarDecorationImageUrl(_decoration: AvatarDecorationId): string {
+  return "";
+}
 
 const LANGUAGE_STORAGE_KEY = "clore_app_language_v1";
 const PUSH_NOTIFICATIONS_STORAGE_KEY = "clore_push_notifications_v1";
 const MESSAGE_SOUND_STORAGE_KEY = "clore_message_sound_v1";
 const SEND_MESSAGE_SOUND_STORAGE_KEY = "clore_send_message_sound_v1";
 const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
+const UI_ACCENT_STORAGE_KEY = "clore_ui_accent_v1";
 const UI_DENSITY_STORAGE_KEY = "clore_ui_density_v1";
 const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
 const UI_RADIUS_STORAGE_KEY = "clore_ui_radius_v1";
@@ -1976,6 +1997,7 @@ const translations = {
     themeLight: "Light",
     accentColor: "Accent color",
     accentColorHint: "Choose the main color for buttons and highlights",
+    accentColorPrimeHint: "Available only with an active Clore Prime subscription",
     accentViolet: "Violet",
     accentBlue: "Blue",
     accentEmerald: "Emerald",
@@ -2349,6 +2371,7 @@ const translations = {
     themeHint: "\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043c\u0435\u0436\u0434\u0443 \u0442\u0435\u043c\u043d\u043e\u0439 \u0438 \u0441\u0432\u0435\u0442\u043b\u043e\u0439 \u0442\u0435\u043c\u043e\u0439",
     themeDark: "\u0422\u0435\u043c\u043d\u0430\u044f",
     themeLight: "\u0421\u0432\u0435\u0442\u043b\u0430\u044f",
+    accentColorPrimeHint: "\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u043e \u0442\u043e\u043b\u044c\u043a\u043e \u0441 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u043e\u0439 Clore Prime",
     accentColor: "Акцентный цвет",
     accentColorHint: "Выберите основной цвет кнопок и акцентов",
     accentViolet: "Фиолетовый",
@@ -4681,6 +4704,7 @@ export function WebMessenger({
     birthday: currentUser.birthday,
     avatarUrl: currentUser.avatarUrl,
     bannerUrl: currentUser.bannerUrl,
+    avatarDecoration: currentUser.avatarDecoration,
   }));
   const [profileDraft, setProfileDraft] = useState<ProfileData>(() => ({
     ...initialProfile,
@@ -4690,9 +4714,11 @@ export function WebMessenger({
     birthday: currentUser.birthday,
     avatarUrl: currentUser.avatarUrl,
     bannerUrl: currentUser.bannerUrl,
+    avatarDecoration: currentUser.avatarDecoration,
   }));
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isAvatarDecorationGalleryOpen, setIsAvatarDecorationGalleryOpen] = useState(false);
   const [birthdayDraft, setBirthdayDraft] = useState<BirthdayParts>(() =>
     parseBirthdayParts(currentUser.birthday)
   );
@@ -4731,6 +4757,18 @@ export function WebMessenger({
     }
     const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
     return stored === "dark" ? "dark" : "light";
+  });
+  const [uiAccent, setUiAccent] = useState<UiAccent>(() => {
+    if (typeof window === "undefined") {
+      return "violet";
+    }
+    const stored = window.localStorage.getItem(UI_ACCENT_STORAGE_KEY);
+    return stored === "blue" ||
+      stored === "emerald" ||
+      stored === "rose" ||
+      stored === "amber"
+      ? stored
+      : "violet";
   });
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(() => {
     if (typeof window === "undefined") {
@@ -4772,6 +4810,9 @@ export function WebMessenger({
         ? stored
         : "left";
     });
+  const hasPrimeAccentAccess =
+    currentUser.primeStatus === "active" && currentUser.primeExpiresAt > serverTimeMs;
+  const effectiveUiAccent: UiAccent = hasPrimeAccentAccess ? uiAccent : "violet";
   const [globalChatWallpaper, setGlobalChatWallpaper] = useState<ChatWallpaper>(() => {
     if (typeof window === "undefined") {
       return "none";
@@ -6900,6 +6941,9 @@ export function WebMessenger({
     window.localStorage.setItem(UI_THEME_STORAGE_KEY, uiTheme);
   }, [uiTheme]);
   useEffect(() => {
+    window.localStorage.setItem(UI_ACCENT_STORAGE_KEY, uiAccent);
+  }, [uiAccent]);
+  useEffect(() => {
     window.localStorage.setItem(UI_FONT_FAMILY_STORAGE_KEY, uiFontFamily);
   }, [uiFontFamily]);
 
@@ -6960,6 +7004,10 @@ export function WebMessenger({
     root.classList.toggle("dark", uiTheme === "dark");
   }, [uiTheme]);
   useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-clore-accent", effectiveUiAccent);
+  }, [effectiveUiAccent]);
+  useEffect(() => {
     setManuallyLoadedMediaIds(new Set());
   }, [activeChatId]);
 
@@ -7017,6 +7065,7 @@ export function WebMessenger({
       birthday: currentUser.birthday,
       avatarUrl: currentUser.avatarUrl,
       bannerUrl: currentUser.bannerUrl,
+      avatarDecoration: currentUser.avatarDecoration,
     }));
     setProfileDraft((prev) => ({
       ...prev,
@@ -7026,6 +7075,7 @@ export function WebMessenger({
       birthday: currentUser.birthday,
       avatarUrl: currentUser.avatarUrl,
       bannerUrl: currentUser.bannerUrl,
+      avatarDecoration: currentUser.avatarDecoration,
     }));
     setBirthdayDraft(parseBirthdayParts(currentUser.birthday));
   }, [
@@ -7035,6 +7085,7 @@ export function WebMessenger({
     currentUser.birthday,
     currentUser.avatarUrl,
     currentUser.bannerUrl,
+    currentUser.avatarDecoration,
   ]);
 
   const loadChatData = useCallback(async (options?: { forceFullSync?: boolean }) => {
@@ -11921,6 +11972,7 @@ export function WebMessenger({
         birthday: "",
         avatarUrl: selectedGroupChat.avatarUrl,
         bannerUrl: selectedGroupChat.bannerUrl,
+        avatarDecoration: "none",
       };
     }
 
@@ -11932,6 +11984,7 @@ export function WebMessenger({
       birthday: user?.birthday ?? "",
       avatarUrl: user?.avatarUrl ?? "",
       bannerUrl: user?.bannerUrl ?? "",
+      avatarDecoration: user?.avatarDecoration ?? "none",
     };
   }, [isOwnProfile, profile, selectedGroupChat, t, knownUsers, profileUserId]);
   const viewedUserId =
@@ -13428,11 +13481,41 @@ export function WebMessenger({
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("");
   }, [viewedProfile.name]);
+  const viewedAvatarDecoration = isGroupProfile ? "none" : viewedProfile.avatarDecoration;
+  const viewedAvatarDecorationFrameClassName = getAvatarDecorationFrameClassName(
+    viewedAvatarDecoration
+  );
+  const viewedAvatarDecorationOverlayClassName = getAvatarDecorationOverlayClassName(
+    viewedAvatarDecoration
+  );
 
   const startProfileEdit = () => {
-    setProfileDraft(profile);
+    setProfileDraft({
+      ...profile,
+      avatarDecoration: profile.avatarDecoration,
+    });
     setBirthdayDraft(parseBirthdayParts(profile.birthday));
     setIsEditingProfile(true);
+  };
+
+  const applyAvatarDecoration = async (avatarDecoration: AvatarDecorationId) => {
+    const nextProfile: ProfileData = {
+      ...profile,
+      avatarDecoration,
+    };
+
+    setProfile(nextProfile);
+    setProfileDraft(nextProfile);
+
+    await onProfileUpdate?.({
+      name: nextProfile.name,
+      username: nextProfile.username,
+      bio: nextProfile.bio,
+      birthday: nextProfile.birthday,
+      avatarUrl: nextProfile.avatarUrl,
+      bannerUrl: nextProfile.bannerUrl,
+      avatarDecoration: nextProfile.avatarDecoration,
+    });
   };
 
   const cancelProfileEdit = () => {
@@ -13449,6 +13532,7 @@ export function WebMessenger({
     const trimmedBirthday = profileDraft.birthday.trim();
     const trimmedAvatarUrl = profileDraft.avatarUrl.trim();
     const trimmedBannerUrl = profileDraft.bannerUrl.trim();
+    const nextAvatarDecoration = profileDraft.avatarDecoration;
 
     if (!trimmedName || !trimmedUsername) {
       return;
@@ -13462,6 +13546,7 @@ export function WebMessenger({
       birthday: trimmedBirthday,
       avatarUrl: trimmedAvatarUrl,
       bannerUrl: trimmedBannerUrl,
+      avatarDecoration: nextAvatarDecoration,
     });
     await onProfileUpdate?.({
       name: trimmedName,
@@ -13470,6 +13555,7 @@ export function WebMessenger({
       birthday: trimmedBirthday,
       avatarUrl: trimmedAvatarUrl,
       bannerUrl: trimmedBannerUrl,
+      avatarDecoration: nextAvatarDecoration,
     });
     setIsEditingProfile(false);
   };
@@ -13554,6 +13640,7 @@ export function WebMessenger({
           birthday: nextProfile.birthday,
           avatarUrl: nextProfile.avatarUrl,
           bannerUrl: nextProfile.bannerUrl,
+          avatarDecoration: nextProfile.avatarDecoration,
         });
         return;
       }
@@ -13618,6 +13705,7 @@ export function WebMessenger({
         birthday: nextProfile.birthday,
         avatarUrl: nextProfile.avatarUrl,
         bannerUrl: nextProfile.bannerUrl,
+        avatarDecoration: nextProfile.avatarDecoration,
       });
       setImagePickerTarget(null);
       return;
@@ -13740,6 +13828,24 @@ export function WebMessenger({
     }
     if (value === "light") {
       return t("themeLight");
+    }
+    return value;
+  };
+  const getAccentLabel = (value: string) => {
+    if (value === "violet") {
+      return t("accentViolet");
+    }
+    if (value === "blue") {
+      return t("accentBlue");
+    }
+    if (value === "emerald") {
+      return t("accentEmerald");
+    }
+    if (value === "rose") {
+      return t("accentRose");
+    }
+    if (value === "amber") {
+      return t("accentAmber");
     }
     return value;
   };
@@ -16509,38 +16615,49 @@ export function WebMessenger({
                 />
                 <div className="border-b border-zinc-700 px-4 pb-4 sm:px-6">
                   <div className="-mt-12 flex items-end sm:-mt-14">
-                    {viewedProfile.avatarUrl ? (
-                      <span
-                        className={`inline-flex size-24 shrink-0 rounded-full border-4 border-zinc-900 bg-zinc-800 bg-cover bg-center sm:size-28 ${
-                          canEditViewedProfileImages ||
-                          (!isOwnProfile && Boolean(viewedProfile.avatarUrl))
-                            ? "cursor-pointer"
-                            : ""
-                        }`}
-                        style={{ backgroundImage: `url(${viewedProfile.avatarUrl})` }}
-                        aria-label={`${viewedProfile.name} avatar`}
-                        onClick={() => {
-                          if (canEditViewedProfileImages) {
-                            openImagePickerDialog("avatar");
-                            return;
-                          }
-                          openImageViewer(PROFILE_AVATAR_VIEWER_IMAGE_ID, "profile-avatar");
-                        }}
-                      />
-                    ) : (
-                      <span
-                        className={`inline-flex size-24 items-center justify-center rounded-full border-4 border-zinc-900 bg-primary text-2xl font-semibold text-zinc-50 sm:size-28 ${
-                          canEditViewedProfileImages ? "cursor-pointer" : ""
-                        }`}
-                        onClick={() => {
-                          if (canEditViewedProfileImages) {
-                            openImagePickerDialog("avatar");
-                          }
-                        }}
-                      >
-                        {profileInitials || "LW"}
-                      </span>
-                    )}
+                    <span
+                      className={`relative inline-flex shrink-0 rounded-full ${
+                        viewedAvatarDecorationFrameClassName ||
+                        viewedAvatarDecorationOverlayClassName
+                      }`}
+                    >
+                      {viewedProfile.avatarUrl ? (
+                        <span
+                          className={`relative inline-flex size-24 shrink-0 rounded-full bg-zinc-800 bg-cover bg-center sm:size-28 ${getAvatarDecorationSurfaceClassName(
+                            viewedAvatarDecoration
+                          )} ${
+                            canEditViewedProfileImages ||
+                            (!isOwnProfile && Boolean(viewedProfile.avatarUrl))
+                              ? "cursor-pointer"
+                              : ""
+                          } ${viewedAvatarDecorationOverlayClassName}`}
+                          style={{ backgroundImage: `url(${viewedProfile.avatarUrl})` }}
+                          aria-label={`${viewedProfile.name} avatar`}
+                          onClick={() => {
+                            if (canEditViewedProfileImages) {
+                              openImagePickerDialog("avatar");
+                              return;
+                            }
+                            openImageViewer(PROFILE_AVATAR_VIEWER_IMAGE_ID, "profile-avatar");
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className={`relative inline-flex size-24 items-center justify-center rounded-full bg-primary text-2xl font-semibold text-zinc-50 sm:size-28 ${getAvatarDecorationSurfaceClassName(
+                            viewedAvatarDecoration
+                          )} ${
+                            canEditViewedProfileImages ? "cursor-pointer" : ""
+                          } ${viewedAvatarDecorationOverlayClassName}`}
+                          onClick={() => {
+                            if (canEditViewedProfileImages) {
+                              openImagePickerDialog("avatar");
+                            }
+                          }}
+                        >
+                          {profileInitials || "LW"}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div className="mt-3">
                     {isOwnProfile && isEditingProfile ? (
@@ -16690,7 +16807,8 @@ export function WebMessenger({
                           <p className="text-sm text-zinc-500">@{viewedProfile.username}</p>
                         ) : null}
                         {!isGroupProfile && isOwnProfile ? (
-                          <div className="mt-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
+                          <>
+                            <div className="mt-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
                             <div className="flex items-center gap-2">
                               <Button
                                 type="button"
@@ -16720,7 +16838,7 @@ export function WebMessenger({
                                 }}
                                 aria-label={t("clorePrime")}
                                 title={`${t("clorePrime")} • ${t("clorePrimePrice")}`}
-                                className="h-9 w-9 rounded-lg border border-amber-300/30 bg-amber-300/10 text-amber-100 hover:bg-amber-300/15 hover:text-amber-50 disabled:cursor-not-allowed disabled:opacity-100"
+                                className="h-9 w-9 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-100"
                               >
                                 <Crown className="size-4" />
                               </Button>
@@ -16742,6 +16860,20 @@ export function WebMessenger({
                                 >
                                   <DropdownMenuItem
                                     className={profileActionMenuItemClassName}
+                                    onSelect={() => {
+                                      if (typeof window !== "undefined") {
+                                        window.location.href = "/avatar-gallery";
+                                      }
+                                    }}
+                                  >
+                                    <Crown className="size-4" />
+                                    Avatar Gallery
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator
+                                    className={profileActionMenuSeparatorClassName}
+                                  />
+                                  <DropdownMenuItem
+                                    className={profileActionMenuItemClassName}
                                     onSelect={openShareContactDialog}
                                   >
                                     <ShareContactIcon className="size-4" />
@@ -16750,7 +16882,101 @@ export function WebMessenger({
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
-                          </div>
+                            </div>
+                            <div className="hidden">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-base font-semibold text-zinc-100">
+                                    Avatar Gallery
+                                  </p>
+                                  <p className="mt-1 text-xs text-zinc-400">
+                                    Отдельная галерея украшений. Выбор применяется сразу.
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() => setIsAvatarDecorationGalleryOpen(false)}
+                                  className="h-9 rounded-lg border border-zinc-600 bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-100"
+                                >
+                                  Close
+                                </Button>
+                              </div>
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                {AVATAR_DECORATION_OPTIONS.map((option) => {
+                                  const frameClassName = getAvatarDecorationFrameClassName(
+                                    option.id
+                                  );
+                                  const overlayClassName =
+                                    getAvatarDecorationOverlayClassName(option.id);
+                                  const imageDecorationUrl = getAvatarDecorationImageUrl(
+                                    option.id
+                                  );
+                                  const isSelected = profile.avatarDecoration === option.id;
+
+                                  return (
+                                    <button
+                                      key={option.id}
+                                      type="button"
+                                      onClick={() => void applyAvatarDecoration(option.id)}
+                                      className={`rounded-2xl border p-4 text-left transition ${
+                                        isSelected
+                                          ? "border-primary bg-primary/10"
+                                          : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-semibold text-zinc-100">
+                                          {option.label}
+                                        </span>
+                                        {option.id !== "none" ? (
+                                          <Crown className="size-4 text-amber-300" />
+                                        ) : null}
+                                      </div>
+                                      <div className="mt-4 flex justify-center">
+                                        <span
+                                          className={`relative inline-flex rounded-full ${frameClassName}`}
+                                        >
+                                          <span
+                                            className={`relative inline-flex size-20 items-center justify-center rounded-full bg-primary text-lg font-semibold text-zinc-50 ${getAvatarDecorationSurfaceClassName(
+                                              option.id
+                                            )} ${overlayClassName}`}
+                                          >
+                                            {profileInitials || "LW"}
+                                          </span>
+                                          {imageDecorationUrl ? (
+                                            <span
+                                              className="pointer-events-none absolute inset-[-10%] rounded-full bg-contain bg-center bg-no-repeat"
+                                              style={{
+                                                backgroundImage: `url('${imageDecorationUrl}')`,
+                                              }}
+                                              aria-hidden="true"
+                                            />
+                                          ) : null}
+                                        </span>
+                                      </div>
+                                      <p className="mt-4 text-xs text-zinc-400">
+                                        {option.id === "none"
+                                          ? "Clean avatar without effects."
+                                          : option.id === "golden-aura"
+                                            ? "Warm premium glow with a gold ring."
+                                            : option.id === "neon-ring"
+                                              ? "Bright cyber ring with neon colors."
+                                              : "Polished icy frame with crystal highlights."}
+                                      </p>
+                                      <div className="mt-3 text-xs font-medium">
+                                        {isSelected ? (
+                                          <span className="text-primary">Applied</span>
+                                        ) : (
+                                          <span className="text-zinc-500">Click to apply</span>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </>
                         ) : !isGroupProfile && !isOwnProfile && viewedUserId ? (
                           <div className="mt-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
                             <div className="flex items-center gap-2">
@@ -17792,6 +18018,71 @@ export function WebMessenger({
                                 </SelectContent>
                               </Select>
                             </div>
+                          </div>
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">
+                                {t("accentColor")}
+                              </p>
+                              <p className="mt-0.5 text-xs text-zinc-500">
+                                {hasPrimeAccentAccess
+                                  ? t("accentColorHint")
+                                  : t("accentColorPrimeHint")}
+                              </p>
+                            </div>
+                            {hasPrimeAccentAccess ? (
+                              <div className="w-full sm:w-[220px]">
+                                <Select
+                                  value={uiAccent}
+                                  onValueChange={(value) => {
+                                    if (
+                                      value === "violet" ||
+                                      value === "blue" ||
+                                      value === "emerald" ||
+                                      value === "rose" ||
+                                      value === "amber"
+                                    ) {
+                                      setUiAccent(value);
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                    <SelectValue className="text-zinc-100">
+                                      {(value) => getAccentLabel(value)}
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent className={unifiedSelectContentClassName}>
+                                    <SelectItem value="violet" className={unifiedSelectItemClassName}>
+                                      {t("accentViolet")}
+                                    </SelectItem>
+                                    <SelectItem value="blue" className={unifiedSelectItemClassName}>
+                                      {t("accentBlue")}
+                                    </SelectItem>
+                                    <SelectItem value="emerald" className={unifiedSelectItemClassName}>
+                                      {t("accentEmerald")}
+                                    </SelectItem>
+                                    <SelectItem value="rose" className={unifiedSelectItemClassName}>
+                                      {t("accentRose")}
+                                    </SelectItem>
+                                    <SelectItem value="amber" className={unifiedSelectItemClassName}>
+                                      {t("accentAmber")}
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : (
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  window.location.href = "/prime";
+                                }}
+                                className="h-9 w-full rounded-lg border border-amber-500/60 bg-amber-500/10 px-3 text-xs text-amber-100 hover:bg-amber-500/20 sm:w-auto"
+                              >
+                                {language === "ru"
+                                  ? "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0441 Clore Prime"
+                                  : "Unlock with Prime"}
+                              </Button>
+                            )}
                           </div>
                           <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                             <div className="min-w-0">
