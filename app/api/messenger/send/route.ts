@@ -264,6 +264,8 @@ export async function POST(request: Request) {
             createdAt: messageCreatedAt,
             scheduledAt,
             editedAt: 0,
+            pinnedAt: 0,
+            pinnedByUserId: "",
             savedBy: {
               [userId]: messageCreatedAt,
             },
@@ -357,6 +359,8 @@ export async function POST(request: Request) {
           createdAt: messageCreatedAt,
           scheduledAt,
           editedAt: 0,
+          pinnedAt: 0,
+          pinnedByUserId: "",
           savedBy: {},
         };
 
@@ -438,6 +442,8 @@ export async function POST(request: Request) {
           createdAt: now,
           scheduledAt: 0,
           editedAt: 0,
+          pinnedAt: 0,
+          pinnedByUserId: "",
           savedBy: {},
         };
 

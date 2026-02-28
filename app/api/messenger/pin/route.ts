@@ -35,6 +35,7 @@ export async function POST(request: Request) {
           (candidate) =>
             candidate.id !== chatId &&
             candidate.memberIds.includes(userId) &&
+            candidate.archivedBy?.[userId] !== true &&
             candidate.pinnedBy?.[userId] === true
         ).length;
         if (pinnedCount >= MAX_PINNED_CHATS) {

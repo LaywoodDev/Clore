@@ -263,9 +263,11 @@ const MAX_SEND_AI_USER_CONTEXT_MESSAGES = 5;
 const MAX_AUTOMATION_TARGETS = 8;
 const MAX_CONTEXT_MESSAGES_PER_CANDIDATE = 160;
 const MAX_SEND_AI_CONTACTS = 140;
+const ASSISTANT_CONTEXT_RECENT_LIMIT = 6;
+const ASSISTANT_CONTEXT_MATCH_LIMIT = 4;
 const FAVORITES_CHAT_ID = "__favorites__";
 const MIN_SCHEDULE_DELAY_MS = 5_000;
-const GROUP_TITLE_MIN_LENGTH = 3;
+const GROUP_TITLE_MIN_LENGTH = 1;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_DESCRIPTION_MAX_LENGTH = 280;
 const GROUP_MIN_OTHER_MEMBERS = 2;
@@ -4496,6 +4498,8 @@ async function executeSendIntents(
           createdAt,
           scheduledAt,
           editedAt: 0,
+          pinnedAt: 0,
+          pinnedByUserId: "",
           savedBy: {
             [userId]: createdAt,
           },
@@ -4583,6 +4587,8 @@ async function executeSendIntents(
           createdAt,
           scheduledAt,
           editedAt: 0,
+          pinnedAt: 0,
+          pinnedByUserId: "",
           savedBy: {},
         };
 
@@ -4630,6 +4636,8 @@ async function executeSendIntents(
         createdAt,
         scheduledAt,
         editedAt: 0,
+        pinnedAt: 0,
+        pinnedByUserId: "",
         savedBy: {},
       };
 
@@ -5836,7 +5844,360 @@ function extractChatCompletionText(payload: unknown): string {
   return "";
 }
 
+function formatAssistantUserLabel(
+  name: string,
+  username: string
+): string {
+  const normalizedName = name.trim();
+  const normalizedUsername = username.trim();
+  if (normalizedName && normalizedUsername) {
+    return `${normalizedName} (@${normalizedUsername})`;
+  }
+  if (normalizedName) {
+    return normalizedName;
+  }
+  if (normalizedUsername) {
+    return `@${normalizedUsername}`;
+  }
+  return "Unknown user";
+}
+
+function formatAssistantGroupLabel(
+  thread: StoredChatThread,
+  language: "en" | "ru"
+): string {
+  const label = formatThreadLabel(thread);
+  const meta: string[] = [];
+  if (thread.groupKind === "channel") {
+    meta.push(language === "ru" ? "канал" : "channel");
+  } else {
+    meta.push(language === "ru" ? "группа" : "group");
+  }
+  if (thread.groupAccess === "public") {
+    meta.push("public");
+  }
+  return meta.length > 0 ? `${label} [${meta.join(", ")}]` : label;
+}
+
+function rankRelevantContactsForAssistant(
+  store: StoreData,
+  userId: string,
+  prompt: string
+): string[] {
+  const candidates = buildRecipientCandidates(store, userId);
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const queryNormalized = normalizeForMatching(prompt);
+  const identityTokens = tokenizeForMatching(prompt);
+  const contextTokens = expandQueryTokens(identityTokens);
+  const usernameHints = extractUsernameHints(prompt);
+  const hasMessageReference = hasMessageReferenceHint(prompt);
+  const relationKeys = detectRelationKeys(identityTokens);
+
+  if (
+    !queryNormalized &&
+    identityTokens.length === 0 &&
+    usernameHints.length === 0
+  ) {
+    return [];
+  }
+
+  const scored = candidates
+    .map((candidate) => {
+      const identity = scoreRecipientIdentity(
+        candidate,
+        queryNormalized,
+        identityTokens,
+        usernameHints
+      );
+      const context = scoreRecipientContext(
+        candidate,
+        queryNormalized,
+        contextTokens,
+        relationKeys,
+        usernameHints,
+        hasMessageReference
+      );
+      return {
+        candidate,
+        identity,
+        context,
+      };
+    });
+
+  const preferIdentity = scored.some(
+    (item) =>
+      item.identity.exact ||
+      item.identity.tokenHits > 0 ||
+      item.identity.score >= 170
+  );
+
+  return scored
+    .map((item) => {
+      const totalScore = preferIdentity
+        ? item.identity.score + Math.min(item.context.score, 45)
+        : item.context.score + Math.min(item.identity.score, 35);
+      const hasStrongSignal =
+        item.identity.exact ||
+        item.identity.tokenHits > 0 ||
+        item.context.strongSignals > 0 ||
+        item.context.evidenceHits >= 3;
+
+      if (
+        !hasStrongSignal ||
+        totalScore < (preferIdentity ? 150 : 120)
+      ) {
+        return null;
+      }
+
+      return {
+        label: formatCandidateLabel(item.candidate),
+        score: totalScore,
+      };
+    })
+    .filter(
+      (item): item is { label: string; score: number } => item !== null
+    )
+    .sort((left, right) => right.score - left.score)
+    .map((item) => item.label)
+    .slice(0, ASSISTANT_CONTEXT_MATCH_LIMIT);
+}
+
+function rankRelevantGroupsForAssistant(
+  store: StoreData,
+  userId: string,
+  prompt: string,
+  language: "en" | "ru"
+): string[] {
+  const groups = store.threads.filter(
+    (thread) => thread.threadType === "group" && thread.memberIds.includes(userId)
+  );
+  if (groups.length === 0) {
+    return [];
+  }
+
+  const queryNormalized = normalizeForMatching(prompt);
+  const queryWithoutAt = queryNormalized.replace(/^@+/, "");
+  const queryTokens = expandQueryTokens(tokenizeForMatching(prompt));
+  const usernameHints = extractUsernameHints(prompt);
+
+  if (
+    !queryNormalized &&
+    queryTokens.length === 0 &&
+    usernameHints.length === 0
+  ) {
+    return [];
+  }
+
+  return groups
+    .map((thread) => {
+      const label = formatThreadLabel(thread);
+      const titleNormalized = normalizeForMatching(label);
+      const descriptionNormalized = normalizeForMatching(thread.description);
+      const groupUsername = normalizeForMatching(thread.groupUsername ?? "").replace(
+        /^@+/,
+        ""
+      );
+      const titleTokens = toStemSet(label);
+      const descriptionTokens = toStemSet(thread.description);
+
+      let score = 0;
+      let evidence = 0;
+
+      if (queryNormalized && titleNormalized === queryNormalized) {
+        score += 300;
+        evidence += 3;
+      }
+      if (queryNormalized.length >= 3 && titleNormalized.startsWith(queryNormalized)) {
+        score += 160;
+        evidence += 2;
+      }
+      if (
+        queryNormalized.length >= 4 &&
+        !titleNormalized.startsWith(queryNormalized) &&
+        titleNormalized.includes(queryNormalized)
+      ) {
+        score += 95;
+        evidence += 2;
+      }
+      if (queryNormalized.length >= 4 && descriptionNormalized.includes(queryNormalized)) {
+        score += 48;
+        evidence += 1;
+      }
+
+      if (queryWithoutAt && groupUsername === queryWithoutAt) {
+        score += 260;
+        evidence += 3;
+      } else if (
+        queryWithoutAt.length >= 2 &&
+        groupUsername.startsWith(queryWithoutAt)
+      ) {
+        score += 150;
+        evidence += 2;
+      }
+
+      for (const usernameHint of usernameHints) {
+        if (groupUsername === usernameHint) {
+          score += 240;
+          evidence += 3;
+          continue;
+        }
+        if (groupUsername.startsWith(usernameHint)) {
+          score += 145;
+          evidence += 2;
+          continue;
+        }
+        if (groupUsername.includes(usernameHint)) {
+          score += 80;
+          evidence += 1;
+        }
+      }
+
+      for (const token of queryTokens) {
+        if (titleTokens.has(token)) {
+          score += 58;
+          evidence += 2;
+        }
+        if (descriptionTokens.has(token)) {
+          score += 24;
+          evidence += 1;
+        }
+      }
+
+      if (score < 120 || evidence < 2) {
+        return null;
+      }
+
+      return {
+        label: formatAssistantGroupLabel(thread, language),
+        score,
+      };
+    })
+    .filter(
+      (item): item is { label: string; score: number } => item !== null
+    )
+    .sort((left, right) => right.score - left.score)
+    .map((item) => item.label)
+    .slice(0, ASSISTANT_CONTEXT_MATCH_LIMIT);
+}
+
+function buildAssistantRuntimeWorkspaceContext(
+  store: StoreData,
+  userId: string,
+  latestUserPrompt: string,
+  language: "en" | "ru"
+): string {
+  const currentUser = store.users.find((candidate) => candidate.id === userId);
+  if (!currentUser) {
+    return "";
+  }
+
+  const usersById = new Map(store.users.map((user) => [user.id, user]));
+  const userThreads = store.threads
+    .filter((thread) => thread.memberIds.includes(userId))
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+
+  const recentContacts = mergeUniqueLabels(
+    userThreads
+      .filter(
+        (thread) =>
+          thread.threadType === "direct" && thread.memberIds.length >= 2
+      )
+      .map((thread) => {
+        const peerId = thread.memberIds.find((memberId) => memberId !== userId);
+        if (!peerId) {
+          return "";
+        }
+        const peer = usersById.get(peerId);
+        if (!peer) {
+          return "";
+        }
+        return formatAssistantUserLabel(peer.name, peer.username);
+      })
+      .filter((label) => label.length > 0),
+    ASSISTANT_CONTEXT_RECENT_LIMIT
+  );
+  const recentGroups = mergeUniqueLabels(
+    userThreads
+      .filter((thread) => thread.threadType === "group")
+      .map((thread) => formatAssistantGroupLabel(thread, language))
+      .filter((label) => label.length > 0),
+    ASSISTANT_CONTEXT_RECENT_LIMIT
+  );
+  const relevantContacts = mergeUniqueLabels(
+    rankRelevantContactsForAssistant(store, userId, latestUserPrompt),
+    ASSISTANT_CONTEXT_MATCH_LIMIT
+  );
+  const relevantGroups = mergeUniqueLabels(
+    rankRelevantGroupsForAssistant(store, userId, latestUserPrompt, language),
+    ASSISTANT_CONTEXT_MATCH_LIMIT
+  );
+
+  const lines: string[] = [];
+  if (language === "ru") {
+    lines.push("Runtime workspace context (recent, local, not exhaustive):");
+    lines.push(
+      `Current user: ${formatAssistantUserLabel(
+        currentUser.name,
+        currentUser.username
+      )}`
+    );
+    lines.push(
+      `Recent direct contacts: ${
+        recentContacts.length > 0 ? recentContacts.join("; ") : "none"
+      }`
+    );
+    lines.push(
+      `Recent groups: ${
+        recentGroups.length > 0 ? recentGroups.join("; ") : "none"
+      }`
+    );
+    if (relevantContacts.length > 0) {
+      lines.push(`Prompt-relevant contacts: ${relevantContacts.join("; ")}`);
+    }
+    if (relevantGroups.length > 0) {
+      lines.push(`Prompt-relevant groups: ${relevantGroups.join("; ")}`);
+    }
+    lines.push(
+      "Use these local hints to ground names and chats. If this context is insufficient, say so and ask one short clarifying question instead of guessing."
+    );
+    return lines.join("\n");
+  }
+
+  lines.push("Runtime workspace context (recent, local, not exhaustive):");
+  lines.push(
+    `Current user: ${formatAssistantUserLabel(
+      currentUser.name,
+      currentUser.username
+    )}`
+  );
+  lines.push(
+    `Recent direct contacts: ${
+      recentContacts.length > 0 ? recentContacts.join("; ") : "none"
+    }`
+  );
+  lines.push(
+    `Recent groups: ${
+      recentGroups.length > 0 ? recentGroups.join("; ") : "none"
+    }`
+  );
+  if (relevantContacts.length > 0) {
+    lines.push(`Prompt-relevant contacts: ${relevantContacts.join("; ")}`);
+  }
+  if (relevantGroups.length > 0) {
+    lines.push(`Prompt-relevant groups: ${relevantGroups.join("; ")}`);
+  }
+  lines.push(
+    "Use these local hints to ground names and chats. If this context is insufficient, say so and ask one short clarifying question instead of guessing."
+  );
+  return lines.join("\n");
+}
+
 async function generateAssistantReply(
+  store: StoreData,
+  userId: string,
   language: "en" | "ru",
   messages: NormalizedAiChatMessage[],
   searchEnabled: boolean,
@@ -5846,12 +6207,18 @@ async function generateAssistantReply(
   const { apiKey, baseUrl, model: modelFromEnv } = getAiProviderConfig();
   const systemPrompt =
     language === "ru"
-      ? "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully. Prefer Russian unless the user writes in another language. Use the internal app knowledge context when relevant. Do not invent app APIs, permissions, or behaviors."
-      : "You are ChatGPT in a messenger app. Reply briefly, clearly, and helpfully. Use the internal app knowledge context when relevant. Do not invent app APIs, permissions, or behaviors.";
+      ? "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Prefer Russian unless the user writes in another language. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, or chats."
+      : "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, or chats.";
   const knowledgeContext = buildAiKnowledgeContext({
     query: latestUserPrompt,
     language,
   });
+  const runtimeWorkspaceContext = buildAssistantRuntimeWorkspaceContext(
+    store,
+    userId,
+    latestUserPrompt,
+    language
+  );
   const responseGuidance = buildAiResponseGuidance({
     query: latestUserPrompt,
     language,
@@ -5866,6 +6233,12 @@ async function generateAssistantReply(
     systemMessages.push({
       role: "system",
       content: responseGuidance,
+    });
+  }
+  if (runtimeWorkspaceContext) {
+    systemMessages.push({
+      role: "system",
+      content: runtimeWorkspaceContext,
     });
   }
   if (!agentEnabled) {
@@ -5903,7 +6276,7 @@ async function generateAssistantReply(
             ...systemMessages,
             ...messages,
           ],
-          max_tokens: 500,
+          max_tokens: 700,
         }),
         signal: controller.signal,
       });
@@ -6153,6 +6526,8 @@ export async function POST(request: Request) {
     }
 
     const reply = await generateAssistantReply(
+      store,
+      userId,
       language,
       messages,
       searchEnabled,

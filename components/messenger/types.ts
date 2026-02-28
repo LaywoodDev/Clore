@@ -26,4 +26,5 @@ export type AuthUser = {
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
+  archiveLockEnabled: boolean;
 };

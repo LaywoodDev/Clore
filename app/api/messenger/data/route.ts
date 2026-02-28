@@ -14,6 +14,7 @@ import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
 type VisibilityScope = "everyone" | "contacts" | "nobody";
 type NextVisibilityScope = "everyone" | "selected" | "nobody";
 const LAST_SEEN_HEARTBEAT_MS = 15_000;
+const ONLINE_STATUS_WINDOW_MS = 20_000;
 const FAVORITES_CHAT_ID = "__favorites__";
 
 function isPendingScheduledMessageForAuthor(
@@ -121,6 +122,9 @@ export async function GET(request: Request) {
         userId,
         isContact
       );
+      const isOnline =
+        publicUser.lastSeenAt > 0 &&
+        now - publicUser.lastSeenAt <= ONLINE_STATUS_WINDOW_MS;
       const canViewAvatar = canViewByVisibility(
         publicUser.avatarVisibility,
         publicUser.avatarAllowedUserIds,
@@ -153,11 +157,12 @@ export async function GET(request: Request) {
         callAllowedUserIds: isSelf ? publicUser.callAllowedUserIds : [],
         forwardAllowedUserIds: isSelf ? publicUser.forwardAllowedUserIds : [],
         groupAddAllowedUserIds: isSelf ? publicUser.groupAddAllowedUserIds : [],
-        showLastSeen: canViewLastSeen && publicUser.showLastSeen,
-        lastSeenAt: canViewLastSeen ? publicUser.lastSeenAt : 0,
+        showLastSeen: isOnline || (canViewLastSeen && publicUser.showLastSeen),
+        lastSeenAt: canViewLastSeen || isOnline ? publicUser.lastSeenAt : 0,
         avatarUrl: canViewAvatar ? publicUser.avatarUrl : "",
         bio: canViewBio ? publicUser.bio : "",
         birthday: canViewBirthday ? publicUser.birthday : "",
+        archiveLockEnabled: isSelf ? publicUser.archiveLockEnabled === true : false,
       };
     });
 
@@ -189,6 +194,13 @@ export async function GET(request: Request) {
       );
       if (message.createdAt > now && !isPendingForAuthor) {
         return false;
+      }
+      const hiddenChangedAt = Math.max(0, message.hiddenFor?.[userId] ?? 0);
+      if (hiddenChangedAt > 0) {
+        if (!hasSince) {
+          return false;
+        }
+        return hiddenChangedAt >= since;
       }
       if (!hasSince) {
         return true;

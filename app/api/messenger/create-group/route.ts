@@ -18,7 +18,7 @@ type CreateGroupPayload = {
   username?: string;
 };
 
-const GROUP_TITLE_MIN_LENGTH = 3;
+const GROUP_TITLE_MIN_LENGTH = 1;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_MAX_MEMBERS = 50;
 const GROUP_USERNAME_VALIDATION_MESSAGE =

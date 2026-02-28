@@ -9,7 +9,7 @@ type RenameGroupPayload = {
   description?: string;
 };
 
-const GROUP_TITLE_MIN_LENGTH = 3;
+const GROUP_TITLE_MIN_LENGTH = 1;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_DESCRIPTION_MAX_LENGTH = 280;
 

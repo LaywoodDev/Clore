@@ -19,7 +19,7 @@ type BuildResponseGuidanceOptions = {
   language: SupportedLanguage;
 };
 
-const KNOWLEDGE_BASE_VERSION = "2026-02-27-ui2";
+const KNOWLEDGE_BASE_VERSION = "2026-02-28-smart-retrieval";
 const DEFAULT_MAX_SECTIONS = 7;
 const DEFAULT_MAX_CHARS = 5_800;
 const DEFAULT_ENTRY_IDS = [
@@ -39,6 +39,35 @@ const UI_PRIORITY_ENTRY_IDS = [
   "ui-profile-screen",
   "ui-settings-map",
   "ui-ai-assistant-screen",
+  "ui-group-settings",
+] as const;
+const API_PRIORITY_ENTRY_IDS = [
+  "assistant-routing",
+  "ai-provider-config",
+  "auth-and-session",
+  "messenger-data-model",
+  "messenger-sync",
+  "messaging-features",
+] as const;
+const TROUBLESHOOTING_PRIORITY_ENTRY_IDS = [
+  "messenger-sync",
+  "privacy-and-permissions",
+  "auth-and-session",
+  "assistant-routing",
+  "ai-provider-config",
+  "messenger-data-model",
+] as const;
+const PERMISSION_PRIORITY_ENTRY_IDS = [
+  "privacy-and-permissions",
+  "ui-privacy-settings-details",
+  "ui-group-settings",
+  "admin-moderation",
+  "auth-and-session",
+] as const;
+const COMPARISON_PRIORITY_ENTRY_IDS = [
+  "ui-chat-personalization",
+  "ui-appearance-customization",
+  "ui-settings-map",
   "ui-group-settings",
 ] as const;
 
@@ -71,6 +100,36 @@ const STOP_WORDS = new Set([
   "what",
   "with",
   "you",
+  "\u0438",
+  "\u0432",
+  "\u0432\u043e",
+  "\u043d\u0430",
+  "\u043f\u043e",
+  "\u043a",
+  "\u043a\u043e",
+  "\u043e",
+  "\u043e\u0431",
+  "\u043a\u0430\u043a",
+  "\u0447\u0442\u043e",
+  "\u044d\u0442\u043e",
+  "\u044d\u0442\u043e\u0442",
+  "\u044d\u0442\u0430",
+  "\u044d\u0442\u0438",
+  "\u0438\u043b\u0438",
+  "\u0430",
+  "\u043d\u043e",
+  "\u043d\u0435",
+  "\u043c\u043d\u0435",
+  "\u043c\u0435\u043d\u044f",
+  "\u043c\u043e\u0439",
+  "\u043c\u043e\u044f",
+  "\u043c\u043e\u044e",
+  "\u043d\u0443\u0436\u043d\u043e",
+  "\u043c\u043e\u0436\u043d\u043e",
+  "\u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430",
+  "\u043f\u043e\u043a\u0430\u0436\u0438",
+  "\u0441\u043a\u0430\u0436\u0438",
+  "\u043e\u0431\u044a\u044f\u0441\u043d\u0438",
   "и",
   "в",
   "во",
@@ -517,11 +576,9 @@ const KNOWLEDGE_ENTRIES: KnowledgeEntry[] = [
 
 const ENTRY_INDEX = KNOWLEDGE_ENTRIES.map((entry) => ({
   entry,
-  tokens: new Set<string>([
-    ...tokenize(entry.title),
-    ...tokenize(entry.content),
-    ...entry.tags.flatMap((tag) => tokenize(tag)),
-  ]),
+  titleTokens: new Set<string>(tokenize(entry.title)),
+  contentTokens: new Set<string>(tokenize(entry.content)),
+  tagTokens: new Set<string>(entry.tags.flatMap((tag) => tokenize(tag))),
 }));
 
 function normalizeForSearch(value: string): string {
@@ -540,23 +597,28 @@ function tokenize(value: string): string[] {
     );
 }
 
-function scoreEntry(tokens: Set<string>, queryTokens: string[]): number {
-  let score = 0;
-  for (const token of queryTokens) {
-    if (tokens.has(token)) {
-      score += token.length >= 5 ? 3 : 2;
-      continue;
-    }
-    if (token.length >= 5) {
-      for (const candidate of tokens) {
-        if (candidate.startsWith(token) || token.startsWith(candidate)) {
-          score += 1;
-          break;
-        }
-      }
+function scoreTokenSet(
+  tokens: Set<string>,
+  token: string,
+  exactScore: number,
+  fuzzyScore: number
+): number {
+  if (tokens.has(token)) {
+    return exactScore;
+  }
+  if (token.length < 5) {
+    return 0;
+  }
+  for (const candidate of tokens) {
+    if (candidate.startsWith(token) || token.startsWith(candidate)) {
+      return fuzzyScore;
     }
   }
-  return score;
+  return 0;
+}
+
+function hasPriorityEntry(entry: KnowledgeEntry, ids: readonly string[]): boolean {
+  return ids.includes(entry.id);
 }
 
 function isUiEntry(entry: KnowledgeEntry): boolean {
@@ -634,21 +696,139 @@ function getUiDefaultEntries(maxSections: number): KnowledgeEntry[] {
 
 const UI_QUERY_REGEX =
   /(ui|interface|screen|layout|flow|menu|button|tab|profile|settings?|home|chat|message|group|channel|call|search|wallpaper|personalization|privacy|appearance|assistant|agent|onboarding|\u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441|\u044d\u043a\u0440\u0430\u043d|\u043c\u0435\u043d\u044e|\u043a\u043d\u043e\u043f\u043a|\u0432\u043a\u043b\u0430\u0434\u043a|\u043f\u0440\u043e\u0444\u0438\u043b|\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a|\u0447\u0430\u0442|\u0441\u043e\u043e\u0431\u0449\u0435\u043d|\u0433\u0440\u0443\u043f\u043f|\u043a\u0430\u043d\u0430\u043b|\u0437\u0432\u043e\u043d|\u043f\u043e\u0438\u0441\u043a|\u043e\u0431\u043e\u0438|\u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u0438\u0437|\u043f\u0440\u0438\u0432\u0430\u0442\u043d|\u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d|\u0430\u0441\u0441\u0438\u0441\u0442\u0435\u043d\u0442|\u0430\u0433\u0435\u043d\u0442)/iu;
+const API_QUERY_REGEX =
+  /(api|endpoint|route|request|response|payload|server|backend|auth|session|model|provider|env|database|store|sse|\u0430\u043f\u0438|\u044d\u043d\u0434\u043f\u043e\u0438\u043d\u0442|\u043c\u0430\u0440\u0448\u0440\u0443\u0442|\u0437\u0430\u043f\u0440\u043e\u0441|\u043e\u0442\u0432\u0435\u0442|\u0441\u0435\u0440\u0432\u0435\u0440|\u0431\u044d\u043a\u0435\u043d\u0434|\u0430\u0432\u0442\u043e\u0440\u0438\u0437|\u0441\u0435\u0441\u0441\u0438|\u0431\u0430\u0437\u0430|\u0445\u0440\u0430\u043d\u0438\u043b\u0438\u0449|\u0445\u0440\u0430\u043d\u0435\u043d|\u0441\u0438\u043d\u0445\u0440\u043e\u043d|\u0441\u043e\u0431\u044b\u0442)/iu;
+const TROUBLESHOOTING_QUERY_REGEX =
+  /(bug|issue|problem|broken|fail|fails|failed|error|errors|not working|stuck|missing|why|can't|cannot|debug|fix|\u0431\u0430\u0433|\u043e\u0448\u0438\u0431|\u043f\u0440\u043e\u0431\u043b\u0435\u043c|\u043d\u0435 \u0440\u0430\u0431\u043e\u0442|\u043d\u0435\u0442|\u043d\u0435 \u043c\u043e\u0433\u0443|\u043d\u0435 \u043f\u043e\u043b\u0443\u0447|\u043f\u043e\u0447\u0435\u043c\u0443|\u0437\u0430\u0432\u0438\u0441|\u0441\u043b\u043e\u043c\u0430\u043b|\u043f\u043e\u0447\u0438\u043d\u0438|\u0438\u0441\u043f\u0440\u0430\u0432)/iu;
+const PERMISSION_QUERY_REGEX =
+  /(permission|permissions|privacy|allow|allowed|deny|denied|blocked|block|ban|banned|mute|muted|who can|visibility|\u043f\u0440\u0430\u0432|\u0434\u043e\u0441\u0442\u0443\u043f|\u0440\u0430\u0437\u0440\u0435\u0448|\u0437\u0430\u043f\u0440\u0435\u0442|\u0431\u043b\u043e\u043a|\u0431\u0430\u043d|\u043c\u0443\u0442|\u0432\u0438\u0434\u0438\u043c\u043e\u0441\u0442|\u043a\u0442\u043e \u043c\u043e\u0436\u0435\u0442)/iu;
+const COMPARISON_QUERY_REGEX =
+  /(difference|compare|comparison|vs\b|better|best|which|choose|trade-?off|\u0440\u0430\u0437\u043d\u0438\u0446|\u0441\u0440\u0430\u0432\u043d|\u043b\u0443\u0447\u0448\u0435|\u0447\u0442\u043e \u0432\u044b\u0431\u0440\u0430\u0442\u044c|\u043a\u0430\u043a\u043e\u0439 \u043b\u0443\u0447\u0448\u0435)/iu;
 
 function isUiQuery(query: string): boolean {
   return UI_QUERY_REGEX.test(query);
+}
+
+function isApiQuery(query: string): boolean {
+  return API_QUERY_REGEX.test(query);
+}
+
+function isTroubleshootingQuery(query: string): boolean {
+  return TROUBLESHOOTING_QUERY_REGEX.test(query);
+}
+
+function isPermissionQuery(query: string): boolean {
+  return PERMISSION_QUERY_REGEX.test(query);
+}
+
+function isComparisonQuery(query: string): boolean {
+  return COMPARISON_QUERY_REGEX.test(query);
+}
+
+function scoreEntry(
+  index: (typeof ENTRY_INDEX)[number],
+  queryTokens: string[],
+  query: string
+): number {
+  let score = 0;
+  for (const token of queryTokens) {
+    score += scoreTokenSet(
+      index.tagTokens,
+      token,
+      token.length >= 5 ? 5 : 4,
+      2
+    );
+    score += scoreTokenSet(
+      index.titleTokens,
+      token,
+      token.length >= 5 ? 4 : 3,
+      2
+    );
+    score += scoreTokenSet(
+      index.contentTokens,
+      token,
+      token.length >= 5 ? 2 : 1,
+      1
+    );
+  }
+
+  if (isUiQuery(query) && isUiEntry(index.entry)) {
+    score += 3;
+  }
+  if (isApiQuery(query) && hasPriorityEntry(index.entry, API_PRIORITY_ENTRY_IDS)) {
+    score += 4;
+  }
+  if (
+    isTroubleshootingQuery(query) &&
+    hasPriorityEntry(index.entry, TROUBLESHOOTING_PRIORITY_ENTRY_IDS)
+  ) {
+    score += 4;
+  }
+  if (
+    isPermissionQuery(query) &&
+    hasPriorityEntry(index.entry, PERMISSION_PRIORITY_ENTRY_IDS)
+  ) {
+    score += 4;
+  }
+  if (
+    isComparisonQuery(query) &&
+    hasPriorityEntry(index.entry, COMPARISON_PRIORITY_ENTRY_IDS)
+  ) {
+    score += 2;
+  }
+
+  return score;
+}
+
+function getCategoryDefaultEntries(query: string, maxSections: number): KnowledgeEntry[] {
+  const defaults: KnowledgeEntry[] = [];
+
+  if (isUiQuery(query)) {
+    appendUniqueEntries(defaults, getEntriesByIds(UI_PRIORITY_ENTRY_IDS), maxSections);
+  }
+  if (isApiQuery(query)) {
+    appendUniqueEntries(defaults, getEntriesByIds(API_PRIORITY_ENTRY_IDS), maxSections);
+  }
+  if (isTroubleshootingQuery(query)) {
+    appendUniqueEntries(
+      defaults,
+      getEntriesByIds(TROUBLESHOOTING_PRIORITY_ENTRY_IDS),
+      maxSections
+    );
+  }
+  if (isPermissionQuery(query)) {
+    appendUniqueEntries(
+      defaults,
+      getEntriesByIds(PERMISSION_PRIORITY_ENTRY_IDS),
+      maxSections
+    );
+  }
+  if (isComparisonQuery(query)) {
+    appendUniqueEntries(
+      defaults,
+      getEntriesByIds(COMPARISON_PRIORITY_ENTRY_IDS),
+      maxSections
+    );
+  }
+  if (defaults.length < maxSections) {
+    appendUniqueEntries(defaults, getDefaultEntries(maxSections), maxSections);
+  }
+
+  return defaults;
 }
 
 function selectEntries(query: string, maxSections: number): KnowledgeEntry[] {
   const queryTokens = tokenize(query).slice(0, 20);
   const uiQuery = isUiQuery(query);
   if (queryTokens.length === 0) {
-    return uiQuery ? getUiDefaultEntries(maxSections) : getDefaultEntries(maxSections);
+    return uiQuery
+      ? getUiDefaultEntries(maxSections)
+      : getCategoryDefaultEntries(query, maxSections);
   }
 
-  const ranked = ENTRY_INDEX.map(({ entry, tokens }) => ({
-    entry,
-    score: scoreEntry(tokens, queryTokens),
+  const ranked = ENTRY_INDEX.map((index) => ({
+    entry: index.entry,
+    score: scoreEntry(index, queryTokens, query),
   }))
     .filter((item) => item.score > 0)
     .sort((left, right) => {
@@ -662,7 +842,9 @@ function selectEntries(query: string, maxSections: number): KnowledgeEntry[] {
     });
 
   if (ranked.length === 0) {
-    return uiQuery ? getUiDefaultEntries(maxSections) : getDefaultEntries(maxSections);
+    return uiQuery
+      ? getUiDefaultEntries(maxSections)
+      : getCategoryDefaultEntries(query, maxSections);
   }
 
   if (uiQuery) {
@@ -693,7 +875,7 @@ function selectEntries(query: string, maxSections: number): KnowledgeEntry[] {
     return selected;
   }
 
-  for (const fallback of getDefaultEntries(maxSections)) {
+  for (const fallback of getCategoryDefaultEntries(query, maxSections)) {
     if (selected.some((entry) => entry.id === fallback.id)) {
       continue;
     }
@@ -707,6 +889,9 @@ function selectEntries(query: string, maxSections: number): KnowledgeEntry[] {
 
 function buildIntro(language: SupportedLanguage): string {
   if (language === "ru") {
+    return "Use this internal Clore knowledge base when the user asks about the Clore UI, app behavior, features, permissions, or API details. If the user writes in Russian, keep the final answer in Russian.";
+  }
+  if (false) {
     return "Используйте эту внутреннюю базу знаний Clore, когда пользователь спрашивает про интерфейс, поведение приложения, функции или API.";
   }
   return "Use this internal Clore app knowledge base when user asks about product behavior or app internals.";
@@ -715,11 +900,144 @@ function buildIntro(language: SupportedLanguage): string {
 const UI_HOW_TO_QUERY_REGEX =
   /(how|steps?|where|click|tap|open|delete|remove|wallpaper|settings?|guide|tutorial|walkthrough|как|пошаг|шаги?|где|нажм|открой|удал|обои|настройк|оформлен|инструкц|объясни|чат)/iu;
 
+const UI_HOW_TO_QUERY_RU_FIX_REGEX =
+  /(how|steps?|where|click|tap|open|delete|remove|wallpaper|settings?|guide|tutorial|walkthrough|\u043a\u0430\u043a|\u043f\u043e\u0448\u0430\u0433|\u0448\u0430\u0433\u0438?|\u0433\u0434\u0435|\u043d\u0430\u0436\u043c|\u043e\u0442\u043a\u0440\u043e\u0439|\u0443\u0434\u0430\u043b|\u043e\u0431\u043e\u0438|\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a|\u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d|\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446|\u043e\u0431\u044a\u044f\u0441\u043d\u0438|\u0447\u0430\u0442|\u043f\u0443\u0442\u044c)/iu;
+
+function buildAdaptiveBudget(query: string): {
+  maxSections: number;
+  maxChars: number;
+} {
+  const queryTokens = tokenize(query);
+  let maxSections = DEFAULT_MAX_SECTIONS;
+  let maxChars = DEFAULT_MAX_CHARS;
+
+  if (queryTokens.length >= 8) {
+    maxSections += 1;
+    maxChars += 500;
+  }
+  if (queryTokens.length >= 14) {
+    maxSections += 1;
+    maxChars += 900;
+  }
+  if (UI_HOW_TO_QUERY_RU_FIX_REGEX.test(query)) {
+    maxSections += 1;
+    maxChars += 500;
+  }
+  if (isApiQuery(query) || isTroubleshootingQuery(query)) {
+    maxSections += 2;
+    maxChars += 1_300;
+  }
+  if (isPermissionQuery(query) || isComparisonQuery(query)) {
+    maxSections += 1;
+    maxChars += 700;
+  }
+
+  return {
+    maxSections,
+    maxChars,
+  };
+}
+
 export function buildAiResponseGuidance({
   query,
   language,
 }: BuildResponseGuidanceOptions): string {
-  const isUiHowTo = UI_HOW_TO_QUERY_REGEX.test(query);
+  const isUiHowToFixed =
+    UI_HOW_TO_QUERY_REGEX.test(query) || UI_HOW_TO_QUERY_RU_FIX_REGEX.test(query);
+  const uiQueryFixed = isUiQuery(query);
+  const apiQuery = isApiQuery(query);
+  const troubleshootingQuery = isTroubleshootingQuery(query);
+  const permissionQuery = isPermissionQuery(query);
+  const comparisonQuery = isComparisonQuery(query);
+
+  if (language === "ru") {
+    if (isUiHowToFixed) {
+      return [
+        "For Clore interface how-to questions, answer in Russian using explicit numbered steps.",
+        "Use exact in-app labels when known.",
+        "If desktop and mobile flows differ, provide both paths.",
+        "Call out confirmation dialogs, warnings, and undo windows when applicable.",
+        "If the exact path is not fully known, state what is confirmed and ask one short clarifying question instead of guessing.",
+      ].join(" ");
+    }
+    if (troubleshootingQuery) {
+      return [
+        "For Clore troubleshooting questions, answer in Russian with this order: likely cause, what to check, what to do next.",
+        "Separate confirmed facts from inference.",
+        "Do not claim a fix is available unless the internal knowledge confirms it.",
+      ].join(" ");
+    }
+    if (apiQuery) {
+      return [
+        "For Clore API or backend questions, answer in Russian and stay grounded in the documented routes and server behavior.",
+        "Prefer concrete route names, store entities, and server modules when known.",
+        "If something is not confirmed, say that it is not confirmed.",
+      ].join(" ");
+    }
+    if (permissionQuery) {
+      return [
+        "For Clore permission or privacy questions, answer in Russian with clear can/cannot rules and the conditions that change the outcome.",
+        "Mention visibility modes, block relationships, sanctions, or role constraints when relevant.",
+      ].join(" ");
+    }
+    if (comparisonQuery) {
+      return [
+        "For Clore comparison questions, answer in Russian with a compact compare-and-recommend format.",
+        "State the difference first, then when to choose each option.",
+      ].join(" ");
+    }
+    if (uiQueryFixed) {
+      return "For Clore interface questions from Russian-speaking users, keep the final answer in Russian, rely on the internal UI knowledge, use exact screen and control labels, and do not invent missing buttons, menus, or flows.";
+    }
+    return "For Clore questions from Russian-speaking users, keep the final answer in Russian, rely only on confirmed internal knowledge, and ask one short clarifying question when the request is ambiguous instead of inventing details.";
+  }
+
+  if (isUiHowToFixed) {
+    return [
+      "For Clore interface how-to questions, answer in explicit numbered steps.",
+      "Use exact in-app labels when known.",
+      "If desktop and mobile flows differ, provide both.",
+      "Call out confirmation dialogs and undo windows when applicable.",
+      "If the exact path is uncertain, say what is confirmed and ask one short clarifying question.",
+    ].join(" ");
+  }
+
+  if (troubleshootingQuery) {
+    return [
+      "For Clore troubleshooting questions, answer in this order: likely cause, what to check, and what to do next.",
+      "Separate confirmed facts from inference.",
+      "Do not invent fixes or hidden settings.",
+    ].join(" ");
+  }
+
+  if (apiQuery) {
+    return [
+      "For Clore API or backend questions, stay grounded in the documented routes, store behavior, and server modules.",
+      "Prefer concrete route names and entities when known.",
+      "If something is not confirmed, say so.",
+    ].join(" ");
+  }
+
+  if (permissionQuery) {
+    return [
+      "For Clore permission or privacy questions, answer with explicit can/cannot rules and the conditions that affect them.",
+      "Mention visibility modes, block relationships, sanctions, or role constraints when relevant.",
+    ].join(" ");
+  }
+
+  if (comparisonQuery) {
+    return [
+      "For Clore comparison questions, use a compact compare-and-recommend format.",
+      "State the difference first, then when to choose each option.",
+    ].join(" ");
+  }
+
+  if (uiQueryFixed) {
+    return "For Clore interface questions, rely on the internal UI knowledge, use exact screen and control labels, and do not invent missing buttons, menus, or flows.";
+  }
+
+  return "For Clore app questions, rely on internal knowledge context, avoid inventing UI controls or API behavior, and ask a short clarifying question instead of guessing when the request is ambiguous.";
+  /* const isUiHowTo = UI_HOW_TO_QUERY_REGEX.test(query);
   const uiQuery = isUiQuery(query);
 
   if (language === "ru") {
@@ -749,6 +1067,7 @@ export function buildAiResponseGuidance({
   }
 
   return "For Clore app questions, rely on internal knowledge context and avoid inventing UI controls or API behavior.";
+  */
 }
 
 export function buildAiKnowledgeContext({
@@ -757,8 +1076,23 @@ export function buildAiKnowledgeContext({
   maxSections = DEFAULT_MAX_SECTIONS,
   maxChars = DEFAULT_MAX_CHARS,
 }: BuildKnowledgeContextOptions): string {
-  const normalizedMaxSections = Math.max(1, Math.min(8, Math.trunc(maxSections)));
-  const normalizedMaxChars = Math.max(500, Math.min(8_000, Math.trunc(maxChars)));
+  const adaptiveBudget = buildAdaptiveBudget(query);
+  const usesDefaultSections = maxSections === DEFAULT_MAX_SECTIONS;
+  const usesDefaultChars = maxChars === DEFAULT_MAX_CHARS;
+  const normalizedMaxSections = Math.max(
+    1,
+    Math.min(
+      10,
+      Math.trunc(usesDefaultSections ? adaptiveBudget.maxSections : maxSections)
+    )
+  );
+  const normalizedMaxChars = Math.max(
+    500,
+    Math.min(
+      10_500,
+      Math.trunc(usesDefaultChars ? adaptiveBudget.maxChars : maxChars)
+    )
+  );
   const selectedEntries = selectEntries(query, normalizedMaxSections);
 
   const header = `${buildIntro(language)}\nKnowledge version: ${KNOWLEDGE_BASE_VERSION}`;

@@ -37,16 +37,20 @@ export async function POST(request: Request) {
       if (!targetMessage) {
         throw new Error("Message not found.");
       }
-      if (targetMessage.authorId !== userId) {
-        throw new Error("Only message author can delete this message.");
+      if (targetMessage.authorId === userId) {
+        store.messages = store.messages.filter((message) => message.id !== messageId);
+
+        const lastChatMessage = store.messages
+          .filter((message) => message.chatId === chatId)
+          .sort((a, b) => b.createdAt - a.createdAt)[0];
+        thread.updatedAt = lastChatMessage?.createdAt ?? thread.createdAt;
+        return;
       }
 
-      store.messages = store.messages.filter((message) => message.id !== messageId);
-
-      const lastChatMessage = store.messages
-        .filter((message) => message.chatId === chatId)
-        .sort((a, b) => b.createdAt - a.createdAt)[0];
-      thread.updatedAt = lastChatMessage?.createdAt ?? thread.createdAt;
+      targetMessage.hiddenFor = {
+        ...targetMessage.hiddenFor,
+        [userId]: Date.now(),
+      };
     });
 
     return NextResponse.json({ ok: true });
@@ -58,9 +62,7 @@ export async function POST(request: Request) {
         ? 404
         : message === "Message not found."
           ? 404
-          : message === "Only message author can delete this message."
-            ? 403
-            : 400;
+          : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

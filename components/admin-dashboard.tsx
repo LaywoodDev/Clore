@@ -167,6 +167,9 @@ function parseDurationHours(value: string): number | null {
 }
 
 export function AdminDashboard() {
+  const [activeSection, setActiveSection] = useState<
+    "overview" | "users" | "threads" | "calls"
+  >("overview");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState("");
@@ -265,7 +268,7 @@ export function AdminDashboard() {
         }
 
         if (normalizeUsername(authPayload.user.username) !== ADMIN_PANEL_USERNAME) {
-          throw new Error("Only @laywood can access this page.");
+          throw new Error("You can't access this page.");
         }
 
         if (cancelled) {
@@ -549,10 +552,22 @@ export function AdminDashboard() {
           (member) =>
             member.name.toLowerCase().includes(query) ||
             member.username.toLowerCase().includes(query)
-        )
+      )
     );
   }, [snapshot, threadQuery]);
 
+  const selectedUser = useMemo(
+    () => snapshot?.users.find((user) => user.id === selectedUserId) ?? null,
+    [selectedUserId, snapshot]
+  );
+  const blockedUsersCount = useMemo(
+    () => snapshot?.users.filter((user) => user.bannedUntil > 0).length ?? 0,
+    [snapshot]
+  );
+  const mutedUsersCount = useMemo(
+    () => snapshot?.users.filter((user) => user.mutedUntil > 0).length ?? 0,
+    [snapshot]
+  );
   const selectedThread = snapshot?.selectedThread ?? null;
 
   if (isLoading) {
@@ -589,6 +604,99 @@ export function AdminDashboard() {
 
   return (
     <main className="min-h-[100dvh] bg-zinc-950 px-4 pb-6 pt-5 text-zinc-100 sm:px-6">
+      <div className="mx-auto flex max-w-[1800px] flex-col gap-4 xl:flex-row">
+        <aside className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/85 p-4 xl:sticky xl:top-5 xl:w-72 xl:self-start">
+          <div className="border-b border-zinc-800 pb-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-zinc-500">Clore Admin</p>
+            <h1 className="mt-2 text-xl font-semibold text-zinc-100">Control Center</h1>
+            <p className="mt-1 text-sm text-zinc-400">@{currentUser.username}</p>
+            <p className="mt-2 text-xs text-zinc-500">
+              Updated: {formatDateTime(snapshot.generatedAt)}
+            </p>
+          </div>
+
+          <nav className="mt-4 space-y-2">
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
+                activeSection === "overview"
+                  ? "bg-zinc-100 text-zinc-950"
+                  : "bg-zinc-950/60 text-zinc-300 hover:bg-zinc-800"
+              }`}
+              onClick={() => setActiveSection("overview")}
+            >
+              <span>Overview</span>
+              <span className="text-xs">{snapshot.users.length + snapshot.threads.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
+                activeSection === "users"
+                  ? "bg-zinc-100 text-zinc-950"
+                  : "bg-zinc-950/60 text-zinc-300 hover:bg-zinc-800"
+              }`}
+              onClick={() => setActiveSection("users")}
+            >
+              <span>Users</span>
+              <span className="text-xs">{snapshot.users.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
+                activeSection === "threads"
+                  ? "bg-zinc-100 text-zinc-950"
+                  : "bg-zinc-950/60 text-zinc-300 hover:bg-zinc-800"
+              }`}
+              onClick={() => setActiveSection("threads")}
+            >
+              <span>Threads</span>
+              <span className="text-xs">{snapshot.threads.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
+                activeSection === "calls"
+                  ? "bg-zinc-100 text-zinc-950"
+                  : "bg-zinc-950/60 text-zinc-300 hover:bg-zinc-800"
+              }`}
+              onClick={() => setActiveSection("calls")}
+            >
+              <span>Calls</span>
+              <span className="text-xs">{snapshot.activeCalls.length}</span>
+            </button>
+          </nav>
+
+          <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+            <p className="text-xs text-zinc-500">Current focus</p>
+            <p className="mt-1 text-sm text-zinc-300">
+              {selectedUser
+                ? `@${selectedUser.username}`
+                : selectedThread
+                  ? selectedThread.title
+                  : "Nothing selected"}
+            </p>
+            <p className="mt-2 text-xs text-zinc-500">
+              {blockedUsersCount} blocked, {mutedUsersCount} muted
+            </p>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <Button type="button" className="w-full" onClick={() => openMessenger()}>
+              Back to Messenger
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => void loadSnapshot(currentUser.id, selectedThreadId)}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh"}
+            </Button>
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
@@ -597,22 +705,7 @@ export function AdminDashboard() {
           <h1 className="text-lg font-semibold text-zinc-100">
             Admin Dashboard (@{currentUser.username})
           </h1>
-          <p className="text-xs text-zinc-400">
-            Updated: {formatDateTime(snapshot.generatedAt)}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" onClick={() => openMessenger()}>
-            Back to Messenger
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void loadSnapshot(currentUser.id, selectedThreadId)}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? "Refreshing..." : "Refresh"}
-          </Button>
+          <p className="text-xs text-zinc-400">Section: {activeSection}</p>
         </div>
       </header>
 
@@ -627,28 +720,70 @@ export function AdminDashboard() {
         </div>
       ) : null}
 
-      <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section
+        className={`mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 ${
+          activeSection === "overview" ? "" : "hidden"
+        }`}
+      >
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-400">Users</p>
           <p className="mt-1 text-2xl font-semibold">{snapshot.users.length}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {blockedUsersCount} blocked, {mutedUsersCount} muted
+          </p>
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-400">Threads</p>
           <p className="mt-1 text-2xl font-semibold">{snapshot.threads.length}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {filteredThreads.length} visible by filter
+          </p>
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-400">Likely Active Calls</p>
           <p className="mt-1 text-2xl font-semibold">{snapshot.activeCalls.length}</p>
-        </div>
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
-          <p className="text-xs text-zinc-400">Selected Thread Messages</p>
-          <p className="mt-1 text-2xl font-semibold">
-            {selectedThread ? selectedThread.messages.length : 0}
-          </p>
+          <p className="mt-1 text-xs text-zinc-500">Signals from the last 2 minutes</p>
         </div>
       </section>
 
-      <section className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+      <section
+        className={`mb-4 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] ${
+          activeSection === "overview" ? "" : "hidden"
+        }`}
+      >
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+          <h2 className="text-sm font-semibold text-zinc-100">Workflow</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            Open a user card to manage profile and moderation actions. Use the thread
+            list to inspect conversations, then read the selected chat in the right panel.
+          </p>
+        </div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+          <h2 className="text-sm font-semibold text-zinc-100">Quick Actions</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            Open the dedicated section from the sidebar to manage users, inspect threads,
+            or monitor calls without duplicated summary blocks.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" onClick={() => setActiveSection("users")}>
+              Go to Users
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setActiveSection("threads")}
+            >
+              Go to Threads
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section
+        className={`mb-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 ${
+          activeSection === "overview" || activeSection === "calls" ? "" : "hidden"
+        }`}
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-100">Likely Active Calls</h2>
           <span className="text-xs text-zinc-400">{snapshot.activeCalls.length}</span>
@@ -693,8 +828,16 @@ export function AdminDashboard() {
         )}
       </section>
 
-      <section className="grid min-h-[70dvh] gap-4 xl:grid-cols-[300px_minmax(420px,1fr)_minmax(420px,1fr)]">
-        <div className="flex min-h-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+      <section
+        className={`grid min-h-[70dvh] gap-4 ${
+          activeSection === "users" || activeSection === "threads" ? "" : "hidden"
+        }`}
+      >
+        <div
+          className={`flex min-h-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 ${
+            activeSection === "users" ? "" : "hidden"
+          }`}
+        >
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-100">Users</h2>
             <span className="text-xs text-zinc-400">{filteredUsers.length}</span>
@@ -702,11 +845,11 @@ export function AdminDashboard() {
           <Input
             value={userQuery}
             onChange={(event) => setUserQuery(event.target.value)}
-            placeholder="Search users"
+            placeholder="Search by name, username, or email"
             className="mb-3 h-9 border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500"
           />
           <p className="mb-2 text-xs text-zinc-400">
-            Нажмите «Управление», чтобы открыть действия пользователя.
+            Use "Manage" to reveal profile and moderation controls.
           </p>
           <div className="min-h-0 space-y-2 overflow-y-auto">
             {filteredUsers.map((user) => {
@@ -743,6 +886,7 @@ export function AdminDashboard() {
                         variant="outline"
                         className="h-8 border-zinc-500 bg-zinc-800 px-3 text-sm text-zinc-100 hover:bg-zinc-700"
                         onClick={() => {
+                          setActiveSection("users");
                           if (isSelectedUser) {
                             if (isEditing) {
                               cancelEditingUser();
@@ -753,7 +897,7 @@ export function AdminDashboard() {
                           setSelectedUserId(user.id);
                         }}
                       >
-                        {isSelectedUser ? "Скрыть" : "Управление"}
+                        {isSelectedUser ? "Hide" : "Manage"}
                       </Button>
                       {isSelectedUser ? (
                         <Button
@@ -765,7 +909,7 @@ export function AdminDashboard() {
                             isEditing ? cancelEditingUser() : startEditingUser(user)
                           }
                         >
-                          {isEditing ? "Закрыть" : "Редакт."}
+                          {isEditing ? "Close form" : "Edit"}
                         </Button>
                       ) : null}
                     </div>
@@ -790,7 +934,7 @@ export function AdminDashboard() {
                   {isSelectedUser && form ? (
                     <div className="mt-3 space-y-2 rounded-md border border-zinc-600 bg-zinc-800/80 p-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">
-                        Редактирование профиля
+                        Edit profile
                       </p>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <Input
@@ -857,7 +1001,7 @@ export function AdminDashboard() {
                           disabled={isPending || isProtectedAdmin}
                           onClick={() => void saveEditedUser(user.id)}
                         >
-                          Сохранить
+                          Save changes
                         </Button>
                         <Button
                           type="button"
@@ -866,7 +1010,7 @@ export function AdminDashboard() {
                           disabled={isPending || isProtectedAdmin}
                           onClick={cancelEditingUser}
                         >
-                          Отмена
+                          Cancel
                         </Button>
                       </div>
                     </div>
@@ -875,7 +1019,7 @@ export function AdminDashboard() {
                   {isSelectedUser ? (
                     <div className="mt-3 rounded-md border border-zinc-600 bg-zinc-800/80 p-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">
-                        Действия с аккаунтом
+                        Account actions
                       </p>
                       <div className="mt-2 grid gap-2 sm:grid-cols-[140px_1fr]">
                         <Input
@@ -886,7 +1030,7 @@ export function AdminDashboard() {
                           onChange={(event) =>
                             updateBlockDuration(user.id, event.target.value)
                           }
-                          placeholder="Часы"
+                          placeholder="Hours"
                           className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                         />
                         <Input
@@ -894,7 +1038,7 @@ export function AdminDashboard() {
                           onChange={(event) =>
                             updateBlockReason(user.id, event.target.value)
                           }
-                          placeholder="Причина (необязательно)"
+                          placeholder="Reason (optional)"
                           className="h-9 border-zinc-500 bg-zinc-950/90 text-sm text-zinc-100 placeholder:text-zinc-400"
                         />
                       </div>
@@ -905,7 +1049,7 @@ export function AdminDashboard() {
                           disabled={isPending || isProtectedAdmin}
                           onClick={() => void setUserBlocked(user, true)}
                         >
-                          {isBlocked ? "Продлить блок" : "Заблокировать"}
+                          {isBlocked ? "Extend block" : "Block user"}
                         </Button>
                         {isBlocked ? (
                           <Button
@@ -915,7 +1059,7 @@ export function AdminDashboard() {
                             disabled={isPending || isProtectedAdmin}
                             onClick={() => void setUserBlocked(user, false)}
                           >
-                            Разблокировать
+                            Unblock
                           </Button>
                         ) : null}
                         <Button
@@ -924,16 +1068,16 @@ export function AdminDashboard() {
                           disabled={isPending || isProtectedAdmin}
                           onClick={() => void deleteUser(user)}
                         >
-                          Удалить аккаунт
+                          Delete account
                         </Button>
                       </div>
                       {isProtectedAdmin ? (
                         <p className="mt-2 text-sm text-zinc-300">
-                          Защищенный админ аккаунт.
+                          This admin account is protected from destructive actions.
                         </p>
                       ) : null}
                       {isPending ? (
-                        <p className="mt-2 text-sm text-zinc-200">Выполняю действие...</p>
+                        <p className="mt-2 text-sm text-zinc-200">Applying action...</p>
                       ) : null}
                     </div>
                   ) : null}
@@ -943,7 +1087,11 @@ export function AdminDashboard() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+        <div
+          className={`flex min-h-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 ${
+            activeSection === "threads" ? "" : "hidden"
+          }`}
+        >
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-100">Threads</h2>
             <span className="text-xs text-zinc-400">{filteredThreads.length}</span>
@@ -951,7 +1099,7 @@ export function AdminDashboard() {
           <Input
             value={threadQuery}
             onChange={(event) => setThreadQuery(event.target.value)}
-            placeholder="Search threads"
+            placeholder="Search by title or member"
             className="mb-3 h-9 border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500"
           />
           <div className="min-h-0 space-y-2 overflow-y-auto">
@@ -969,7 +1117,10 @@ export function AdminDashboard() {
                   <button
                     type="button"
                     className="w-full text-left"
-                    onClick={() => void loadSnapshot(currentUser.id, thread.id)}
+                    onClick={() => {
+                      setActiveSection("threads");
+                      void loadSnapshot(currentUser.id, thread.id);
+                    }}
                   >
                     <p className="text-sm font-medium text-zinc-100">{thread.title}</p>
                     <p className="mt-1 text-xs text-zinc-400">
@@ -1018,7 +1169,11 @@ export function AdminDashboard() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+        <div
+          className={`flex min-h-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 ${
+            activeSection === "threads" ? "" : "hidden"
+          }`}
+        >
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-100">
               {selectedThread ? `Messages: ${selectedThread.title}` : "Messages"}
@@ -1029,7 +1184,7 @@ export function AdminDashboard() {
           </div>
           {!selectedThread ? (
             <p className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-400">
-              Select a thread to inspect conversation history.
+              Select a thread in the center column to inspect conversation history.
             </p>
           ) : (
             <div className="min-h-0 space-y-2 overflow-y-auto">
@@ -1058,6 +1213,8 @@ export function AdminDashboard() {
           )}
         </div>
       </section>
+        </div>
+      </div>
     </main>
   );
 }

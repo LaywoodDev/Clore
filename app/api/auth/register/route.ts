@@ -86,6 +86,8 @@ export async function POST(request: Request) {
         lastSeenAt: 0,
         avatarUrl: "",
         bannerUrl: "",
+        archiveLockEnabled: false,
+        archivePasscode: "",
       };
       store.users.push(created);
       return created;

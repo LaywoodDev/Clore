@@ -33,6 +33,8 @@ export type StoredUser = {
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
+  archiveLockEnabled?: boolean;
+  archivePasscode?: string;
 };
 
 export type PublicUser = {
@@ -61,6 +63,7 @@ export type PublicUser = {
   lastSeenAt: number;
   avatarUrl: string;
   bannerUrl: string;
+  archiveLockEnabled: boolean;
 };
 
 export type GroupRole = "owner" | "admin" | "member";
@@ -88,6 +91,7 @@ export type StoredChatThread = {
   readBy: Record<string, number>;
   pinnedBy: Record<string, boolean>;
   mutedBy: Record<string, boolean>;
+  archivedBy?: Record<string, boolean>;
   typingBy: Record<string, number>;
   groupRoles: Record<string, GroupRole>;
 };
@@ -102,7 +106,10 @@ export type StoredChatMessage = {
   createdAt: number;
   scheduledAt: number;
   editedAt: number;
+  pinnedAt: number;
+  pinnedByUserId: string;
   savedBy: Record<string, number>;
+  hiddenFor?: Record<string, number>;
 };
 
 export type StoredChatAttachment = {
@@ -209,6 +216,8 @@ function createBotStoredUser(): StoredUser {
     lastSeenAt: now,
     avatarUrl: "",
     bannerUrl: "",
+    archiveLockEnabled: false,
+    archivePasscode: "",
   };
 }
 
@@ -428,6 +437,7 @@ export function toPublicUser(user: StoredUser): PublicUser {
     lastSeenAt: user.lastSeenAt,
     avatarUrl: user.avatarUrl,
     bannerUrl: user.bannerUrl,
+    archiveLockEnabled: user.archiveLockEnabled === true,
   };
 }
 
@@ -588,6 +598,35 @@ export function canUserPostInThread(
 
   const role = getGroupRole(thread, userId);
   return role === "owner" || role === "admin";
+}
+
+export function canUserPinMessagesInThread(
+  thread: StoredChatThread,
+  userId: string
+): boolean {
+  if (!thread.memberIds.includes(userId)) {
+    return false;
+  }
+  if (thread.threadType !== "group") {
+    return true;
+  }
+  if (thread.groupKind !== "channel") {
+    return true;
+  }
+
+  return getGroupRole(thread, userId) === "owner";
+}
+
+export function getPinnedMessageLimitForThread(
+  thread: StoredChatThread
+): number | null {
+  if (thread.threadType !== "group") {
+    return 10;
+  }
+  if (thread.groupKind === "channel") {
+    return null;
+  }
+  return 20;
 }
 
 export function canRemoveGroupMember(
@@ -846,6 +885,9 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       typeof user.avatarUrl === "string" ? user.avatarUrl.trim() : "";
     const bannerUrl =
       typeof user.bannerUrl === "string" ? user.bannerUrl.trim() : "";
+    const archiveLockEnabled = user.archiveLockEnabled === true;
+    const archivePasscode =
+      typeof user.archivePasscode === "string" ? user.archivePasscode : "";
 
     if (!id || !name || !username || !password) {
       continue;
@@ -878,6 +920,8 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       lastSeenAt,
       avatarUrl,
       bannerUrl,
+      archiveLockEnabled,
+      archivePasscode,
     });
   }
 
@@ -990,11 +1034,13 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
     const readByRaw = asRecord(thread.readBy) ?? {};
     const pinnedByRaw = asRecord(thread.pinnedBy) ?? {};
     const mutedByRaw = asRecord(thread.mutedBy) ?? {};
+    const archivedByRaw = asRecord(thread.archivedBy) ?? {};
     const typingByRaw = asRecord(thread.typingBy) ?? {};
     const groupRolesRaw = asRecord(thread.groupRoles) ?? {};
     const readBy: Record<string, number> = {};
     const pinnedBy: Record<string, boolean> = {};
     const mutedBy: Record<string, boolean> = {};
+    const archivedBy: Record<string, boolean> = {};
     const typingBy: Record<string, number> = {};
     const groupRoles: Record<string, GroupRole> = {};
 
@@ -1012,6 +1058,12 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
         continue;
       }
       mutedBy[memberId] = muted === true;
+    }
+    for (const [memberId, archived] of Object.entries(archivedByRaw)) {
+      if (!uniqueMemberIds.includes(memberId)) {
+        continue;
+      }
+      archivedBy[memberId] = archived === true;
     }
     for (const [memberId, typingAt] of Object.entries(typingByRaw)) {
       if (!uniqueMemberIds.includes(memberId)) {
@@ -1071,6 +1123,7 @@ function sanitizeThreads(rawThreads: unknown): StoredChatThread[] {
       readBy,
       pinnedBy,
       mutedBy,
+      archivedBy,
       typingBy,
       groupRoles,
     });
@@ -1142,6 +1195,11 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
         ? Math.trunc(scheduledAtRaw)
         : 0;
     const editedAt = normalizeNumber(message.editedAt, 0);
+    const pinnedAt = Math.max(0, normalizeNumber(message.pinnedAt, 0));
+    const pinnedByUserId =
+      pinnedAt > 0 && typeof message.pinnedByUserId === "string"
+        ? message.pinnedByUserId.trim()
+        : "";
     const savedByRaw = asRecord(message.savedBy) ?? {};
     const savedBy: Record<string, number> = {};
     for (const [userId, rawSavedAt] of Object.entries(savedByRaw)) {
@@ -1159,6 +1217,17 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
         savedBy[normalizedUserId] = -createdAt;
       }
     }
+    const hiddenForRaw = asRecord(message.hiddenFor) ?? {};
+    const hiddenFor: Record<string, number> = {};
+    for (const [userId, rawHiddenAt] of Object.entries(hiddenForRaw)) {
+      const normalizedUserId = userId.trim();
+      if (!normalizedUserId) {
+        continue;
+      }
+      if (typeof rawHiddenAt === "number" && Number.isFinite(rawHiddenAt)) {
+        hiddenFor[normalizedUserId] = Math.max(0, Math.trunc(rawHiddenAt));
+      }
+    }
 
     if (!id || !chatId || !authorId || (!text.trim() && attachments.length === 0)) {
       continue;
@@ -1174,7 +1243,10 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
       createdAt,
       scheduledAt,
       editedAt,
+      pinnedAt,
+      pinnedByUserId,
       savedBy,
+      hiddenFor,
     });
   }
 

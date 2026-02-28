@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import {
+  Archive,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
@@ -360,6 +361,7 @@ type StoredChatThread = {
   readBy: Record<string, number>;
   pinnedBy: Record<string, boolean>;
   mutedBy: Record<string, boolean>;
+  archivedBy?: Record<string, boolean>;
   typingBy: Record<string, number>;
   groupRoles: Record<string, GroupRole>;
 };
@@ -374,7 +376,10 @@ type StoredChatMessage = {
   createdAt: number;
   scheduledAt: number;
   editedAt: number;
+  pinnedAt: number;
+  pinnedByUserId: string;
   savedBy: Record<string, number>;
+  hiddenFor?: Record<string, number>;
 };
 
 type StoredChatAttachment = {
@@ -418,6 +423,8 @@ type RenderMessage = {
   groupReadByCount: number;
   groupReadByLabels: string[];
   isEdited: boolean;
+  isPinned: boolean;
+  pinnedAt: number;
   reply: {
     targetMessageId: string;
     authorLabel: string;
@@ -475,6 +482,7 @@ type ChatListItem = {
   updatedAt: number;
   isPinned: boolean;
   isMuted: boolean;
+  isArchived?: boolean;
 };
 
 type SidebarItem = {
@@ -525,11 +533,19 @@ type MobileBackSwipeGestureState = {
   startY: number;
 };
 
+type ArchivePullGestureState = {
+  tracking: boolean;
+  activated: boolean;
+  startX: number;
+  startY: number;
+};
+
 type AppLanguage = "en" | "ru";
 type UiTheme = "dark" | "light";
 type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
 type UiRadius = "sharp" | "normal" | "rounded";
+type UiPinnedMessageAlignment = "left" | "center" | "right";
 type UiFontFamily = "default" | "modern" | "readable" | "comfortaa";
 type ChatWallpaper =
   | "none"
@@ -591,6 +607,14 @@ type AiPrivacyCommandTarget = {
   };
   aliases: string[];
 };
+type AiSettingsContextTarget =
+  | "language"
+  | "theme"
+  | "density"
+  | "radius"
+  | "fontSize"
+  | "fontFamily"
+  | "wallpaper";
 
 const AI_ALL_PRIVACY_ALIASES = [
   "all privacy settings",
@@ -626,6 +650,25 @@ const AI_SETTINGS_ACTION_ALIASES = [
   "отключи",
   "поставь",
   "обнови",
+];
+const AI_SETTINGS_QUESTION_PREFIXES = [
+  "how",
+  "how do i",
+  "how can i",
+  "where",
+  "where do i",
+  "what is",
+  "why",
+  "which",
+  "guide me",
+  "tell me how",
+  "РєР°Рє",
+  "РєР°Рє РјРЅРµ",
+  "РіРґРµ",
+  "РїРѕС‡РµРјСѓ",
+  "Р·Р°С‡РµРј",
+  "РєР°РєРёРј РѕР±СЂР°Р·РѕРј",
+  "РїРѕРґСЃРєР°Р¶Рё РєР°Рє",
 ];
 const AI_PUSH_NOTIFICATIONS_ALIASES = [
   "push notifications",
@@ -956,20 +999,344 @@ function normalizeAiCommandText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function tokenizeAiCommandText(value: string): string[] {
+  return normalizeAiCommandText(value)
+    .replace(/[^\p{L}\p{N}@_-]+/gu, " ")
+    .split(" ")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function getAiTypoTolerance(value: string): number {
+  if (value.length <= 4) {
+    return 0;
+  }
+  if (value.length <= 7) {
+    return 1;
+  }
+  return 2;
+}
+
+function getAiLevenshteinDistance(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+  if (!left.length) {
+    return right.length;
+  }
+  if (!right.length) {
+    return left.length;
+  }
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = new Array<number>(right.length + 1).fill(0);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    current[0] = leftIndex;
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + cost
+      );
+    }
+
+    for (let rightIndex = 0; rightIndex <= right.length; rightIndex += 1) {
+      previous[rightIndex] = current[rightIndex];
+    }
+  }
+
+  return previous[right.length];
+}
+
+function getAiTokenStem(value: string): string {
+  const normalizedValue = value.trim().toLowerCase().replace(/^@+/, "");
+  if (!normalizedValue) {
+    return "";
+  }
+
+  const russianEndings = [
+    "иями",
+    "ями",
+    "ами",
+    "ого",
+    "его",
+    "ому",
+    "ему",
+    "ыми",
+    "ими",
+    "ить",
+    "ать",
+    "ять",
+    "еть",
+    "уть",
+    "ая",
+    "яя",
+    "ую",
+    "юю",
+    "ой",
+    "ей",
+    "ый",
+    "ий",
+    "ое",
+    "ее",
+    "ые",
+    "ие",
+    "ых",
+    "их",
+    "ом",
+    "ем",
+    "ым",
+    "им",
+    "ов",
+    "ев",
+    "ам",
+    "ям",
+    "ах",
+    "ях",
+    "ти",
+    "ть",
+    "а",
+    "я",
+    "у",
+    "ю",
+    "е",
+    "о",
+    "ы",
+    "и",
+    "й",
+    "ь",
+  ];
+  const englishEndings = ["ing", "ed", "es", "s"];
+  const endings = /[а-яё]/i.test(normalizedValue) ? russianEndings : englishEndings;
+
+  for (const ending of endings) {
+    if (
+      normalizedValue.length > ending.length + 2 &&
+      normalizedValue.endsWith(ending)
+    ) {
+      return normalizedValue.slice(0, -ending.length);
+    }
+  }
+
+  return normalizedValue;
+}
+
+function areAiTokensClose(left: string, right: string): boolean {
+  const normalizedLeft = left.trim().toLowerCase().replace(/^@+/, "");
+  const normalizedRight = right.trim().toLowerCase().replace(/^@+/, "");
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+  if (normalizedLeft === normalizedRight) {
+    return true;
+  }
+
+  const leftStem = getAiTokenStem(normalizedLeft);
+  const rightStem = getAiTokenStem(normalizedRight);
+  if (leftStem.length >= 3 && leftStem === rightStem) {
+    return true;
+  }
+  if (leftStem.length >= 4 && rightStem.length >= 4) {
+    const stemTolerance = Math.min(
+      1,
+      Math.max(getAiTypoTolerance(leftStem), getAiTypoTolerance(rightStem))
+    );
+    if (
+      Math.abs(leftStem.length - rightStem.length) <= stemTolerance &&
+      getAiLevenshteinDistance(leftStem, rightStem) <= stemTolerance
+    ) {
+      return true;
+    }
+  }
+
+  const tolerance = Math.max(
+    getAiTypoTolerance(normalizedLeft),
+    getAiTypoTolerance(normalizedRight)
+  );
+  if (tolerance === 0) {
+    return false;
+  }
+  if (Math.abs(normalizedLeft.length - normalizedRight.length) > tolerance) {
+    return false;
+  }
+
+  return getAiLevenshteinDistance(normalizedLeft, normalizedRight) <= tolerance;
+}
+
+function getAiAliasMatchScore(value: string, alias: string): number {
+  const normalizedValue = normalizeAiCommandText(value);
+  const normalizedAlias = normalizeAiCommandText(alias);
+
+  if (!normalizedAlias) {
+    return 0;
+  }
+  if (normalizedValue.includes(normalizedAlias)) {
+    return normalizedAlias.split(" ").filter(Boolean).length + 10;
+  }
+
+  const valueTokens = tokenizeAiCommandText(normalizedValue);
+  const aliasTokens = tokenizeAiCommandText(normalizedAlias);
+  if (aliasTokens.length === 0 || aliasTokens.length > valueTokens.length) {
+    return 0;
+  }
+
+  let bestScore = 0;
+  for (let startIndex = 0; startIndex <= valueTokens.length - aliasTokens.length; startIndex += 1) {
+    let matchedTokens = 0;
+
+    for (let offset = 0; offset < aliasTokens.length; offset += 1) {
+      if (!areAiTokensClose(valueTokens[startIndex + offset], aliasTokens[offset])) {
+        matchedTokens = 0;
+        break;
+      }
+      matchedTokens += 1;
+    }
+
+    if (matchedTokens > bestScore) {
+      bestScore = matchedTokens;
+    }
+  }
+
+  return bestScore;
+}
+
 function includesAiCommandAlias(value: string, aliases: string[]): boolean {
-  return aliases.some((alias) => value.includes(alias));
+  return aliases.some((alias) => getAiAliasMatchScore(value, alias) > 0);
+}
+
+function startsWithAiCommandAlias(value: string, aliases: string[]): boolean {
+  const normalizedValue = normalizeAiCommandText(value);
+
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeAiCommandText(alias);
+    if (!normalizedAlias) {
+      return false;
+    }
+    if (normalizedValue.startsWith(normalizedAlias)) {
+      return true;
+    }
+
+    const valueTokens = tokenizeAiCommandText(normalizedValue);
+    const aliasTokens = tokenizeAiCommandText(normalizedAlias);
+    if (aliasTokens.length === 0 || aliasTokens.length > valueTokens.length) {
+      return false;
+    }
+
+    return aliasTokens.every((token, index) =>
+      areAiTokensClose(valueTokens[index], token)
+    );
+  });
 }
 
 function includesAiCommandToken(value: string, tokens: string[]): boolean {
-  const parts = value.split(" ");
-  return tokens.some((token) => parts.includes(token));
+  const parts = tokenizeAiCommandText(value);
+  return tokens.some((token) => parts.some((part) => areAiTokensClose(part, token)));
 }
 
 function findAiCommandOption<T extends string>(
   value: string,
   options: AiCommandOption<T>[]
 ): AiCommandOption<T> | null {
-  return options.find((option) => includesAiCommandAlias(value, option.aliases)) ?? null;
+  let bestMatch: AiCommandOption<T> | null = null;
+  let bestScore = 0;
+
+  for (const option of options) {
+    for (const alias of option.aliases) {
+      const score = getAiAliasMatchScore(value, alias);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = option;
+      }
+    }
+  }
+
+  return bestScore > 0 ? bestMatch : null;
+}
+
+function detectAiSettingsContextTargetFromText(
+  value: string
+): AiSettingsContextTarget | null {
+  if (includesAiCommandAlias(value, AI_THEME_SETTING_ALIASES)) {
+    return "theme";
+  }
+  if (includesAiCommandAlias(value, AI_LANGUAGE_SETTING_ALIASES)) {
+    return "language";
+  }
+  if (includesAiCommandAlias(value, AI_DENSITY_SETTING_ALIASES)) {
+    return "density";
+  }
+  if (includesAiCommandAlias(value, AI_RADIUS_SETTING_ALIASES)) {
+    return "radius";
+  }
+  if (includesAiCommandAlias(value, AI_FONT_SIZE_SETTING_ALIASES)) {
+    return "fontSize";
+  }
+  if (includesAiCommandAlias(value, AI_FONT_FAMILY_SETTING_ALIASES)) {
+    return "fontFamily";
+  }
+  if (includesAiCommandAlias(value, AI_WALLPAPER_SETTING_ALIASES)) {
+    return "wallpaper";
+  }
+
+  return null;
+}
+
+function detectLastAiSettingsContextTarget(
+  messages: AiAssistantMessage[]
+): AiSettingsContextTarget | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "user") {
+      continue;
+    }
+
+    const target = detectAiSettingsContextTargetFromText(message.content);
+    if (target) {
+      return target;
+    }
+  }
+
+  return null;
+}
+
+function findBestAiUserMatch(
+  query: string,
+  users: Pick<AuthUser, "id" | "name" | "username" | "email">[]
+): Pick<AuthUser, "id" | "name" | "username" | "email"> | null {
+  const normalizedQuery = normalizeAiCommandText(query).replace(/^@+/, "");
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  let bestUser: Pick<AuthUser, "id" | "name" | "username" | "email"> | null = null;
+  let bestScore = 0;
+
+  for (const user of users) {
+    const aliases = [
+      user.username,
+      user.username.replace(/^@+/, ""),
+      user.name,
+      user.email,
+    ];
+
+    for (const alias of aliases) {
+      const score = getAiAliasMatchScore(normalizedQuery, alias);
+      if (score > bestScore) {
+        bestScore = score;
+        bestUser = user;
+      }
+    }
+  }
+
+  return bestScore > 0 ? bestUser : null;
+}
+
+function isLikelyAiSettingsQuestion(value: string): boolean {
+  return startsWithAiCommandAlias(value, AI_SETTINGS_QUESTION_PREFIXES);
 }
 
 function detectAiBooleanSettingValue(value: string): boolean | null {
@@ -1130,6 +1497,8 @@ const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
 const UI_RADIUS_STORAGE_KEY = "clore_ui_radius_v1";
 const UI_FONT_FAMILY_STORAGE_KEY = "clore_ui_font_family_v1";
 const GLOBAL_CHAT_WALLPAPER_STORAGE_KEY = "clore_global_chat_wallpaper_v1";
+const PINNED_MESSAGE_ALIGNMENT_STORAGE_KEY = "clore_pinned_message_alignment_v1";
+const ARCHIVE_VISIBILITY_STORAGE_KEY_PREFIX = "clore_archive_visibility_v1_";
 const SIDEBAR_LAYOUT_STORAGE_KEY_PREFIX = "clore_sidebar_layout_v1_";
 const CHAT_PERSONALIZATION_STORAGE_KEY_PREFIX = "clore_chat_personalization_v1_";
 const PERSONALIZATION_ONBOARDING_DONE_STORAGE_KEY =
@@ -1160,7 +1529,7 @@ const TYPING_PING_INTERVAL_MS = 2_500;
 const MESSAGE_APPEAR_ANIMATION_MS = 220;
 const MESSAGE_TARGET_HIGHLIGHT_MS = 1_200;
 const UNDO_WINDOW_MS = 5_000;
-const APP_VERSION = "beta 1.1.1";
+const APP_VERSION = "- Release Candidate 1.0.0";
 const SCHEDULE_MIN_LEAD_MS = 60_000;
 const SCHEDULE_DEFAULT_LEAD_MS = 60 * 60 * 1000;
 const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) =>
@@ -1169,7 +1538,7 @@ const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) =>
 const SCHEDULE_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) =>
   String(index).padStart(2, "0")
 );
-const GROUP_TITLE_MIN_LENGTH = 3;
+const GROUP_TITLE_MIN_LENGTH = 1;
 const GROUP_TITLE_MAX_LENGTH = 64;
 const GROUP_DESCRIPTION_MAX_LENGTH = 280;
 const GROUP_MAX_MEMBERS = 50;
@@ -1265,6 +1634,9 @@ const translations = {
     fromChat: "From",
     openOriginalChat: "Open original chat",
     deleteMessage: "Delete message",
+    pinMessage: "Pin message",
+    unpinMessage: "Unpin message",
+    pinnedMessages: "Pinned messages",
     pinChat: "Pin chat",
     unpinChat: "Unpin chat",
     muteChat: "Mute chat",
@@ -1382,6 +1754,25 @@ const translations = {
     account: "Account",
     pushNotifications: "Push notifications",
     pushNotificationsHint: "Get notified about new messages",
+    archivedChats: "Archived chats",
+    archivedChatsHint: "Hidden from the main list until you open Archive.",
+    archivePullHint: "Pull down to open Archive",
+    archiveTapToReturn: "Tap to return to the main chat list",
+    archiveEmptyState: "No chats in archive yet.",
+    archiveChat: "Archive chat",
+    unarchiveChat: "Unarchive chat",
+    archiveLockTitle: "Lock archive",
+    archiveLockHint: "Set a passcode before archived chats can be opened.",
+    archivePasscode: "Archive passcode",
+    archivePasscodeConfirm: "Confirm passcode",
+    archiveLockEnabledHint: "Archive will ask for the passcode before it opens.",
+    archiveLockDisabledHint: "Archive opens instantly until you enable a passcode.",
+    unlockArchive: "Unlock archive",
+    unlockArchiveHint: "Enter your passcode to open archived chats.",
+    showArchive: "Show archive",
+    showArchiveHint: "Show or hide Archive in the chat list",
+    saveChanges: "Save changes",
+    savingLabel: "Saving...",
     messageSound: "Message sound",
     messageSoundHint: "Play sound for incoming messages",
     sendMessageSound: "Send sound",
@@ -1460,6 +1851,11 @@ const translations = {
     radiusSharp: "Sharp",
     radiusNormal: "Normal",
     radiusRounded: "Rounded",
+    pinnedMessagePosition: "Pinned message position",
+    pinnedMessagePositionHint: "Choose where the pinned message pill is aligned",
+    alignLeft: "Left",
+    alignCenter: "Center",
+    alignRight: "Right",
     chatWallpaper: "Chat wallpaper",
     chatWallpaperHint: "Choose default wallpaper for chats",
     wallpaperNone: "None",
@@ -1626,6 +2022,9 @@ const translations = {
     fromChat: "Из чата",
     openOriginalChat: "Открыть исходный чат",
     deleteMessage: "Удалить сообщение",
+    pinMessage: "Закрепить сообщение",
+    unpinMessage: "Открепить сообщение",
+    pinnedMessages: "Закрепленные сообщения",
     pinChat: "Закрепить чат",
     unpinChat: "Открепить чат",
     muteChat: "Выключить уведомления",
@@ -1823,6 +2222,11 @@ const translations = {
     radiusSharp: "Острый",
     radiusNormal: "Нормальный",
     radiusRounded: "Скругленный",
+    pinnedMessagePosition: "Положение закрепа",
+    pinnedMessagePositionHint: "Где выравнивать плашку закрепленного сообщения",
+    alignLeft: "Слева",
+    alignCenter: "По центру",
+    alignRight: "Справа",
     chatWallpaper: "Обои чата",
     chatWallpaperHint: "Выберите обои по умолчанию для чатов",
     wallpaperNone: "Без обоев",
@@ -1904,6 +2308,25 @@ const translations = {
       "Блокирует копирование, пересылку и скачивание в этой группе.",
     groupContentProtectionSavedToast: "Ограничения обновлены",
     groupContentProtectionBlockedToast: "Это действие запрещено в этой группе.",
+    archivedChats: "Архив",
+    archivedChatsHint: "Скрытые чаты. Они не показываются в основном списке, пока вы не откроете архив.",
+    archivePullHint: "Потяните вниз, чтобы открыть архив",
+    archiveTapToReturn: "Нажмите, чтобы вернуться к обычному списку чатов",
+    archiveEmptyState: "В архиве пока нет чатов.",
+    archiveChat: "В архив",
+    unarchiveChat: "Из архива",
+    archiveLockTitle: "Пароль на архив",
+    archiveLockHint: "Архив будет открываться только после ввода пароля.",
+    archivePasscode: "Пароль архива",
+    archivePasscodeConfirm: "Повторите пароль",
+    archiveLockEnabledHint: "При каждом новом открытии архива потребуется пароль.",
+    archiveLockDisabledHint: "Архив открывается сразу, пока пароль выключен.",
+    unlockArchive: "Открыть архив",
+    unlockArchiveHint: "Введите пароль, чтобы открыть архив.",
+    showArchive: "Показывать архив",
+    showArchiveHint: "Показывать или скрывать архив в списке чатов",
+    saveChanges: "Сохранить",
+    savingLabel: "Сохранение...",
     onboardingApply: "Применить",
   },
 } as const;
@@ -2729,7 +3152,66 @@ function extractUrls(text: string): string[] {
   return text.match(URL_PATTERN) ?? [];
 }
 
-function renderInlineStyledText(segment: string, keyPrefix: string): ReactNode[] {
+type MentionClickHandler = (username: string) => void;
+
+function renderTextWithMentions(
+  text: string,
+  keyPrefix: string,
+  onMentionClick?: MentionClickHandler
+): ReactNode[] {
+  if (!text) {
+    return [];
+  }
+
+  if (!onMentionClick) {
+    return [text];
+  }
+
+  const mentionPattern = /(^|[^A-Za-z0-9_])(@[A-Za-z0-9_]{3,32})/g;
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let tokenIndex = 0;
+
+  for (const match of text.matchAll(mentionPattern)) {
+    const start = match.index ?? 0;
+    const prefix = match[1] ?? "";
+    const mention = match[2] ?? "";
+    const mentionStart = start + prefix.length;
+
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start));
+    }
+    if (prefix) {
+      nodes.push(prefix);
+    }
+
+    nodes.push(
+      <button
+        key={`${keyPrefix}-mention-${tokenIndex}`}
+        type="button"
+        onClick={() => onMentionClick(mention)}
+        className="inline rounded-sm font-semibold text-current underline decoration-current/60 underline-offset-4 hover:opacity-85"
+      >
+        {mention}
+      </button>
+    );
+
+    lastIndex = mentionStart + mention.length;
+    tokenIndex += 1;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function renderInlineStyledText(
+  segment: string,
+  keyPrefix: string,
+  onMentionClick?: MentionClickHandler
+): ReactNode[] {
   if (!segment) {
     return [];
   }
@@ -2742,16 +3224,46 @@ function renderInlineStyledText(segment: string, keyPrefix: string): ReactNode[]
     const full = match[0];
     const start = match.index ?? 0;
     if (start > lastIndex) {
-      nodes.push(segment.slice(lastIndex, start));
+      nodes.push(
+        ...renderTextWithMentions(
+          segment.slice(lastIndex, start),
+          `${keyPrefix}-plain-${tokenIndex}`,
+          onMentionClick
+        )
+      );
     }
 
     const tokenKey = `${keyPrefix}-style-${tokenIndex}`;
     if (full.startsWith("**") && full.endsWith("**")) {
-      nodes.push(<strong key={tokenKey}>{full.slice(2, -2)}</strong>);
+      nodes.push(
+        <strong key={tokenKey}>
+          {renderTextWithMentions(
+            full.slice(2, -2),
+            `${tokenKey}-bold`,
+            onMentionClick
+          )}
+        </strong>
+      );
     } else if (full.startsWith("*") && full.endsWith("*")) {
-      nodes.push(<em key={tokenKey}>{full.slice(1, -1)}</em>);
+      nodes.push(
+        <em key={tokenKey}>
+          {renderTextWithMentions(
+            full.slice(1, -1),
+            `${tokenKey}-italic`,
+            onMentionClick
+          )}
+        </em>
+      );
     } else if (full.startsWith("~~") && full.endsWith("~~")) {
-      nodes.push(<s key={tokenKey}>{full.slice(2, -2)}</s>);
+      nodes.push(
+        <s key={tokenKey}>
+          {renderTextWithMentions(
+            full.slice(2, -2),
+            `${tokenKey}-strike`,
+            onMentionClick
+          )}
+        </s>
+      );
     } else if (full.startsWith("`") && full.endsWith("`")) {
       nodes.push(
         <code
@@ -2770,13 +3282,23 @@ function renderInlineStyledText(segment: string, keyPrefix: string): ReactNode[]
   }
 
   if (lastIndex < segment.length) {
-    nodes.push(segment.slice(lastIndex));
+    nodes.push(
+      ...renderTextWithMentions(
+        segment.slice(lastIndex),
+        `${keyPrefix}-tail`,
+        onMentionClick
+      )
+    );
   }
 
   return nodes;
 }
 
-function renderFormattedInlineContent(text: string, keyPrefix: string): ReactNode[] {
+function renderFormattedInlineContent(
+  text: string,
+  keyPrefix: string,
+  onMentionClick?: MentionClickHandler
+): ReactNode[] {
   if (!text) {
     return [];
   }
@@ -2789,7 +3311,11 @@ function renderFormattedInlineContent(text: string, keyPrefix: string): ReactNod
     const start = match.index ?? 0;
     if (start > lastIndex) {
       nodes.push(
-        ...renderInlineStyledText(text.slice(lastIndex, start), `${keyPrefix}-plain-${tokenIndex}`)
+        ...renderInlineStyledText(
+          text.slice(lastIndex, start),
+          `${keyPrefix}-plain-${tokenIndex}`,
+          onMentionClick
+        )
       );
     }
 
@@ -2819,14 +3345,21 @@ function renderFormattedInlineContent(text: string, keyPrefix: string): ReactNod
 
   if (lastIndex < text.length) {
     nodes.push(
-      ...renderInlineStyledText(text.slice(lastIndex), `${keyPrefix}-plain-tail`)
+      ...renderInlineStyledText(
+        text.slice(lastIndex),
+        `${keyPrefix}-plain-tail`,
+        onMentionClick
+      )
     );
   }
 
   return nodes;
 }
 
-function renderFormattedMessageText(text: string): ReactNode {
+function renderFormattedMessageText(
+  text: string,
+  onMentionClick?: MentionClickHandler
+): ReactNode {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const nodes: ReactNode[] = [];
   let inCodeBlock = false;
@@ -2895,7 +3428,7 @@ function renderFormattedMessageText(text: string): ReactNode {
             : "text-sm font-semibold";
       nodes.push(
         <div key={`${key}-heading`} className={`${headingClassName} leading-6`}>
-          {renderFormattedInlineContent(headingContent, `${key}-heading`)}
+          {renderFormattedInlineContent(headingContent, `${key}-heading`, onMentionClick)}
         </div>
       );
       continue;
@@ -2904,7 +3437,7 @@ function renderFormattedMessageText(text: string): ReactNode {
     if (line.startsWith("> ")) {
       nodes.push(
         <div key={key} className="border-l-2 border-primary/70 pl-2 opacity-95">
-          {renderFormattedInlineContent(line.slice(2), `${key}-quote`)}
+          {renderFormattedInlineContent(line.slice(2), `${key}-quote`, onMentionClick)}
         </div>
       );
       continue;
@@ -2915,7 +3448,13 @@ function renderFormattedMessageText(text: string): ReactNode {
       nodes.push(
         <div key={key} className="flex items-start gap-2">
           <span className="mt-2 inline-block size-1.5 shrink-0 rounded-full bg-current/80" />
-          <span>{renderFormattedInlineContent(unorderedMatch[1] ?? "", `${key}-list`)}</span>
+          <span>
+            {renderFormattedInlineContent(
+              unorderedMatch[1] ?? "",
+              `${key}-list`,
+              onMentionClick
+            )}
+          </span>
         </div>
       );
       continue;
@@ -2928,7 +3467,13 @@ function renderFormattedMessageText(text: string): ReactNode {
           <span className="min-w-[1.25rem] shrink-0 text-right text-current/80">
             {(orderedMatch[1] ?? "1").slice(0, 4)}.
           </span>
-          <span>{renderFormattedInlineContent(orderedMatch[2] ?? "", `${key}-olist`)}</span>
+          <span>
+            {renderFormattedInlineContent(
+              orderedMatch[2] ?? "",
+              `${key}-olist`,
+              onMentionClick
+            )}
+          </span>
         </div>
       );
       continue;
@@ -2936,7 +3481,7 @@ function renderFormattedMessageText(text: string): ReactNode {
 
     nodes.push(
       <div key={key} className="whitespace-pre-wrap">
-        {renderFormattedInlineContent(line, `${key}-text`)}
+        {renderFormattedInlineContent(line, `${key}-text`, onMentionClick)}
       </div>
     );
   }
@@ -3419,6 +3964,15 @@ function createIdleMobileBackSwipeGestureState(): MobileBackSwipeGestureState {
   };
 }
 
+function createIdleArchivePullGestureState(): ArchivePullGestureState {
+  return {
+    tracking: false,
+    activated: false,
+    startX: 0,
+    startY: 0,
+  };
+}
+
 export function WebMessenger({
   currentUser,
   onLogout,
@@ -3467,6 +4021,10 @@ export function WebMessenger({
   const mobileBackSwipeGestureRef = useRef<MobileBackSwipeGestureState>(
     createIdleMobileBackSwipeGestureState()
   );
+  const archivePullGestureRef = useRef<ArchivePullGestureState>(
+    createIdleArchivePullGestureState()
+  );
+  const chatListScrollRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedInitialChatDataRef = useRef(false);
   const hasNotificationBaselineRef = useRef(false);
   const seenMessageIdsRef = useRef<Set<string>>(new Set());
@@ -3850,6 +4408,16 @@ export function WebMessenger({
     const stored = window.localStorage.getItem(UI_RADIUS_STORAGE_KEY);
     return stored === "sharp" || stored === "rounded" ? stored : "normal";
   });
+  const [uiPinnedMessageAlignment, setUiPinnedMessageAlignment] =
+    useState<UiPinnedMessageAlignment>(() => {
+      if (typeof window === "undefined") {
+        return "left";
+      }
+      const stored = window.localStorage.getItem(PINNED_MESSAGE_ALIGNMENT_STORAGE_KEY);
+      return stored === "center" || stored === "right" || stored === "left"
+        ? stored
+        : "left";
+    });
   const [globalChatWallpaper, setGlobalChatWallpaper] = useState<ChatWallpaper>(() => {
     if (typeof window === "undefined") {
       return "none";
@@ -4002,6 +4570,35 @@ export function WebMessenger({
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("privacy");
+  const [isArchiveViewOpen, setIsArchiveViewOpen] = useState(false);
+  const [archivePullPreviewPx, setArchivePullPreviewPx] = useState(0);
+  const [pinnedMessageCursor, setPinnedMessageCursor] = useState(0);
+  const [isArchiveVisible, setIsArchiveVisible] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return (
+      window.localStorage.getItem(
+        `${ARCHIVE_VISIBILITY_STORAGE_KEY_PREFIX}${currentUser.id}`
+      ) !== "0"
+    );
+  });
+  const [archiveLockEnabled, setArchiveLockEnabled] = useState(
+    currentUser.archiveLockEnabled === true
+  );
+  const [hasArchiveLockPasscode, setHasArchiveLockPasscode] = useState(
+    currentUser.archiveLockEnabled === true
+  );
+  const [archiveLockPasscodeDraft, setArchiveLockPasscodeDraft] = useState("");
+  const [archiveLockConfirmDraft, setArchiveLockConfirmDraft] = useState("");
+  const [isSavingArchiveLock, setIsSavingArchiveLock] = useState(false);
+  const [isArchiveUnlocked, setIsArchiveUnlocked] = useState(
+    currentUser.archiveLockEnabled !== true
+  );
+  const [isArchiveUnlockDialogOpen, setIsArchiveUnlockDialogOpen] = useState(false);
+  const [archiveUnlockPasscode, setArchiveUnlockPasscode] = useState("");
+  const [archiveUnlockError, setArchiveUnlockError] = useState("");
+  const [isArchiveUnlockSubmitting, setIsArchiveUnlockSubmitting] = useState(false);
   const [isChatPersonalizationOpen, setIsChatPersonalizationOpen] = useState(false);
   const [privacyPickerField, setPrivacyPickerField] = useState<
     "lastSeen" | "avatar" | "bio" | "birthday" | "call" | "forward" | "groupAdd" | null
@@ -4462,15 +5059,362 @@ export function WebMessenger({
     setAiAgentEnabled(true);
     setIsAiAgentWarningOpen(false);
   }, []);
-  const tryExecuteAiSettingsCommand = useCallback(
-    async (rawPrompt: string) => {
+  const runAiSettingsCommand = useCallback(
+    async (rawPrompt: string, messageHistory: AiAssistantMessage[]) => {
       const normalizedPrompt = normalizeAiCommandText(rawPrompt);
+      if (isLikelyAiSettingsQuestion(normalizedPrompt)) {
+        return null;
+      }
       if (
         !normalizedPrompt ||
         !includesAiCommandToken(normalizedPrompt, AI_SETTINGS_ACTION_ALIASES)
       ) {
         return null;
       }
+
+      const contextTarget = detectLastAiSettingsContextTarget(messageHistory);
+      const booleanValue = detectAiBooleanSettingValue(normalizedPrompt);
+
+      const privacyScope = findAiCommandOption(
+        normalizedPrompt,
+        AI_PRIVACY_SCOPE_OPTIONS
+      );
+      if (privacyScope) {
+        const applyToAllPrivacyFields = includesAiCommandAlias(
+          normalizedPrompt,
+          AI_ALL_PRIVACY_ALIASES
+        );
+        const privacyTargets = applyToAllPrivacyFields
+          ? AI_PRIVACY_COMMAND_TARGETS
+          : AI_PRIVACY_COMMAND_TARGETS.filter((target) =>
+              includesAiCommandAlias(normalizedPrompt, target.aliases)
+            );
+
+        if (privacyTargets.length > 0) {
+          if (!onPrivacyUpdate) {
+            return {
+              message:
+                language === "ru"
+                  ? "\u0421\u0435\u0439\u0447\u0430\u0441 \u044f \u043d\u0435 \u043c\u043e\u0433\u0443 \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u043f\u0440\u0438\u0432\u0430\u0442\u043d\u043e\u0441\u0442\u0438 \u0432 \u044d\u0442\u043e\u0439 \u0441\u0431\u043e\u0440\u043a\u0435."
+                  : "I cannot save privacy settings in this build right now.",
+            };
+          }
+
+          const availablePrivacyUsers = knownUsers.filter(
+            (user) =>
+              user.id !== currentUser.id && user.id !== BUILT_IN_ASSISTANT_USER_ID
+          );
+          const requestedUserQueries =
+            privacyScope.value === "selected"
+              ? extractAiSelectedUserQueries(normalizedPrompt)
+              : [];
+          const resolvedUserIds: string[] = [];
+          const unresolvedUserQueries: string[] = [];
+
+          for (const query of requestedUserQueries) {
+            const candidate = findBestAiUserMatch(query, availablePrivacyUsers);
+            if (!candidate) {
+              unresolvedUserQueries.push(query);
+              continue;
+            }
+            if (!resolvedUserIds.includes(candidate.id)) {
+              resolvedUserIds.push(candidate.id);
+            }
+          }
+
+          if (
+            privacyScope.value === "selected" &&
+            requestedUserQueries.length > 0 &&
+            resolvedUserIds.length === 0
+          ) {
+            return {
+              message:
+                language === "ru"
+                  ? `\u041d\u0435 \u043d\u0430\u0448\u0435\u043b \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439 \u0434\u043b\u044f \u0441\u043f\u0438\u0441\u043a\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u0430: ${requestedUserQueries.join(", ")}.`
+                  : `I could not match any users for the selected access list: ${requestedUserQueries.join(", ")}.`,
+            };
+          }
+
+          const nextPrivacy = {
+            lastSeenVisibility: normalizePrivacyVisibility(
+              currentUser.lastSeenVisibility,
+              currentUser.showLastSeen ? "everyone" : "nobody"
+            ),
+            avatarVisibility: normalizePrivacyVisibility(
+              currentUser.avatarVisibility,
+              "everyone"
+            ),
+            bioVisibility: normalizePrivacyVisibility(
+              currentUser.bioVisibility,
+              "everyone"
+            ),
+            birthdayVisibility: normalizePrivacyVisibility(
+              currentUser.birthdayVisibility,
+              "everyone"
+            ),
+            callVisibility: normalizePrivacyVisibility(
+              currentUser.callVisibility,
+              "everyone"
+            ),
+            forwardVisibility: normalizePrivacyVisibility(
+              currentUser.forwardVisibility,
+              "everyone"
+            ),
+            groupAddVisibility: normalizePrivacyVisibility(
+              currentUser.groupAddVisibility,
+              "everyone"
+            ),
+            lastSeenAllowedUserIds: currentUser.lastSeenAllowedUserIds ?? EMPTY_USER_IDS,
+            avatarAllowedUserIds: currentUser.avatarAllowedUserIds ?? EMPTY_USER_IDS,
+            bioAllowedUserIds: currentUser.bioAllowedUserIds ?? EMPTY_USER_IDS,
+            birthdayAllowedUserIds: currentUser.birthdayAllowedUserIds ?? EMPTY_USER_IDS,
+            callAllowedUserIds: currentUser.callAllowedUserIds ?? EMPTY_USER_IDS,
+            forwardAllowedUserIds: currentUser.forwardAllowedUserIds ?? EMPTY_USER_IDS,
+            groupAddAllowedUserIds: currentUser.groupAddAllowedUserIds ?? EMPTY_USER_IDS,
+          };
+
+          for (const target of privacyTargets) {
+            nextPrivacy[target.visibilityField] = privacyScope.value;
+            if (privacyScope.value !== "selected") {
+              nextPrivacy[target.allowedField] = [];
+              continue;
+            }
+            if (resolvedUserIds.length > 0) {
+              nextPrivacy[target.allowedField] = resolvedUserIds;
+            }
+          }
+
+          await onPrivacyUpdate(nextPrivacy);
+
+          const targetLabel =
+            privacyTargets.length === AI_PRIVACY_COMMAND_TARGETS.length
+              ? language === "ru"
+                ? "\u0432\u0441\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u043f\u0440\u0438\u0432\u0430\u0442\u043d\u043e\u0441\u0442\u0438"
+                : "all privacy settings"
+              : privacyTargets
+                  .map((target) =>
+                    language === "ru" ? target.label.ru : target.label.en
+                  )
+                  .join(", ");
+          const unresolvedSuffix =
+            unresolvedUserQueries.length > 0
+              ? language === "ru"
+                ? ` \u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043d\u0430\u0439\u0442\u0438: ${unresolvedUserQueries.join(", ")}.`
+                : ` I could not match: ${unresolvedUserQueries.join(", ")}.`
+              : "";
+          const selectedSuffix =
+            privacyScope.value === "selected"
+              ? requestedUserQueries.length > 0
+                ? language === "ru"
+                  ? ` \u0421\u043f\u0438\u0441\u043e\u043a \u0434\u043e\u0441\u0442\u0443\u043f\u0430: ${resolvedUserIds.length}.`
+                  : ` Selected list size: ${resolvedUserIds.length}.`
+                : language === "ru"
+                  ? " \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0445 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439."
+                  : " Kept the current selected-people list."
+              : "";
+
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u0434\u043b\u044f ${targetLabel} \u0442\u0435\u043f\u0435\u0440\u044c ${privacyScope.label.ru}.${selectedSuffix}${unresolvedSuffix}`
+                : `Done: ${targetLabel} is now visible to ${privacyScope.label.en}.${selectedSuffix}${unresolvedSuffix}`,
+          };
+        }
+      }
+
+      if (booleanValue !== null) {
+        const updatedToggleLabels: string[] = [];
+        const allSoundsRequested = includesAiCommandAlias(
+          normalizedPrompt,
+          AI_ALL_SOUND_ALIASES
+        );
+
+        if (includesAiCommandAlias(normalizedPrompt, AI_PUSH_NOTIFICATIONS_ALIASES)) {
+          setPushNotificationsEnabled(booleanValue);
+          if (
+            booleanValue &&
+            typeof window !== "undefined" &&
+            "Notification" in window &&
+            window.Notification.permission === "default"
+          ) {
+            void window.Notification.requestPermission().catch(() => undefined);
+          }
+          updatedToggleLabels.push(
+            language === "ru"
+              ? "\u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f"
+              : "push notifications"
+          );
+        }
+        if (
+          allSoundsRequested ||
+          includesAiCommandAlias(normalizedPrompt, AI_MESSAGE_SOUND_ALIASES)
+        ) {
+          setMessageSoundEnabled(booleanValue);
+          updatedToggleLabels.push(
+            language === "ru"
+              ? "\u0437\u0432\u0443\u043a \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0439"
+              : "message sound"
+          );
+        }
+        if (
+          allSoundsRequested ||
+          includesAiCommandAlias(normalizedPrompt, AI_SEND_SOUND_ALIASES)
+        ) {
+          setSendMessageSoundEnabled(booleanValue);
+          updatedToggleLabels.push(
+            language === "ru"
+              ? "\u0437\u0432\u0443\u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0438"
+              : "send sound"
+          );
+        }
+        if (includesAiCommandAlias(normalizedPrompt, AI_SIDEBAR_ALIASES)) {
+          setIsMainSidebarCollapsed(!booleanValue);
+          updatedToggleLabels.push(
+            language === "ru"
+              ? "\u0431\u043e\u043a\u043e\u0432\u0430\u044f \u043f\u0430\u043d\u0435\u043b\u044c"
+              : "sidebar"
+          );
+        }
+
+        if (updatedToggleLabels.length > 0) {
+          const uniqueLabels = [...new Set(updatedToggleLabels)];
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: ${uniqueLabels.join(", ")} (${booleanValue ? "\u0432\u043a\u043b." : "\u0432\u044b\u043a\u043b."}).`
+                : `Done: ${uniqueLabels.join(", ")} ${booleanValue ? "enabled" : "disabled"}.`,
+          };
+        }
+      }
+
+      if (includesAiCommandAlias(normalizedPrompt, AI_LANGUAGE_SETTING_ALIASES)) {
+        const nextLanguage = findAiCommandOption(normalizedPrompt, AI_LANGUAGE_OPTIONS);
+        if (nextLanguage) {
+          setLanguage(nextLanguage.value);
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u044f\u0437\u044b\u043a \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430 \u0442\u0435\u043f\u0435\u0440\u044c ${nextLanguage.label.ru}.`
+                : `Done: interface language is now ${nextLanguage.label.en}.`,
+          };
+        }
+      }
+
+      const hasExplicitThemeTarget = includesAiCommandAlias(
+        normalizedPrompt,
+        AI_THEME_SETTING_ALIASES
+      );
+      const requestedTheme = findAiCommandOption(normalizedPrompt, AI_THEME_OPTIONS);
+      if (requestedTheme && (hasExplicitThemeTarget || contextTarget === "theme")) {
+        const resolvedTheme =
+          booleanValue === false
+            ? requestedTheme.value === "light"
+              ? "dark"
+              : "light"
+            : requestedTheme.value;
+        const appliedTheme =
+          AI_THEME_OPTIONS.find((option) => option.value === resolvedTheme) ??
+          requestedTheme;
+
+        setUiTheme(resolvedTheme);
+        return {
+          message:
+            language === "ru"
+              ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u0442\u0435\u043c\u0430 \u0442\u0435\u043f\u0435\u0440\u044c ${appliedTheme.label.ru}.`
+              : `Done: theme is now ${appliedTheme.label.en}.`,
+        };
+      }
+
+      if (includesAiCommandAlias(normalizedPrompt, AI_DENSITY_SETTING_ALIASES)) {
+        const nextDensity = findAiCommandOption(normalizedPrompt, AI_DENSITY_OPTIONS);
+        if (nextDensity) {
+          setUiDensity(nextDensity.value);
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u043f\u043b\u043e\u0442\u043d\u043e\u0441\u0442\u044c \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430 \u0442\u0435\u043f\u0435\u0440\u044c ${nextDensity.label.ru}.`
+                : `Done: interface density is now ${nextDensity.label.en}.`,
+          };
+        }
+      }
+
+      if (includesAiCommandAlias(normalizedPrompt, AI_RADIUS_SETTING_ALIASES)) {
+        const nextRadius = findAiCommandOption(normalizedPrompt, AI_RADIUS_OPTIONS);
+        if (nextRadius) {
+          setUiRadius(nextRadius.value);
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u0441\u043a\u0440\u0443\u0433\u043b\u0435\u043d\u0438\u0435 \u0442\u0435\u043f\u0435\u0440\u044c ${nextRadius.label.ru}.`
+                : `Done: corner radius is now ${nextRadius.label.en}.`,
+          };
+        }
+      }
+
+      if (includesAiCommandAlias(normalizedPrompt, AI_FONT_SIZE_SETTING_ALIASES)) {
+        const nextFontSize = findAiCommandOption(normalizedPrompt, AI_FONT_SIZE_OPTIONS);
+        if (nextFontSize) {
+          setUiFontSize(nextFontSize.value);
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u0440\u0430\u0437\u043c\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430 \u0442\u0435\u043f\u0435\u0440\u044c ${nextFontSize.label.ru}.`
+                : `Done: font size is now ${nextFontSize.label.en}.`,
+          };
+        }
+      }
+
+      if (includesAiCommandAlias(normalizedPrompt, AI_FONT_FAMILY_SETTING_ALIASES)) {
+        const nextFontFamily = findAiCommandOption(
+          normalizedPrompt,
+          AI_FONT_FAMILY_OPTIONS
+        );
+        if (nextFontFamily) {
+          setUiFontFamily(nextFontFamily.value);
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u0448\u0440\u0438\u0444\u0442 \u0442\u0435\u043f\u0435\u0440\u044c ${nextFontFamily.label.ru}.`
+                : `Done: font family is now ${nextFontFamily.label.en}.`,
+          };
+        }
+      }
+
+      if (includesAiCommandAlias(normalizedPrompt, AI_WALLPAPER_SETTING_ALIASES)) {
+        const nextWallpaper = findAiCommandOption(
+          normalizedPrompt,
+          AI_WALLPAPER_OPTIONS
+        );
+        if (nextWallpaper) {
+          setGlobalChatWallpaper(nextWallpaper.value);
+          return {
+            message:
+              language === "ru"
+                ? `\u0413\u043e\u0442\u043e\u0432\u043e: \u0444\u043e\u043d \u0447\u0430\u0442\u0430 \u0442\u0435\u043f\u0435\u0440\u044c ${nextWallpaper.label.ru}.`
+                : `Done: chat wallpaper is now ${nextWallpaper.label.en}.`,
+          };
+        }
+      }
+
+      return null;
+    },
+    [currentUser, knownUsers, language, onPrivacyUpdate]
+  );
+  const tryExecuteAiSettingsCommand = useCallback(
+    async (rawPrompt: string, messageHistory: AiAssistantMessage[]) => {
+      return runAiSettingsCommand(rawPrompt, messageHistory);
+      /*
+      const normalizedPrompt = normalizeAiCommandText(rawPrompt);
+      if (isLikelyAiSettingsQuestion(normalizedPrompt)) {
+        return null;
+      }
+      if (
+        !normalizedPrompt ||
+        !includesAiCommandToken(normalizedPrompt, AI_SETTINGS_ACTION_ALIASES)
+      ) {
+        return null;
+      }
+      const contextTarget = detectLastAiSettingsContextTarget(messageHistory);
 
       const privacyScope = findAiCommandOption(
         normalizedPrompt,
@@ -4509,20 +5453,7 @@ export function WebMessenger({
           const unresolvedUserQueries: string[] = [];
 
           for (const query of requestedUserQueries) {
-            const candidate = availablePrivacyUsers.find((user) => {
-              const normalizedName = user.name.trim().toLowerCase();
-              const normalizedUsername = user.username.trim().toLowerCase();
-              const normalizedEmail = user.email.trim().toLowerCase();
-              return (
-                normalizedUsername === query ||
-                normalizedName === query ||
-                normalizedEmail === query ||
-                normalizedUsername.replace(/^@+/, "") === query ||
-                normalizedName.includes(query) ||
-                normalizedUsername.includes(query) ||
-                normalizedEmail.includes(query)
-              );
-            });
+            const candidate = findBestAiUserMatch(query, availablePrivacyUsers);
 
             if (!candidate) {
               unresolvedUserQueries.push(query);
@@ -4704,6 +5635,31 @@ export function WebMessenger({
         }
       }
 
+      const hasExplicitThemeTarget = includesAiCommandAlias(
+        normalizedPrompt,
+        AI_THEME_SETTING_ALIASES
+      );
+      const requestedTheme = findAiCommandOption(normalizedPrompt, AI_THEME_OPTIONS);
+      if (requestedTheme && (hasExplicitThemeTarget || contextTarget === "theme")) {
+        const resolvedTheme =
+          booleanValue === false
+            ? requestedTheme.value === "light"
+              ? "dark"
+              : "light"
+            : requestedTheme.value;
+        const appliedTheme =
+          AI_THEME_OPTIONS.find((option) => option.value === resolvedTheme) ??
+          requestedTheme;
+
+        setUiTheme(resolvedTheme);
+        return {
+          message:
+            language === "ru"
+              ? `Р“РѕС‚РѕРІРѕ: С‚РµРјР° С‚РµРїРµСЂСЊ ${appliedTheme.label.ru}.`
+              : `Done: theme is now ${appliedTheme.label.en}.`,
+        };
+      }
+
       if (includesAiCommandAlias(normalizedPrompt, AI_THEME_SETTING_ALIASES)) {
         const nextTheme = findAiCommandOption(normalizedPrompt, AI_THEME_OPTIONS);
         if (nextTheme) {
@@ -4789,8 +5745,9 @@ export function WebMessenger({
       }
 
       return null;
+      */
     },
-    [currentUser, knownUsers, language, onPrivacyUpdate]
+    [currentUser, knownUsers, language, onPrivacyUpdate, runAiSettingsCommand]
   );
   const sendAiPrompt = useCallback(async () => {
     if (!AI_FEATURE_ENABLED) {
@@ -4835,23 +5792,21 @@ export function WebMessenger({
     setAiMessages((prev) => [...prev, userMessage, pendingAssistantMessage]);
 
     try {
-      if (aiAgentEnabled) {
-        const localCommandResult = await tryExecuteAiSettingsCommand(prompt);
-        if (localCommandResult) {
-          setAiMessages((prev) =>
-            prev.map((message) =>
-              message.id === pendingAssistantId
-                ? {
-                    ...message,
-                    content: localCommandResult.message,
-                    pending: false,
-                    error: false,
-                  }
-                : message
-            )
-          );
-          return;
-        }
+      const localCommandResult = await tryExecuteAiSettingsCommand(prompt, aiMessages);
+      if (localCommandResult) {
+        setAiMessages((prev) =>
+          prev.map((message) =>
+            message.id === pendingAssistantId
+              ? {
+                  ...message,
+                  content: localCommandResult.message,
+                  pending: false,
+                  error: false,
+                }
+              : message
+          )
+        );
+        return;
       }
 
       const response = await requestJson<AiAssistantChatResponse>("/api/ai/chat", {
@@ -5494,8 +6449,20 @@ export function WebMessenger({
     window.localStorage.setItem(UI_RADIUS_STORAGE_KEY, uiRadius);
   }, [uiRadius]);
   useEffect(() => {
+    window.localStorage.setItem(
+      PINNED_MESSAGE_ALIGNMENT_STORAGE_KEY,
+      uiPinnedMessageAlignment
+    );
+  }, [uiPinnedMessageAlignment]);
+  useEffect(() => {
     window.localStorage.setItem(GLOBAL_CHAT_WALLPAPER_STORAGE_KEY, globalChatWallpaper);
   }, [globalChatWallpaper]);
+  useEffect(() => {
+    window.localStorage.setItem(
+      `${ARCHIVE_VISIBILITY_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      isArchiveVisible ? "1" : "0"
+    );
+  }, [currentUser.id, isArchiveVisible]);
   useEffect(() => {
     window.localStorage.setItem(
       `${CHAT_PERSONALIZATION_STORAGE_KEY_PREFIX}${currentUser.id}`,
@@ -5531,6 +6498,18 @@ export function WebMessenger({
   useEffect(() => {
     setManuallyLoadedMediaIds(new Set());
   }, [activeChatId]);
+
+  useEffect(() => {
+    const isLocked = currentUser.archiveLockEnabled === true;
+    setArchiveLockEnabled(isLocked);
+    setHasArchiveLockPasscode(isLocked);
+    setArchiveLockPasscodeDraft("");
+    setArchiveLockConfirmDraft("");
+    setIsArchiveUnlocked(!isLocked);
+    setIsArchiveUnlockDialogOpen(false);
+    setArchiveUnlockPasscode("");
+    setArchiveUnlockError("");
+  }, [currentUser.archiveLockEnabled, currentUser.id]);
 
   useEffect(() => {
     baseDocumentTitleRef.current = document.title || "Clore";
@@ -5632,6 +6611,10 @@ export function WebMessenger({
           setMessages((prev) => {
             const byId = new Map(prev.map((message) => [message.id, message]));
             for (const message of data.messages) {
+              if ((message.hiddenFor?.[currentUser.id] ?? 0) > 0) {
+                byId.delete(message.id);
+                continue;
+              }
               byId.set(message.id, message);
             }
             return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
@@ -5758,8 +6741,7 @@ export function WebMessenger({
       }
     }
 
-    const regularChatItems = [...threads]
-      .map((thread) => {
+    const regularChatItems = [...threads].flatMap<ChatListItem>((thread) => {
         const isGroup = thread.threadType === "group";
         const groupKind: GroupKind | null = isGroup
           ? thread.groupKind === "channel"
@@ -5790,7 +6772,7 @@ export function WebMessenger({
         const isBuiltInAssistantThread =
           !isGroup && directMemberId === BUILT_IN_ASSISTANT_USER_ID;
         if (isBuiltInAssistantThread) {
-          return null;
+          return [];
         }
         const directMember = directMemberId ? usersById.get(directMemberId) : null;
         const groupMembers = thread.memberIds
@@ -5837,7 +6819,7 @@ export function WebMessenger({
         }, {});
         const myGroupRole = isGroup ? getThreadRoleForUser(thread, currentUser.id) : null;
 
-        return {
+        return [{
           id: thread.id,
           memberId: directMemberId,
           memberIds: thread.memberIds,
@@ -5871,9 +6853,9 @@ export function WebMessenger({
           updatedAt: Math.max(thread.updatedAt, lastMessage?.createdAt ?? 0),
           isPinned: thread.pinnedBy?.[currentUser.id] === true,
           isMuted: thread.mutedBy?.[currentUser.id] === true,
-        };
-      })
-      .filter((item): item is ChatListItem => item !== null);
+          isArchived: thread.archivedBy?.[currentUser.id] === true,
+        }];
+      });
 
     const favoriteMessages = messages
       .map((message) => ({
@@ -5949,6 +6931,7 @@ export function WebMessenger({
       updatedAt: latestFavorite?.savedAt ?? 0,
       isPinned: isFavoritesChatPinned,
       isMuted: false,
+      isArchived: false,
     };
 
     return [favoriteChatItem, ...sortedRegularChatItems].sort((a, b) => {
@@ -5972,12 +6955,23 @@ export function WebMessenger({
     serverTimeMs,
   ]);
 
+  const archivedChatItems = useMemo(
+    () => chatItems.filter((chat) => !chat.isFavorites && chat.isArchived === true),
+    [chatItems]
+  );
+  const visibleChatItems = useMemo(
+    () =>
+      isArchiveViewOpen
+        ? archivedChatItems
+        : chatItems.filter((chat) => chat.isArchived !== true),
+    [archivedChatItems, chatItems, isArchiveViewOpen]
+  );
   const filteredChats = useMemo(() => {
     const normalized = normalizeSearchQuery(query);
     const source =
       normalized.raw.length === 0
-        ? chatItems
-        : chatItems.filter(
+        ? visibleChatItems
+        : visibleChatItems.filter(
             (chat) =>
               chat.name.toLowerCase().includes(normalized.raw) ||
               chat.username.toLowerCase().includes(normalized.username)
@@ -5989,7 +6983,18 @@ export function WebMessenger({
       }
       return b.updatedAt - a.updatedAt;
     });
-  }, [chatItems, query]);
+  }, [query, visibleChatItems]);
+
+  useEffect(() => {
+    if (isArchiveViewOpen && archivedChatItems.length === 0) {
+      setIsArchiveViewOpen(false);
+    }
+  }, [archivedChatItems.length, isArchiveViewOpen]);
+  useEffect(() => {
+    if (!isArchiveVisible && isArchiveViewOpen) {
+      setIsArchiveViewOpen(false);
+    }
+  }, [isArchiveViewOpen, isArchiveVisible]);
 
   const activePreviewChat = useMemo<ChatListItem | null>(() => {
     if (activePublicGroupPreview) {
@@ -6072,7 +7077,10 @@ export function WebMessenger({
   }, [activeChatPreviewUserId, activePublicGroupPreview, currentUser.id, knownUsers, t, language]);
 
   const pinnedChatsCount = useMemo(
-    () => chatItems.filter((chat) => !chat.isFavorites && chat.isPinned).length,
+    () =>
+      chatItems.filter(
+        (chat) => !chat.isFavorites && chat.isPinned && chat.isArchived !== true
+      ).length,
     [chatItems]
   );
 
@@ -6184,17 +7192,37 @@ export function WebMessenger({
     if (!activeChatUser) {
       return t("lastSeenHidden");
     }
-    if (!activeChatUser.showLastSeen) {
-      return t("lastSeenHidden");
-    }
     const isOnline =
       activeChatUser.lastSeenAt > 0 &&
       Date.now() - activeChatUser.lastSeenAt <= ONLINE_STATUS_WINDOW_MS;
     if (isOnline) {
       return t("online");
     }
+    if (!activeChatUser.showLastSeen) {
+      return t("lastSeenHidden");
+    }
     return `${t("lastSeenAt")} ${formatLastSeen(activeChatUser.lastSeenAt, language)}`;
   }, [activeChatUser, t, language]);
+  const activeGroupStatusText = useMemo(() => {
+    if (!activeChat || !activeChat.isGroup || activeChat.groupKind === "channel") {
+      return "";
+    }
+
+    const memberCount = Math.max(2, activeChat.memberCount || activeChat.memberIds.length);
+    const onlineCount = activeChat.memberIds.reduce((count, memberId) => {
+      const member = knownUsers.find((user) => user.id === memberId);
+      if (!member || member.lastSeenAt <= 0) {
+        return count;
+      }
+      return Date.now() - member.lastSeenAt <= ONLINE_STATUS_WINDOW_MS ? count + 1 : count;
+    }, 0);
+
+    if (onlineCount > 0) {
+      return `${onlineCount} ${t("online").toLowerCase()}`;
+    }
+
+    return `${memberCount} ${t("members")}`;
+  }, [activeChat, knownUsers, t]);
   const activeChatTypingText = useMemo(() => {
     if (!activeChat || activeChat.isFavorites || activeChat.isPreview) {
       return "";
@@ -7532,6 +8560,8 @@ export function WebMessenger({
           groupReadByCount: 0,
           groupReadByLabels: [],
           isEdited: message.editedAt > 0,
+          isPinned: message.pinnedAt > 0,
+          pinnedAt: message.pinnedAt,
           reply: message.replyToMessageId
             ? {
                 targetMessageId: message.replyToMessageId,
@@ -7629,6 +8659,8 @@ export function WebMessenger({
         groupReadByCount: groupReadByLabels.length,
         groupReadByLabels,
         isEdited: message.editedAt > 0,
+        isPinned: message.pinnedAt > 0,
+        pinnedAt: message.pinnedAt,
         reply: message.replyToMessageId
           ? {
               targetMessageId: message.replyToMessageId,
@@ -7656,6 +8688,28 @@ export function WebMessenger({
     threads,
     serverTimeMs,
   ]);
+  const pinnedActiveMessages = useMemo(
+    () =>
+      activeChat && !activeChat.isFavorites
+        ? activeMessages
+            .filter((message) => message.isPinned)
+            .sort((a, b) => b.pinnedAt - a.pinnedAt || b.createdAt - a.createdAt)
+        : [],
+    [activeChat, activeMessages]
+  );
+  const activePinnedMessage = pinnedActiveMessages[pinnedMessageCursor] ?? null;
+
+  useEffect(() => {
+    setPinnedMessageCursor(0);
+  }, [activeChat?.id]);
+  useEffect(() => {
+    setPinnedMessageCursor((prev) => {
+      if (pinnedActiveMessages.length === 0) {
+        return 0;
+      }
+      return Math.min(prev, pinnedActiveMessages.length - 1);
+    });
+  }, [pinnedActiveMessages.length]);
 
   const protectedGroupChatIds = useMemo(() => {
     const ids = new Set<string>();
@@ -8268,6 +9322,20 @@ export function WebMessenger({
     [activeChat]
   );
 
+  const handleMessageDoubleClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>, messageId: string) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest("button, a, input, textarea, video, audio")
+      ) {
+        return;
+      }
+      startReplyToMessage(messageId);
+    },
+    [startReplyToMessage]
+  );
+
   const startEditingMessage = useCallback(
     (messageId: string) => {
       if (activeChat?.isFavorites || activeChat?.isPreview) {
@@ -8490,6 +9558,88 @@ export function WebMessenger({
       }
     },
     [currentUser.id, showToast, t]
+  );
+  const toggleMessagePinned = useCallback(
+    async (messageId: string, pinned: boolean) => {
+      if (!activeChat || activeChat.isFavorites || activeChat.isPreview) {
+        return;
+      }
+      if (
+        activeChat.isGroup &&
+        activeChat.groupKind === "channel" &&
+        activeChat.myGroupRole !== "owner"
+      ) {
+        return;
+      }
+
+      const targetMessage =
+        messagesRef.current.find((message) => message.id === messageId) ?? null;
+      if (!targetMessage) {
+        return;
+      }
+
+      const limit = !activeChat.isGroup
+        ? 10
+        : activeChat.groupKind === "channel"
+          ? null
+          : 20;
+      if (pinned && limit !== null) {
+        const pinnedCount = messagesRef.current.filter(
+          (message) =>
+            message.chatId === activeChat.id &&
+            message.pinnedAt > 0 &&
+            message.id !== messageId
+        ).length;
+        if (pinnedCount >= limit) {
+          showToast(
+            language === "ru"
+              ? `Можно закрепить только ${limit} сообщений.`
+              : `You can pin up to ${limit} messages.`
+          );
+          return;
+        }
+      }
+
+      const nextPinnedAt = pinned ? Date.now() : 0;
+      const nextPinnedByUserId = pinned ? currentUser.id : "";
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                pinnedAt: nextPinnedAt,
+                pinnedByUserId: nextPinnedByUserId,
+              }
+            : message
+        )
+      );
+
+      try {
+        await requestJson<{ ok: boolean }>("/api/messenger/pin-message", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            chatId: activeChat.id,
+            messageId,
+            pinned,
+          }),
+        });
+      } catch (error) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  pinnedAt: targetMessage.pinnedAt,
+                  pinnedByUserId: targetMessage.pinnedByUserId,
+                }
+              : message
+          )
+        );
+        showToast(getRequestErrorMessage(error));
+      }
+    },
+    [activeChat, currentUser.id, getRequestErrorMessage, language, showToast]
   );
   const reportMessage = useCallback(
     async (message: RenderMessage) => {
@@ -9270,6 +10420,238 @@ export function WebMessenger({
     [currentUser.id, dismissToast, loadChatData, showToast, t]
   );
 
+  const openArchiveView = useCallback(() => {
+    if (!isArchiveVisible) {
+      return;
+    }
+    if (archiveLockEnabled && !isArchiveUnlocked) {
+      setArchiveUnlockPasscode("");
+      setArchiveUnlockError("");
+      setIsArchiveUnlockDialogOpen(true);
+      return;
+    }
+    setIsArchiveViewOpen(true);
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia(MOBILE_VIEWPORT_MEDIA_QUERY).matches
+      ) {
+        setMobileView("list");
+      }
+  }, [archiveLockEnabled, isArchiveUnlocked, isArchiveVisible]);
+
+  const closeArchiveView = useCallback(() => {
+    setIsArchiveViewOpen(false);
+  }, []);
+
+  const setChatArchived = useCallback(
+    async (chatId: string, archived: boolean) => {
+      if (chatId === FAVORITES_CHAT_ID) {
+        return;
+      }
+
+      setThreads((prev) =>
+        prev.map((thread) => {
+          if (thread.id !== chatId) {
+            return thread;
+          }
+          return {
+            ...thread,
+            archivedBy: {
+              ...thread.archivedBy,
+              [currentUser.id]: archived,
+            },
+          };
+        })
+      );
+
+      try {
+        await requestJson<{ ok: boolean }>("/api/messenger/archive", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            chatId,
+            archived,
+          }),
+        });
+        if (!archived && isArchiveViewOpen && activeChatId === chatId) {
+          setIsArchiveViewOpen(false);
+        }
+      } catch {
+        await loadChatData({ forceFullSync: true });
+        showToast(t("actionFailed"));
+      }
+    },
+    [activeChatId, currentUser.id, isArchiveViewOpen, loadChatData, showToast, t]
+  );
+
+  const saveArchiveLockSettings = useCallback(async () => {
+    if (!hasArchiveLockPasscode) {
+      if (archiveLockPasscodeDraft.length < 4) {
+        showToast(
+          language === "ru"
+            ? "Пароль архива должен быть не короче 4 символов."
+            : "Archive passcode must be at least 4 characters."
+        );
+        return;
+      }
+      if (false) {
+        showToast(language === "ru" ? "Пароли не совпадают." : "Passcodes do not match.");
+        return;
+      }
+    }
+
+    if (hasArchiveLockPasscode) {
+      if (!archiveLockPasscodeDraft || archiveLockConfirmDraft.length < 4) {
+        showToast(
+          language === "ru"
+            ? "Введите текущий пароль и новый пароль не короче 4 символов."
+            : "Enter current passcode and a new passcode with at least 4 characters."
+        );
+        return;
+      }
+    }
+
+    setIsSavingArchiveLock(true);
+    try {
+      const result = await requestJson<{ archiveLockEnabled: boolean }>(
+        "/api/auth/archive-lock",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            enabled: true,
+            passcode: hasArchiveLockPasscode ? undefined : archiveLockPasscodeDraft,
+            currentPasscode: hasArchiveLockPasscode
+              ? archiveLockPasscodeDraft
+              : undefined,
+            nextPasscode: hasArchiveLockPasscode
+              ? archiveLockConfirmDraft
+              : undefined,
+          }),
+        }
+      );
+      const isLocked = result.archiveLockEnabled === true;
+      setArchiveLockEnabled(isLocked);
+      setHasArchiveLockPasscode(isLocked);
+      setArchiveLockPasscodeDraft("");
+      setArchiveLockConfirmDraft("");
+      setIsArchiveUnlocked(!isLocked);
+      showToast(
+        isLocked
+          ? language === "ru"
+            ? "Архив защищен паролем."
+            : "Archive lock enabled."
+          : language === "ru"
+            ? "Пароль архива отключен."
+            : "Archive lock disabled."
+      );
+    } catch (error) {
+      showToast(getRequestErrorMessage(error));
+    } finally {
+      setIsSavingArchiveLock(false);
+    }
+  }, [
+    archiveLockConfirmDraft,
+    archiveLockPasscodeDraft,
+    currentUser.id,
+    getRequestErrorMessage,
+    hasArchiveLockPasscode,
+    isSavingArchiveLock,
+    language,
+    showToast,
+  ]);
+
+  const handleArchiveLockToggle = useCallback(
+    async (checked: boolean) => {
+      if (checked) {
+        setArchiveLockEnabled(true);
+        return;
+      }
+
+      if (!hasArchiveLockPasscode) {
+        setArchiveLockEnabled(false);
+        setArchiveLockPasscodeDraft("");
+        setArchiveLockConfirmDraft("");
+        return;
+      }
+
+      if (isSavingArchiveLock) {
+        return;
+      }
+
+      setIsSavingArchiveLock(true);
+      try {
+        const result = await requestJson<{ archiveLockEnabled: boolean }>(
+          "/api/auth/archive-lock",
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              userId: currentUser.id,
+              enabled: false,
+            }),
+          }
+        );
+        const isLocked = result.archiveLockEnabled === true;
+        setArchiveLockEnabled(isLocked);
+        setHasArchiveLockPasscode(isLocked);
+        setArchiveLockPasscodeDraft("");
+        setArchiveLockConfirmDraft("");
+        setIsArchiveUnlocked(!isLocked);
+        showToast(
+          language === "ru"
+            ? "Пароль архива отключен."
+            : "Archive lock disabled."
+        );
+      } catch (error) {
+        showToast(getRequestErrorMessage(error));
+      } finally {
+        setIsSavingArchiveLock(false);
+      }
+    },
+    [
+      currentUser.id,
+      getRequestErrorMessage,
+      hasArchiveLockPasscode,
+      isSavingArchiveLock,
+      language,
+      showToast,
+    ]
+  );
+
+  const unlockArchive = useCallback(async () => {
+    if (!archiveUnlockPasscode) {
+      setArchiveUnlockError(
+        language === "ru" ? "Введите пароль архива." : "Enter archive passcode."
+      );
+      return;
+    }
+
+    setIsArchiveUnlockSubmitting(true);
+    setArchiveUnlockError("");
+    try {
+      await requestJson<{ ok: boolean }>("/api/auth/archive-lock", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: currentUser.id,
+          passcode: archiveUnlockPasscode,
+        }),
+      });
+      setIsArchiveUnlocked(true);
+      setIsArchiveUnlockDialogOpen(false);
+      setArchiveUnlockPasscode("");
+      setIsArchiveViewOpen(true);
+    } catch (error) {
+      setArchiveUnlockError(getRequestErrorMessage(error));
+    } finally {
+      setIsArchiveUnlockSubmitting(false);
+    }
+  }, [
+    archiveUnlockPasscode,
+    currentUser.id,
+    getRequestErrorMessage,
+    language,
+  ]);
+
   const deleteChat = useCallback(
     async (chatId: string) => {
       const threadToDelete = threads.find((thread) => thread.id === chatId) ?? null;
@@ -9757,6 +11139,19 @@ export function WebMessenger({
     },
     [draft]
   );
+
+  useEffect(() => {
+    const input = messageInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    const maxComposerHeight = 144;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, maxComposerHeight)}px`;
+    input.style.overflowY =
+      input.scrollHeight > maxComposerHeight ? "auto" : "hidden";
+  }, [draft]);
 
   const formattingControls = useMemo(
     () =>
@@ -10776,9 +12171,134 @@ export function WebMessenger({
     [currentUser.id, openOwnProfile]
   );
 
+  const handleMentionClick = useCallback(
+    async (rawMention: string) => {
+      const normalizedUsername = normalizeGroupUsername(rawMention);
+      if (!normalizedUsername) {
+        return;
+      }
+
+      const mentionedUser =
+        knownUsers.find(
+          (user) =>
+            user.username.trim().replace(/^@+/, "").toLowerCase() === normalizedUsername
+        ) ?? null;
+      if (mentionedUser) {
+        openUserProfileFromChat(mentionedUser.id);
+        return;
+      }
+
+      const existingGroupChat = chatItems.find(
+        (chat) =>
+          chat.isGroup &&
+          !chat.isFavorites &&
+          !chat.isPreview &&
+          normalizeGroupUsername(chat.groupUsername ?? "") === normalizedUsername
+      );
+      if (existingGroupChat) {
+        openChat(existingGroupChat.id);
+        setActiveSidebar("home");
+        setQuery("");
+        return;
+      }
+
+      try {
+        const response = await requestJson<SearchPublicGroupsResponse>(
+          `/api/messenger/search-public-groups?${new URLSearchParams({
+            userId: currentUser.id,
+            q: normalizedUsername,
+          }).toString()}`
+        );
+        const matchedGroup =
+          response.groups.find(
+            (group) => normalizeGroupUsername(group.username) === normalizedUsername
+          ) ?? null;
+        if (matchedGroup) {
+          openPublicGroupPreview(matchedGroup);
+        }
+      } catch {
+        // Ignore lookup failures and leave the message content unchanged.
+      }
+    },
+    [
+      chatItems,
+      currentUser.id,
+      knownUsers,
+      openChat,
+      openPublicGroupPreview,
+      openUserProfileFromChat,
+    ]
+  );
+
   const resetMobileBackSwipeGesture = useCallback(() => {
     mobileBackSwipeGestureRef.current = createIdleMobileBackSwipeGestureState();
   }, []);
+
+  const resetArchivePullGesture = useCallback(() => {
+    archivePullGestureRef.current = createIdleArchivePullGestureState();
+    setArchivePullPreviewPx(0);
+  }, []);
+
+  const handleArchivePullStart = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      const touch = event.touches[0];
+      const scroller = chatListScrollRef.current;
+      if (
+        !touch ||
+        !scroller ||
+        !isArchiveVisible ||
+        isArchiveViewOpen ||
+        archivedChatItems.length === 0 ||
+        query.trim().length > 0 ||
+        scroller.scrollTop > 2
+      ) {
+        resetArchivePullGesture();
+        return;
+      }
+
+      archivePullGestureRef.current = {
+        tracking: true,
+        activated: false,
+        startX: touch.clientX,
+        startY: touch.clientY,
+      };
+    },
+    [archivedChatItems.length, isArchiveViewOpen, isArchiveVisible, query, resetArchivePullGesture]
+  );
+
+  const handleArchivePullMove = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      const gesture = archivePullGestureRef.current;
+      if (!gesture.tracking || gesture.activated) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      if (!touch) {
+        return;
+      }
+
+      const deltaY = touch.clientY - gesture.startY;
+      const deltaX = touch.clientX - gesture.startX;
+      if (deltaY <= 0 || Math.abs(deltaX) > deltaY) {
+        return;
+      }
+
+      event.preventDefault();
+      setArchivePullPreviewPx(Math.min(72, deltaY));
+
+      if (deltaY >= 72) {
+        gesture.activated = true;
+        setArchivePullPreviewPx(0);
+        openArchiveView();
+      }
+    },
+    [openArchiveView]
+  );
+
+  const handleArchivePullEnd = useCallback(() => {
+    resetArchivePullGesture();
+  }, [resetArchivePullGesture]);
 
   const handleMobileBackSwipeStart = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
@@ -11813,6 +13333,18 @@ export function WebMessenger({
     }
     return value;
   };
+  const getPinnedMessageAlignmentLabel = (value: string) => {
+    if (value === "left") {
+      return t("alignLeft");
+    }
+    if (value === "center") {
+      return t("alignCenter");
+    }
+    if (value === "right") {
+      return t("alignRight");
+    }
+    return value;
+  };
   const getFontFamilyLabel = (value: string) => {
     if (value === "default") {
       return t("fontFamilyDefault");
@@ -12037,7 +13569,7 @@ export function WebMessenger({
               <AlertDialog open={isGroupMenuOpen} onOpenChange={handleGroupMenuOpenChange}>
                 <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-xl">
                   <AlertDialogHeader className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
                       <AlertDialogTitle className="text-zinc-100">
                         {groupCreationKind === "channel"
                           ? language === "ru"
@@ -12045,13 +13577,6 @@ export function WebMessenger({
                             : "New channel"
                           : t("newGroup")}
                       </AlertDialogTitle>
-                      <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300">
-                        {groupCreationKind === "channel"
-                          ? "1/1"
-                          : groupCreationStep === "members"
-                            ? "1/2"
-                            : "2/2"}
-                      </span>
                     </div>
                     <AlertDialogDescription className="text-zinc-400">
                       {groupCreationKind !== "channel" && groupCreationStep === "members"
@@ -12068,8 +13593,8 @@ export function WebMessenger({
 
                   {groupCreationKind !== "channel" && groupCreationStep === "members" ? (
                     <div className="space-y-3">
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
-                        {selectedGroupDraftMembers.length > 0 ? (
+                      {selectedGroupDraftMembers.length > 0 ? (
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
                           <div className="flex flex-wrap gap-1.5">
                             {selectedGroupDraftMembers.map((member) => (
                               <button
@@ -12083,10 +13608,8 @@ export function WebMessenger({
                               </button>
                             ))}
                           </div>
-                        ) : (
-                          <p className="text-xs text-zinc-500">{t("groupMembersOptionalHint")}</p>
-                        )}
-                      </div>
+                        </div>
+                      ) : null}
 
                       <div className="relative">
                         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
@@ -12274,10 +13797,70 @@ export function WebMessenger({
                 </AlertDialogContent>
               </AlertDialog>
               <div
+                ref={chatListScrollRef}
+                onTouchStart={handleArchivePullStart}
+                onTouchMove={handleArchivePullMove}
+                onTouchEnd={handleArchivePullEnd}
+                onTouchCancel={handleArchivePullEnd}
                 className={`flex-1 overflow-y-auto ${
                   uiDensity === "compact" ? "space-y-1 p-2" : "space-y-2 p-3"
                 }`}
               >
+                {!isArchiveViewOpen && isArchiveVisible ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={openArchiveView}
+                      className="w-full rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-1.5 text-left text-zinc-300 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Archive className="size-3.5 shrink-0 text-zinc-500" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">
+                            {t("archivedChats")}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] text-zinc-500 md:hidden">
+                            {archivedChatItems.length > 0
+                              ? t("archivedChatsHint")
+                              : t("archiveEmptyState")}
+                          </span>
+                        </span>
+                      </div>
+                    </button>
+                    {archivedChatItems.length > 0 && archivePullPreviewPx > 0 ? (
+                      <div
+                        className="flex items-end justify-center overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/10 px-3 text-center text-xs text-primary transition-[height] duration-150"
+                        style={{ height: `${archivePullPreviewPx}px` }}
+                      >
+                        <span className="pb-2">{t("archivePullHint")}</span>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+                {isArchiveViewOpen ? (
+                  <button
+                    type="button"
+                    onClick={closeArchiveView}
+                    className="w-full rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-left text-zinc-300 transition-colors hover:bg-primary/10"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <ArrowLeft className="size-3.5 shrink-0 text-primary" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium uppercase tracking-[0.12em] text-primary/90">
+                          {t("archivedChats")}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11px] text-zinc-400 md:hidden">
+                          {t("archiveTapToReturn")}
+                        </span>
+                      </span>
+                    </div>
+                  </button>
+                ) : null}
+                {isArchiveViewOpen && filteredChats.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 px-4 py-5 text-center text-sm text-zinc-400">
+                    {t("archiveEmptyState")}
+                  </div>
+                ) : null}
                 {filteredChats.map((chat) => {
                   const selected = chat.id === activeChat?.id;
                   const pinLimitReached =
@@ -12436,6 +14019,15 @@ export function WebMessenger({
                                 <BellOff className="size-4" />
                               )}
                               {chat.isMuted ? t("unmuteChat") : t("muteChat")}
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              className={chatActionMenuItemClassName}
+                              onSelect={() =>
+                                void setChatArchived(chat.id, chat.isArchived !== true)
+                              }
+                            >
+                              <Archive className="size-4" />
+                              {chat.isArchived ? t("unarchiveChat") : t("archiveChat")}
                             </ContextMenuItem>
                             <ContextMenuSeparator
                               className={chatActionMenuSeparatorClassName}
@@ -12662,10 +14254,12 @@ export function WebMessenger({
                           (activeChat.isFavorites
                             ? t("savedMessages")
                             : activeChat.isGroup
-                              ? `${Math.max(
-                                  activeChat.groupKind === "channel" ? 1 : 2,
-                                  activeChat.memberCount || activeChat.memberIds.length
-                                )} ${activeChatAudienceLabel}`
+                              ? activeChat.groupKind === "channel"
+                                ? `${Math.max(
+                                    1,
+                                    activeChat.memberCount || activeChat.memberIds.length
+                                  )} ${activeChatAudienceLabel}`
+                                : activeGroupStatusText
                               : activeChatLastSeenText)}
                       </p>
                       </span>
@@ -12955,6 +14549,48 @@ export function WebMessenger({
                         uiDensity === "compact" ? "space-y-1.5 px-4 py-3" : "space-y-2 px-4 py-5"
                       }`}
                     >
+                    {activePinnedMessage ? (
+                      <div
+                        className={`mb-3 flex ${
+                          uiPinnedMessageAlignment === "right"
+                            ? "justify-end"
+                            : uiPinnedMessageAlignment === "center"
+                              ? "justify-center"
+                              : "justify-start"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            focusReplyTargetMessage(activePinnedMessage.id);
+                            if (pinnedActiveMessages.length > 1) {
+                              setPinnedMessageCursor(
+                                (prev) => (prev + 1) % pinnedActiveMessages.length
+                              );
+                            }
+                          }}
+                          className="flex w-72 items-center gap-2 rounded-full border border-zinc-700/80 bg-zinc-950/80 px-3 py-2 text-left backdrop-blur hover:border-zinc-600 hover:bg-zinc-900/85"
+                        >
+                          <PinFilledIcon className="size-3.5 shrink-0 text-zinc-400" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-medium text-zinc-200">
+                              {activePinnedMessage.text.trim() ||
+                                (activePinnedMessage.attachments.length > 0
+                                  ? t("attachment")
+                                  : t("noMessagesYet"))}
+                            </p>
+                            {pinnedActiveMessages.length > 1 ? (
+                              <p className="mt-0.5 text-[11px] text-zinc-500">
+                                {`${pinnedMessageCursor + 1}/${pinnedActiveMessages.length}`}
+                              </p>
+                            ) : null}
+                          </div>
+                          {pinnedActiveMessages.length > 1 ? (
+                            <ArrowRight className="size-3.5 shrink-0 text-zinc-500" />
+                          ) : null}
+                        </button>
+                      </div>
+                    ) : null}
                     {filteredActiveMessages.length === 0 ? (
                       <div className={`text-center text-sm text-zinc-500 ${uiDensity === "compact" ? "py-7" : "py-10"}`}>
                         {activeChatSearchQuery.trim().length > 0
@@ -13000,9 +14636,17 @@ export function WebMessenger({
                         hasMessageText && !isMessageContentProtected;
                       const canCopyAttachmentLink =
                         Boolean(firstAttachmentUrl) && !isMessageContentProtected;
-                      const canDeleteMessage =
+                      const canEditMessage =
                         message.author === "me" && !activeChat.isFavorites;
+                      const canDeleteMessage = !activeChat.isFavorites;
                       const canReplyToMessage = !activeChat.isFavorites;
+                      const canPinMessage =
+                        !activeChat.isFavorites &&
+                        !activeChat.isPreview &&
+                        !message.isScheduledPending &&
+                        (!activeChat.isGroup ||
+                          activeChat.groupKind !== "channel" ||
+                          activeChat.myGroupRole === "owner");
                       const canReportMessage =
                         !activeChat.isFavorites &&
                         !activeChat.isPreview &&
@@ -13029,7 +14673,9 @@ export function WebMessenger({
                         hasPrimaryMessageContextActions ||
                         hasForwardOrCopyMessageContextActions;
                       const hasActionsBeforeDeleteMessageContext =
-                        hasActionsBeforeReportMessageContext || canReportMessage;
+                        hasActionsBeforeReportMessageContext ||
+                        canReportMessage ||
+                        canPinMessage;
                       const viewsMenuLabel =
                         language === "ru"
                           ? `${message.groupReadByCount} просмотры`
@@ -13037,6 +14683,24 @@ export function WebMessenger({
                               message.groupReadByCount === 1 ? "view" : "views"
                             }`;
                       const reply = message.reply;
+                      const mediaAttachments = message.attachments.filter(
+                        (attachment) =>
+                          attachment.kind === "image" || attachment.kind === "video"
+                      );
+                      const audioAttachments = message.attachments.filter(
+                        (attachment) => attachment.kind === "audio"
+                      );
+                      const fileAttachments = message.attachments.filter(
+                        (attachment) => attachment.kind === "file"
+                      );
+                      const mediaGalleryClassName =
+                        mediaAttachments.length <= 1
+                          ? "grid-cols-1"
+                          : "grid-cols-2";
+                      const mediaRowClassName =
+                        mediaAttachments.length === 3
+                          ? "auto-rows-[minmax(7.5rem,1fr)] sm:auto-rows-[minmax(8.75rem,1fr)]"
+                          : "";
                       const shouldShowUnreadDivider =
                         unreadDividerMessageId === message.id &&
                         (activeChatSearchQuery.trim().length === 0 ||
@@ -13149,6 +14813,12 @@ export function WebMessenger({
                                         }
                                       : undefined
                                   }
+                                  onDoubleClick={
+                                    canReplyToMessage
+                                      ? (event) =>
+                                          handleMessageDoubleClick(event, message.id)
+                                      : undefined
+                                  }
                                   className={`${shouldShowIncomingAuthorIdentity ? "min-w-0 flex-1" : ""} ${uiRadiusBubbleClass} ring-1 ring-white/5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7)] ${
                                     uiDensity === "compact" ? "px-3 py-1.5" : "px-4 py-2"
                                   } ${
@@ -13220,74 +14890,60 @@ export function WebMessenger({
                                     ) : null}
                                   </button>
                                 ) : null}
-                                {message.text ? <div>{renderFormattedMessageText(message.text)}</div> : null}
-                                {message.attachments.length > 0 ? (
-                                  <div className={`${message.text ? "mt-2" : ""} space-y-2`}>
-                                    {message.attachments.map((attachment) => {
-                                      if (attachment.kind === "image" || attachment.kind === "video") {
-                                        const shouldLoadMedia =
-                                          activeChatAutoLoadMediaEnabled ||
-                                          message.author === "me" ||
-                                          manuallyLoadedMediaIds.has(attachment.id);
-                                        if (!shouldLoadMedia) {
-                                          return (
-                                            <button
-                                              key={attachment.id}
-                                              type="button"
-                                              onClick={() =>
-                                                setManuallyLoadedMediaIds((prev) => {
-                                                  const next = new Set(prev);
-                                                  next.add(attachment.id);
-                                                  return next;
-                                                })
-                                              }
-                                              className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${
-                                                message.author === "me"
-                                                  ? "border-white/35 bg-white/10"
-                                                  : "border-zinc-500/40 bg-zinc-800/70"
-                                              }`}
-                                            >
-                                              <span className="truncate">{attachment.name}</span>
-                                              <span className="ml-3 shrink-0 text-xs text-zinc-300">
-                                                {t("loadMedia")}
-                                              </span>
-                                            </button>
-                                          );
-                                        }
-                                        if (attachment.kind === "image") {
-                                          return (
-                                            <button
-                                              key={attachment.id}
-                                              type="button"
-                                              onClick={() => openImageViewer(attachment.id)}
-                                              onContextMenu={
-                                                isMessageContentProtected
-                                                  ? (event) => {
-                                                      event.preventDefault();
-                                                      showGroupContentProtectionBlockedToast();
-                                                    }
-                                                  : undefined
-                                              }
-                                              className="block overflow-hidden rounded-lg border border-zinc-400/30 bg-black/10"
-                                            >
-                                              <img
-                                                src={attachment.url}
-                                                alt={attachment.name}
-                                                className="max-h-64 w-full cursor-zoom-in object-cover"
-                                                draggable={!isMessageContentProtected}
-                                              />
-                                            </button>
-                                          );
-                                        }
+                                {mediaAttachments.length > 0 ? (
+                                  <div
+                                    className={`${
+                                      reply || activeChat.isFavorites ? "mt-2" : "mt-1"
+                                    } grid gap-1.5 ${mediaGalleryClassName} ${mediaRowClassName}`}
+                                  >
+                                    {mediaAttachments.map((attachment, mediaIndex) => {
+                                      const shouldLoadMedia =
+                                        activeChatAutoLoadMediaEnabled ||
+                                        message.author === "me" ||
+                                        manuallyLoadedMediaIds.has(attachment.id);
+                                      const mediaTileClassName =
+                                        mediaAttachments.length === 1
+                                          ? "min-h-56 sm:min-h-72"
+                                          : mediaAttachments.length === 3 && mediaIndex === 0
+                                            ? "row-span-2 min-h-56 sm:min-h-72"
+                                            : mediaAttachments.length > 4 &&
+                                                  mediaAttachments.length % 2 === 1 &&
+                                                  mediaIndex === mediaAttachments.length - 1
+                                              ? "col-span-2 min-h-44 sm:min-h-52"
+                                              : "min-h-36 sm:min-h-44";
+                                      if (!shouldLoadMedia) {
                                         return (
-                                          <video
+                                          <button
                                             key={attachment.id}
-                                            controls
-                                            className="max-h-64 w-full rounded-lg border border-zinc-400/30 bg-black/30"
-                                            src={attachment.url}
-                                            controlsList={
-                                              isMessageContentProtected ? "nodownload" : undefined
+                                            type="button"
+                                            onClick={() =>
+                                              setManuallyLoadedMediaIds((prev) => {
+                                                const next = new Set(prev);
+                                                next.add(attachment.id);
+                                                return next;
+                                              })
                                             }
+                                            className={`flex h-full w-full flex-col items-start justify-end overflow-hidden rounded-xl border p-3 text-left ${
+                                              message.author === "me"
+                                                ? "border-white/20 bg-white/12"
+                                                : "border-zinc-500/30 bg-zinc-950/45"
+                                            } ${mediaTileClassName}`}
+                                          >
+                                            <span className="line-clamp-2 text-sm font-medium">
+                                              {attachment.name}
+                                            </span>
+                                            <span className="mt-1 text-xs opacity-80">
+                                              {t("loadMedia")}
+                                            </span>
+                                          </button>
+                                        );
+                                      }
+                                      if (attachment.kind === "image") {
+                                        return (
+                                          <button
+                                            key={attachment.id}
+                                            type="button"
+                                            onClick={() => openImageViewer(attachment.id)}
                                             onContextMenu={
                                               isMessageContentProtected
                                                 ? (event) => {
@@ -13296,19 +14952,74 @@ export function WebMessenger({
                                                   }
                                                 : undefined
                                             }
-                                          />
+                                            className={`block h-full w-full overflow-hidden rounded-xl border border-zinc-400/30 bg-black/15 ${mediaTileClassName}`}
+                                          >
+                                            <img
+                                              src={attachment.url}
+                                              alt={attachment.name}
+                                              className="h-full w-full cursor-zoom-in object-cover"
+                                              draggable={!isMessageContentProtected}
+                                            />
+                                          </button>
                                         );
                                       }
-                                      if (attachment.kind === "audio") {
-                                        return (
-                                          <AudioAttachmentPlayer
-                                            key={attachment.id}
-                                            src={attachment.url}
-                                            disableDownload={isMessageContentProtected}
-                                            onBlockedAction={showGroupContentProtectionBlockedToast}
-                                          />
-                                        );
-                                      }
+                                      return (
+                                        <video
+                                          key={attachment.id}
+                                          controls
+                                          className={`h-full w-full rounded-xl border border-zinc-400/30 bg-black/30 object-cover ${mediaTileClassName}`}
+                                          src={attachment.url}
+                                          controlsList={
+                                            isMessageContentProtected ? "nodownload" : undefined
+                                          }
+                                          onContextMenu={
+                                            isMessageContentProtected
+                                              ? (event) => {
+                                                  event.preventDefault();
+                                                  showGroupContentProtectionBlockedToast();
+                                                }
+                                              : undefined
+                                          }
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                ) : null}
+                                {message.text ? (
+                                  <div className={mediaAttachments.length > 0 ? "mt-3" : ""}>
+                                    {renderFormattedMessageText(
+                                      message.text,
+                                      handleMentionClick
+                                    )}
+                                  </div>
+                                ) : null}
+                                {audioAttachments.length > 0 ? (
+                                  <div
+                                    className={`space-y-2 ${
+                                      mediaAttachments.length > 0 || message.text ? "mt-2" : ""
+                                    }`}
+                                  >
+                                    {audioAttachments.map((attachment) => (
+                                      <AudioAttachmentPlayer
+                                        key={attachment.id}
+                                        src={attachment.url}
+                                        disableDownload={isMessageContentProtected}
+                                        onBlockedAction={showGroupContentProtectionBlockedToast}
+                                      />
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {fileAttachments.length > 0 ? (
+                                  <div
+                                    className={`space-y-2 ${
+                                      mediaAttachments.length > 0 ||
+                                      message.text ||
+                                      audioAttachments.length > 0
+                                        ? "mt-2"
+                                        : ""
+                                    }`}
+                                  >
+                                    {fileAttachments.map((attachment) => {
                                       if (isMessageContentProtected) {
                                         return (
                                           <button
@@ -13369,6 +15080,9 @@ export function WebMessenger({
                                       : "justify-end text-zinc-500"
                                   }`}
                                 >
+                                  {message.isPinned ? (
+                                    <PinFilledIcon className="size-3 opacity-85" />
+                                  ) : null}
                                   {message.isEdited ? (
                                     <span className="opacity-80">{t("editedLabel")}</span>
                                   ) : null}
@@ -13500,30 +15214,60 @@ export function WebMessenger({
                                 </ContextMenuItem>
                               </>
                             ) : null}
-                            {canDeleteMessage ? (
+                            {canPinMessage ? (
                               <>
-                                {hasActionsBeforeDeleteMessageContext ? (
+                                {hasActionsBeforeReportMessageContext || canReportMessage ? (
                                   <ContextMenuSeparator
                                     className={chatActionMenuSeparatorClassName}
                                   />
                                 ) : null}
                                 <ContextMenuItem
                                   className={chatActionMenuItemClassName}
-                                  onSelect={() => startEditingMessage(message.id)}
+                                  onSelect={() =>
+                                    void toggleMessagePinned(message.id, !message.isPinned)
+                                  }
                                 >
-                                  <Pencil className="size-4" />
-                                  {t("editMessage")}
+                                  {message.isPinned ? (
+                                    <PinOffIcon className="size-4" />
+                                  ) : (
+                                    <PinFilledIcon className="size-4" />
+                                  )}
+                                  {message.isPinned ? t("unpinMessage") : t("pinMessage")}
                                 </ContextMenuItem>
-                                <ContextMenuSeparator
-                                  className={chatActionMenuSeparatorClassName}
-                                />
-                                <ContextMenuItem
-                                  className={chatActionMenuItemClassName}
-                                  onSelect={() => void deleteMessage(message.id)}
-                                >
-                                  <Trash2 className="size-4" />
-                                  {t("deleteMessage")}
-                                </ContextMenuItem>
+                              </>
+                            ) : null}
+                            {canEditMessage || canDeleteMessage ? (
+                              <>
+                                {hasActionsBeforeDeleteMessageContext ? (
+                                  <ContextMenuSeparator
+                                    className={chatActionMenuSeparatorClassName}
+                                  />
+                                ) : null}
+                                {canEditMessage ? (
+                                  <>
+                                    <ContextMenuItem
+                                      className={chatActionMenuItemClassName}
+                                      onSelect={() => startEditingMessage(message.id)}
+                                    >
+                                      <Pencil className="size-4" />
+                                      {t("editMessage")}
+                                    </ContextMenuItem>
+                                    {canDeleteMessage ? (
+                                      <ContextMenuSeparator
+                                        className={chatActionMenuSeparatorClassName}
+                                      />
+                                    ) : null}
+                                  </>
+                                ) : null}
+                                {canDeleteMessage ? (
+                                  <ContextMenuItem
+                                    className={chatActionMenuItemClassName}
+                                    onSelect={() => void deleteMessage(message.id)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    {t("deleteMessage")}
+                                  </ContextMenuItem>
+                                ) : null}
                               </>
                             ) : null}
                             </ContextMenuContent>
@@ -13851,7 +15595,7 @@ export function WebMessenger({
                           </div>
                         </div>
                       ) : (
-                        <div ref={composerRef} className="relative flex items-center gap-2">
+                        <div ref={composerRef} className="relative flex items-stretch gap-2">
                           <Button
                             type="button"
                             variant="ghost"
@@ -13859,14 +15603,14 @@ export function WebMessenger({
                             aria-label={t("attachFiles")}
                             title={t("attachFiles")}
                             disabled={Boolean(editingTargetMessage)}
-                            className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-primary hover:bg-zinc-600 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 ${
+                            className={`shrink-0 self-end border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-primary hover:bg-zinc-600 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 ${
                               uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
                             }`}
                             onClick={openAttachmentPicker}
                           >
                             <Plus className="size-4" />
                           </Button>
-                          <div className="relative flex-1">
+                          <div className="relative min-w-0 flex-1">
                             <div
                               className={`absolute bottom-12 right-0 z-50 w-[min(360px,calc(100vw-3rem))] rounded-xl border border-zinc-800/90 bg-zinc-950/90 p-2 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl transition-all duration-150 ${
                                 isEmojiMenuOpen
@@ -13904,7 +15648,7 @@ export function WebMessenger({
                                   sendMessage();
                                 }
                               }}
-                              className={`max-h-36 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400 ${
+                              className={`block max-h-36 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400 [field-sizing:fixed] [scrollbar-gutter:stable] ${
                                 uiDensity === "compact"
                                   ? "min-h-[38px] py-1.5 pr-10 text-sm"
                                   : "min-h-[44px] py-2 pr-12"
@@ -13917,8 +15661,10 @@ export function WebMessenger({
                               aria-label="Emoji"
                               title="Emoji"
                               aria-expanded={isEmojiSidebarOpen || isEmojiMenuOpen}
-                              className={`absolute top-1/2 -translate-y-1/2 rounded-md border-0 bg-transparent p-0 text-zinc-300 shadow-none hover:bg-transparent hover:text-primary focus-visible:ring-0 ${
-                                uiDensity === "compact" ? "right-1.5 h-6 w-6" : "right-2 h-7 w-7"
+                              className={`absolute rounded-md border-0 bg-transparent p-0 text-zinc-300 shadow-none hover:bg-transparent hover:text-primary focus-visible:ring-0 ${
+                                uiDensity === "compact"
+                                  ? "bottom-1.5 right-1.5 h-6 w-6"
+                                  : "bottom-2 right-2 h-7 w-7"
                               }`}
                               onClick={toggleEmojiSidebar}
                               onMouseEnter={openEmojiMenu}
@@ -13936,7 +15682,7 @@ export function WebMessenger({
                               size="icon"
                               aria-label={t("startVoiceRecording")}
                               title={t("startVoiceRecording")}
-                              className={`shrink-0 border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-primary hover:bg-zinc-600 hover:text-primary ${
+                              className={`shrink-0 self-end border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-primary hover:bg-zinc-600 hover:text-primary ${
                                 uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
                               }`}
                               onClick={toggleVoiceRecording}
@@ -13948,7 +15694,7 @@ export function WebMessenger({
                               type="submit"
                               aria-label={editingTargetMessage ? t("saveEdit") : t("send")}
                               title={editingTargetMessage ? t("saveEdit") : t("send")}
-                              className={`shrink-0 rounded-lg bg-primary p-0 text-zinc-50 hover:bg-primary/90 ${
+                              className={`shrink-0 self-end rounded-lg bg-primary p-0 text-zinc-50 hover:bg-primary/90 ${
                                 uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
                               }`}
                               onContextMenu={(event) => {
@@ -14095,7 +15841,10 @@ export function WebMessenger({
                                       : "border-zinc-700/90 bg-zinc-900/90 text-zinc-100"
                                 }`}
                               >
-                                {renderFormattedMessageText(message.content)}
+                                {renderFormattedMessageText(
+                                  message.content,
+                                  handleMentionClick
+                                )}
                               </div>
                             </div>
                           </ContextMenuTrigger>
@@ -15410,6 +17159,95 @@ export function WebMessenger({
                           aria-label={t("pushNotifications")}
                         />
                       </div>
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-medium text-zinc-100">{t("showArchive")}</p>
+                          <p className="mt-0.5 text-xs text-zinc-500">{t("showArchiveHint")}</p>
+                        </div>
+                        <Switch
+                          checked={isArchiveVisible}
+                          onCheckedChange={setIsArchiveVisible}
+                          aria-label={t("showArchive")}
+                        />
+                      </div>
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-zinc-100">{t("archiveLockTitle")}</p>
+                            <p className="mt-0.5 text-xs text-zinc-500">{t("archiveLockHint")}</p>
+                          </div>
+                          <Switch
+                            checked={archiveLockEnabled}
+                            onCheckedChange={(checked) => {
+                              void handleArchiveLockToggle(checked);
+                            }}
+                            aria-label={t("archiveLockTitle")}
+                          />
+                        </div>
+                        {archiveLockEnabled ? (
+                          hasArchiveLockPasscode ? (
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <Input
+                                type="password"
+                                value={archiveLockPasscodeDraft}
+                                onChange={(event) =>
+                                  setArchiveLockPasscodeDraft(event.target.value)
+                                }
+                                autoComplete="current-password"
+                                placeholder={
+                                  language === "ru"
+                                    ? "Текущий пароль"
+                                    : "Current passcode"
+                                }
+                                className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500"
+                              />
+                              <Input
+                                type="password"
+                                value={archiveLockConfirmDraft}
+                                onChange={(event) =>
+                                  setArchiveLockConfirmDraft(event.target.value)
+                                }
+                                onBlur={() => {
+                                  void saveArchiveLockSettings();
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    void saveArchiveLockSettings();
+                                  }
+                                }}
+                                autoComplete="new-password"
+                                placeholder={
+                                  language === "ru" ? "Новый пароль" : "New passcode"
+                                }
+                                className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500"
+                              />
+                            </div>
+                          ) : (
+                            <div className="mt-3">
+                              <Input
+                                type="password"
+                                value={archiveLockPasscodeDraft}
+                                onChange={(event) =>
+                                  setArchiveLockPasscodeDraft(event.target.value)
+                                }
+                                onBlur={() => {
+                                  void saveArchiveLockSettings();
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    void saveArchiveLockSettings();
+                                  }
+                                }}
+                                autoComplete="new-password"
+                                placeholder={t("archivePasscode")}
+                                className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500"
+                              />
+                            </div>
+                          )
+                        ) : null}
+                      </div>
                       <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
                         <div className="space-y-3">
                           <div>
@@ -15419,12 +17257,6 @@ export function WebMessenger({
                             <p className="text-xs text-zinc-500">
                               {currentUser.email}
                             </p>
-                          </div>
-                          <div className="rounded-md border border-zinc-700/80 bg-zinc-950/60 px-3 py-2">
-                            <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-                              {language === "ru" ? "Версия приложения" : "App version"}
-                            </p>
-                            <p className="mt-1 font-mono text-xs text-zinc-200">{APP_VERSION}</p>
                           </div>
                           <Button
                             type="button"
@@ -15566,6 +17398,47 @@ export function WebMessenger({
                                   </SelectItem>
                                   <SelectItem value="rounded" className={unifiedSelectItemClassName}>
                                     {t("radiusRounded")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">
+                                {t("pinnedMessagePosition")}
+                              </p>
+                              <p className="mt-0.5 text-xs text-zinc-500">
+                                {t("pinnedMessagePositionHint")}
+                              </p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={uiPinnedMessageAlignment}
+                                onValueChange={(value) => {
+                                  if (
+                                    value === "left" ||
+                                    value === "center" ||
+                                    value === "right"
+                                  ) {
+                                    setUiPinnedMessageAlignment(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className={`text-zinc-100 ${uiControlTextClass}`}>
+                                    {(value) => getPinnedMessageAlignmentLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="left" className={unifiedSelectItemClassName}>
+                                    {t("alignLeft")}
+                                  </SelectItem>
+                                  <SelectItem value="center" className={unifiedSelectItemClassName}>
+                                    {t("alignCenter")}
+                                  </SelectItem>
+                                  <SelectItem value="right" className={unifiedSelectItemClassName}>
+                                    {t("alignRight")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -15748,6 +17621,9 @@ export function WebMessenger({
                     </div>
                   </section>
                   ) : null}
+                  <p className="pt-1 text-center font-mono text-xs text-zinc-400">
+                    {APP_VERSION}
+                  </p>
 
                   </div>
                 </div>
@@ -17130,6 +19006,56 @@ export function WebMessenger({
                   {t("forwardMessageAction")}
                 </>
               )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={isArchiveUnlockDialogOpen}
+        onOpenChange={(open) => {
+          setIsArchiveUnlockDialogOpen(open);
+          if (!open) {
+            setArchiveUnlockPasscode("");
+            setArchiveUnlockError("");
+          }
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">{t("unlockArchive")}</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {t("unlockArchiveHint")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="password"
+              value={archiveUnlockPasscode}
+              onChange={(event) => {
+                setArchiveUnlockPasscode(event.target.value);
+                if (archiveUnlockError) {
+                  setArchiveUnlockError("");
+                }
+              }}
+              autoComplete="current-password"
+              placeholder={t("archivePasscode")}
+              className="h-10 rounded-lg border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500"
+            />
+            {archiveUnlockError ? (
+              <p className="text-xs text-red-300">{archiveUnlockError}</p>
+            ) : null}
+          </div>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              {t("cancel")}
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => void unlockArchive()}
+              disabled={isArchiveUnlockSubmitting}
+              className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
+            >
+              {isArchiveUnlockSubmitting ? t("savingLabel") : t("unlockArchive")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
