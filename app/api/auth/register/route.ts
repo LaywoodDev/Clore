@@ -88,6 +88,12 @@ export async function POST(request: Request) {
         bannerUrl: "",
         archiveLockEnabled: false,
         archivePasscode: "",
+        primeStatus: "inactive",
+        primeExpiresAt: 0,
+        primeAutoRenew: false,
+        primePendingPaymentId: "",
+        primeLastPaymentId: "",
+        primePaymentMethodId: "",
       };
       store.users.push(created);
       return created;

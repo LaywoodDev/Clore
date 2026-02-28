@@ -35,6 +35,12 @@ export type StoredUser = {
   bannerUrl: string;
   archiveLockEnabled?: boolean;
   archivePasscode?: string;
+  primeStatus?: "inactive" | "pending" | "active" | "canceled";
+  primeExpiresAt?: number;
+  primeAutoRenew?: boolean;
+  primePendingPaymentId?: string;
+  primeLastPaymentId?: string;
+  primePaymentMethodId?: string;
 };
 
 export type PublicUser = {
@@ -64,6 +70,9 @@ export type PublicUser = {
   avatarUrl: string;
   bannerUrl: string;
   archiveLockEnabled: boolean;
+  primeStatus: "inactive" | "pending" | "active" | "canceled";
+  primeExpiresAt: number;
+  primeAutoRenew: boolean;
 };
 
 export type GroupRole = "owner" | "admin" | "member";
@@ -218,6 +227,12 @@ function createBotStoredUser(): StoredUser {
     bannerUrl: "",
     archiveLockEnabled: false,
     archivePasscode: "",
+    primeStatus: "inactive",
+    primeExpiresAt: 0,
+    primeAutoRenew: false,
+    primePendingPaymentId: "",
+    primeLastPaymentId: "",
+    primePaymentMethodId: "",
   };
 }
 
@@ -438,6 +453,17 @@ export function toPublicUser(user: StoredUser): PublicUser {
     avatarUrl: user.avatarUrl,
     bannerUrl: user.bannerUrl,
     archiveLockEnabled: user.archiveLockEnabled === true,
+    primeStatus:
+      user.primeStatus === "pending" ||
+      user.primeStatus === "active" ||
+      user.primeStatus === "canceled"
+        ? user.primeStatus
+        : "inactive",
+    primeExpiresAt:
+      typeof user.primeExpiresAt === "number" && Number.isFinite(user.primeExpiresAt)
+        ? Math.max(0, Math.trunc(user.primeExpiresAt))
+        : 0,
+    primeAutoRenew: user.primeAutoRenew === true,
   };
 }
 
@@ -888,6 +914,20 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
     const archiveLockEnabled = user.archiveLockEnabled === true;
     const archivePasscode =
       typeof user.archivePasscode === "string" ? user.archivePasscode : "";
+    const primeStatus =
+      user.primeStatus === "pending" ||
+      user.primeStatus === "active" ||
+      user.primeStatus === "canceled"
+        ? user.primeStatus
+        : "inactive";
+    const primeExpiresAt = Math.max(0, Math.trunc(normalizeNumber(user.primeExpiresAt, 0)));
+    const primeAutoRenew = user.primeAutoRenew === true;
+    const primePendingPaymentId =
+      typeof user.primePendingPaymentId === "string" ? user.primePendingPaymentId.trim() : "";
+    const primeLastPaymentId =
+      typeof user.primeLastPaymentId === "string" ? user.primeLastPaymentId.trim() : "";
+    const primePaymentMethodId =
+      typeof user.primePaymentMethodId === "string" ? user.primePaymentMethodId.trim() : "";
 
     if (!id || !name || !username || !password) {
       continue;
@@ -922,6 +962,12 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       bannerUrl,
       archiveLockEnabled,
       archivePasscode,
+      primeStatus,
+      primeExpiresAt,
+      primeAutoRenew,
+      primePendingPaymentId,
+      primeLastPaymentId,
+      primePaymentMethodId,
     });
   }
 

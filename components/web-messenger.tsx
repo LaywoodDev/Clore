@@ -23,6 +23,7 @@ import {
   CheckCheck,
   Clock3,
   Copy,
+  Crown,
   Download,
   Eraser,
   Maximize2,
@@ -651,6 +652,88 @@ const AI_SETTINGS_ACTION_ALIASES = [
   "поставь",
   "обнови",
 ];
+const AI_MULTI_ACTION_FILLER_TOKENS = [
+  "please",
+  "kindly",
+  "just",
+  "пожалуйста",
+  "пожалуй",
+  "ну",
+];
+const AI_MULTI_ACTION_SERVER_START_ALIASES = [
+  "send",
+  "text",
+  "message",
+  "write",
+  "tell",
+  "notify",
+  "schedule",
+  "ping",
+  "congratulate",
+  "delete",
+  "remove",
+  "erase",
+  "clear",
+  "create",
+  "make",
+  "start",
+  "assemble",
+  "set up",
+  "invite",
+  "add",
+  "include",
+  "kick",
+  "exclude",
+  "drop",
+  "rename",
+  "update",
+  "change",
+  "edit",
+  "set",
+  "promote",
+  "demote",
+  "grant",
+  "revoke",
+  "отправь",
+  "напиши",
+  "передай",
+  "сообщи",
+  "скажи",
+  "уведомь",
+  "запланируй",
+  "поздравь",
+  "удали",
+  "убери",
+  "сотри",
+  "очисти",
+  "создай",
+  "сделай",
+  "собери",
+  "организуй",
+  "пригласи",
+  "добавь",
+  "закинь",
+  "позови",
+  "подключи",
+  "исключи",
+  "кикни",
+  "выгони",
+  "выкинь",
+  "переименуй",
+  "измени",
+  "обнови",
+  "редактируй",
+  "поменяй",
+  "исправь",
+  "задай",
+  "назначь",
+  "повысь",
+  "понизь",
+  "сними",
+  "дай",
+];
+const AI_MULTI_ACTION_CONNECTOR_SPLIT_REGEX =
+  /\s+(?:and then|then|also|and|и затем|затем|а потом|потом|и)\s+/giu;
 const AI_SETTINGS_QUESTION_PREFIXES = [
   "how",
   "how do i",
@@ -1339,6 +1422,91 @@ function isLikelyAiSettingsQuestion(value: string): boolean {
   return startsWithAiCommandAlias(value, AI_SETTINGS_QUESTION_PREFIXES);
 }
 
+function trimLeadingAiActionFillers(value: string): string {
+  const tokens = tokenizeAiCommandText(value);
+  let startIndex = 0;
+
+  while (
+    startIndex < tokens.length &&
+    AI_MULTI_ACTION_FILLER_TOKENS.some((token) =>
+      areAiTokensClose(tokens[startIndex], token)
+    )
+  ) {
+    startIndex += 1;
+  }
+
+  return tokens.slice(startIndex).join(" ");
+}
+
+function isLikelyAiActionSegment(value: string): boolean {
+  const normalizedValue = normalizeAiCommandText(value);
+  if (!normalizedValue || isLikelyAiSettingsQuestion(normalizedValue)) {
+    return false;
+  }
+
+  const strippedValue = trimLeadingAiActionFillers(normalizedValue);
+  if (!strippedValue) {
+    return false;
+  }
+
+  return (
+    startsWithAiCommandAlias(strippedValue, AI_SETTINGS_ACTION_ALIASES) ||
+    startsWithAiCommandAlias(strippedValue, AI_MULTI_ACTION_SERVER_START_ALIASES)
+  );
+}
+
+function splitAiActionChunk(value: string): string[] {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return [];
+  }
+
+  const connectorRegex = new RegExp(
+    AI_MULTI_ACTION_CONNECTOR_SPLIT_REGEX.source,
+    AI_MULTI_ACTION_CONNECTOR_SPLIT_REGEX.flags
+  );
+  const matches = [...trimmedValue.matchAll(connectorRegex)];
+  for (const match of matches) {
+    const index = match.index ?? -1;
+    if (index < 0) {
+      continue;
+    }
+
+    const left = trimmedValue.slice(0, index).trim();
+    const right = trimmedValue.slice(index + match[0].length).trim();
+
+    if (!left || !right) {
+      continue;
+    }
+    if (!isLikelyAiActionSegment(left) || !isLikelyAiActionSegment(right)) {
+      continue;
+    }
+
+    return [...splitAiActionChunk(left), ...splitAiActionChunk(right)];
+  }
+
+  return [trimmedValue];
+}
+
+function splitAiActionPrompt(value: string): string[] {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return [];
+  }
+
+  const segments = trimmedValue
+    .split(/[,\n;]+/u)
+    .flatMap((chunk) => splitAiActionChunk(chunk))
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  if (segments.length < 2 || !segments.every((segment) => isLikelyAiActionSegment(segment))) {
+    return [trimmedValue];
+  }
+
+  return segments;
+}
+
 function detectAiBooleanSettingValue(value: string): boolean | null {
   if (
     includesAiCommandAlias(value, [
@@ -1468,7 +1636,6 @@ const DEFAULT_CHAT_PERSONALIZATION: ChatPersonalization = {
 const MOBILE_VIEWPORT_MEDIA_QUERY = "(max-width: 767px)";
 const MOBILE_BACK_SWIPE_EDGE_WIDTH = 28;
 const MOBILE_BACK_SWIPE_TRIGGER_DISTANCE = 72;
-
 const accentPalette = [
   "from-orange-500 to-amber-400",
   "from-cyan-500 to-sky-400",
@@ -1752,6 +1919,10 @@ const translations = {
     appearance: "Appearance",
     interface: "Interface",
     account: "Account",
+    clorePrime: "Clore Prime",
+    clorePrimeHint: "Premium subscription. Billing and benefits are not connected yet.",
+    clorePrimePrice: "150 ₽/month",
+    clorePrimeComingSoon: "Coming soon",
     pushNotifications: "Push notifications",
     pushNotificationsHint: "Get notified about new messages",
     archivedChats: "Archived chats",
@@ -2142,6 +2313,10 @@ const translations = {
     appearance: "Оформление",
     interface: "Интерфейс",
     account: "Аккаунт",
+    clorePrime: "Clore Prime",
+    clorePrimeHint: "Премиум-подписка. Оплата и преимущества пока не подключены.",
+    clorePrimePrice: "150 ₽/мес",
+    clorePrimeComingSoon: "Скоро",
     pushNotifications: "Push-уведомления",
     pushNotificationsHint: "Получать уведомления о новых сообщениях",
     messageSound: "Звук сообщений",
@@ -2402,6 +2577,11 @@ type AiAssistantChatResponse = {
   removedMembers?: number;
   updatedGroups?: number;
   updatedMemberRoles?: number;
+};
+type AiAssistantSegmentExecutionResult = {
+  message: string;
+  hasMutation: boolean;
+  errorMessage?: string;
 };
 
 function normalizeAiAssistantMessages(value: unknown): AiAssistantMessage[] {
@@ -3633,7 +3813,126 @@ type PreparedCallAudioStream = {
   cleanup: () => void;
 };
 
-function prepareCallAudioStream(sourceStream: MediaStream): PreparedCallAudioStream {
+type PreferredSpeechTrackConstraints = MediaTrackConstraints & {
+  voiceIsolation?: boolean;
+};
+
+type PreferredSpeechCaptureConstraints = MediaTrackConstraints & {
+  latency?: ConstrainDouble;
+};
+
+const RNNOISE_WORKLET_PATH = "/vendor/rnnoiseWorklet.js";
+const RNNOISE_WASM_PATH = "/vendor/rnnoise.wasm";
+const RNNOISE_SIMD_WASM_PATH = "/vendor/rnnoise_simd.wasm";
+
+let rnnoiseBinaryPromise: Promise<ArrayBuffer> | null = null;
+
+function buildPreferredSpeechAudioConstraints(): {
+  capture: PreferredSpeechCaptureConstraints;
+  track: PreferredSpeechTrackConstraints;
+} {
+  const capture: PreferredSpeechCaptureConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+  const track: PreferredSpeechTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+
+  if (typeof navigator === "undefined") {
+    return { capture, track };
+  }
+
+  const supportedConstraints = navigator.mediaDevices?.getSupportedConstraints?.() ?? {};
+  const extendedSupportedConstraints = supportedConstraints as MediaTrackSupportedConstraints & {
+    latency?: boolean;
+    voiceIsolation?: boolean;
+  };
+
+  if (supportedConstraints.channelCount) {
+    capture.channelCount = { ideal: 1, max: 1 };
+    track.channelCount = { ideal: 1, max: 1 };
+  }
+  if (supportedConstraints.sampleRate) {
+    capture.sampleRate = { ideal: 48000 };
+    track.sampleRate = { ideal: 48000 };
+  }
+  if (supportedConstraints.sampleSize) {
+    capture.sampleSize = { ideal: 16 };
+    track.sampleSize = { ideal: 16 };
+  }
+  if (extendedSupportedConstraints.latency) {
+    capture.latency = { ideal: 0.02 };
+  }
+
+  const advancedConstraints: MediaTrackConstraintSet[] = [
+    {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+    {
+      googEchoCancellation: true,
+      googAutoGainControl: true,
+      googNoiseSuppression: true,
+      googHighpassFilter: true,
+      googTypingNoiseDetection: true,
+      googAudioMirroring: false,
+    } as MediaTrackConstraintSet,
+  ];
+
+  if (extendedSupportedConstraints.voiceIsolation) {
+    track.voiceIsolation = true;
+    advancedConstraints.unshift({ voiceIsolation: true } as MediaTrackConstraintSet);
+  }
+
+  capture.advanced = advancedConstraints;
+
+  return { capture, track };
+}
+
+async function createRnnoiseWorkletNode(
+  audioContext: AudioContext
+): Promise<AudioWorkletNode | null> {
+  if (
+    typeof window === "undefined" ||
+    typeof AudioWorkletNode === "undefined" ||
+    typeof audioContext.audioWorklet === "undefined"
+  ) {
+    return null;
+  }
+
+  try {
+    const { RnnoiseWorkletNode, loadRnnoise } = await import(
+      "@sapphi-red/web-noise-suppressor"
+    );
+    if (!rnnoiseBinaryPromise) {
+      rnnoiseBinaryPromise = loadRnnoise({
+        url: RNNOISE_WASM_PATH,
+        simdUrl: RNNOISE_SIMD_WASM_PATH,
+      }).catch((error) => {
+        rnnoiseBinaryPromise = null;
+        throw error;
+      });
+    }
+
+    await audioContext.audioWorklet.addModule(RNNOISE_WORKLET_PATH);
+    const wasmBinary = await rnnoiseBinaryPromise;
+    return new RnnoiseWorkletNode(audioContext, {
+      maxChannels: 1,
+      wasmBinary,
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function prepareCallAudioStream(
+  sourceStream: MediaStream
+): Promise<PreparedCallAudioStream> {
   if (typeof window === "undefined" || typeof window.AudioContext === "undefined") {
     return { stream: sourceStream, cleanup: () => undefined };
   }
@@ -3642,28 +3941,75 @@ function prepareCallAudioStream(sourceStream: MediaStream): PreparedCallAudioStr
     const audioContext = new window.AudioContext({ latencyHint: "interactive" });
     const sourceNode = audioContext.createMediaStreamSource(sourceStream);
     const highPassFilter = audioContext.createBiquadFilter();
+    const rnnoiseNode = await createRnnoiseWorkletNode(audioContext);
+    const presenceFilter = audioContext.createBiquadFilter();
     const lowPassFilter = audioContext.createBiquadFilter();
+    const speechGate = audioContext.createGain();
+    const analyser = audioContext.createAnalyser();
     const compressor = audioContext.createDynamicsCompressor();
     const destination = audioContext.createMediaStreamDestination();
 
     highPassFilter.type = "highpass";
-    highPassFilter.frequency.value = 120;
+    highPassFilter.frequency.value = 100;
     highPassFilter.Q.value = 0.707;
 
+    presenceFilter.type = "peaking";
+    presenceFilter.frequency.value = 1800;
+    presenceFilter.Q.value = 1.1;
+    presenceFilter.gain.value = 2.8;
+
     lowPassFilter.type = "lowpass";
-    lowPassFilter.frequency.value = 7600;
+    lowPassFilter.frequency.value = 6800;
     lowPassFilter.Q.value = 0.8;
 
-    compressor.threshold.value = -48;
-    compressor.knee.value = 30;
-    compressor.ratio.value = 10;
-    compressor.attack.value = 0.002;
-    compressor.release.value = 0.14;
+    speechGate.gain.value = 1;
+
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.18;
+
+    compressor.threshold.value = -30;
+    compressor.knee.value = 18;
+    compressor.ratio.value = 8;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.12;
 
     sourceNode.connect(highPassFilter);
-    highPassFilter.connect(lowPassFilter);
-    lowPassFilter.connect(compressor);
+    if (rnnoiseNode) {
+      highPassFilter.connect(rnnoiseNode);
+      rnnoiseNode.connect(presenceFilter);
+    } else {
+      highPassFilter.connect(presenceFilter);
+    }
+    presenceFilter.connect(lowPassFilter);
+    lowPassFilter.connect(analyser);
+    lowPassFilter.connect(speechGate);
+    speechGate.connect(compressor);
     compressor.connect(destination);
+
+    const timeDomainData = new Uint8Array(analyser.fftSize);
+    let lastSpeechAt = audioContext.currentTime;
+    const speechDetectionInterval = window.setInterval(() => {
+      if (audioContext.state !== "running") {
+        return;
+      }
+
+      analyser.getByteTimeDomainData(timeDomainData);
+      let total = 0;
+      for (const value of timeDomainData) {
+        const centered = (value - 128) / 128;
+        total += centered * centered;
+      }
+      const rms = Math.sqrt(total / timeDomainData.length);
+      if (rms >= 0.018) {
+        lastSpeechAt = audioContext.currentTime;
+      }
+
+      const recentlySpeaking = audioContext.currentTime - lastSpeechAt <= 0.18;
+      const nextGain = recentlySpeaking ? 1 : 0.22;
+      const smoothing = recentlySpeaking ? 0.015 : 0.09;
+      speechGate.gain.cancelScheduledValues(audioContext.currentTime);
+      speechGate.gain.setTargetAtTime(nextGain, audioContext.currentTime, smoothing);
+    }, 50);
 
     if (audioContext.state === "suspended") {
       void audioContext.resume().catch(() => undefined);
@@ -3683,9 +4029,15 @@ function prepareCallAudioStream(sourceStream: MediaStream): PreparedCallAudioStr
     return {
       stream,
       cleanup: () => {
+        window.clearInterval(speechDetectionInterval);
         sourceNode.disconnect();
         highPassFilter.disconnect();
+        rnnoiseNode?.disconnect();
+        (rnnoiseNode as (AudioWorkletNode & { destroy?: () => void }) | null)?.destroy?.();
+        presenceFilter.disconnect();
         lowPassFilter.disconnect();
+        speechGate.disconnect();
+        analyser.disconnect();
         compressor.disconnect();
         destination.disconnect();
         void audioContext.close().catch(() => undefined);
@@ -4047,6 +4399,8 @@ export function WebMessenger({
   const toastProgressAnimationRef = useRef<number | null>(null);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceRecorderStreamRef = useRef<MediaStream | null>(null);
+  const voiceRecorderInputStreamRef = useRef<MediaStream | null>(null);
+  const voiceRecorderCleanupRef = useRef<(() => void) | null>(null);
   const voiceRecorderChunksRef = useRef<Blob[]>([]);
   const voiceRecorderDiscardRef = useRef(false);
   const voiceRecordingTimerRef = useRef<number | null>(null);
@@ -5749,6 +6103,85 @@ export function WebMessenger({
     },
     [currentUser, knownUsers, language, onPrivacyUpdate, runAiSettingsCommand]
   );
+  const executeAiPromptSegments = useCallback(
+    async (
+      rawPrompt: string,
+      messageHistory: AiAssistantMessage[],
+      conversationBase: AiAssistantRequestMessage[]
+    ): Promise<AiAssistantSegmentExecutionResult | null> => {
+      const segments = splitAiActionPrompt(rawPrompt);
+      if (segments.length < 2) {
+        return null;
+      }
+
+      const replies: string[] = [];
+      let hasMutation = false;
+      let errorMessage = "";
+
+      for (const segment of segments) {
+        const localCommandResult = await tryExecuteAiSettingsCommand(
+          segment,
+          messageHistory
+        );
+        if (localCommandResult) {
+          replies.push(localCommandResult.message);
+          continue;
+        }
+
+        try {
+          const response = await requestJson<AiAssistantChatResponse>("/api/ai/chat", {
+            method: "POST",
+            body: JSON.stringify({
+              userId: currentUser.id,
+              language,
+              searchEnabled: aiSearchEnabled,
+              agentEnabled: aiAgentEnabled,
+              messages: [
+                ...conversationBase,
+                {
+                  role: "user",
+                  content: segment,
+                },
+              ],
+            }),
+          });
+          const reply = response.message.trim() || t("actionFailed");
+          replies.push(reply);
+
+          if (
+            (response.sentMessages ?? 0) > 0 ||
+            (response.deletedChats ?? 0) > 0 ||
+            (response.createdGroups ?? 0) > 0 ||
+            (response.invitedMembers ?? 0) > 0 ||
+            (response.removedMembers ?? 0) > 0 ||
+            (response.updatedGroups ?? 0) > 0 ||
+            (response.updatedMemberRoles ?? 0) > 0
+          ) {
+            hasMutation = true;
+          }
+        } catch (error) {
+          errorMessage = getRequestErrorMessage(error);
+          replies.push(errorMessage);
+          break;
+        }
+      }
+
+      return {
+        message: replies.join("\n"),
+        hasMutation,
+        errorMessage: errorMessage || undefined,
+      };
+    },
+    [
+      aiAgentEnabled,
+      aiSearchEnabled,
+      currentUser.id,
+      getRequestErrorMessage,
+      language,
+      t,
+      tryExecuteAiSettingsCommand,
+    ]
+  );
   const sendAiPrompt = useCallback(async () => {
     if (!AI_FEATURE_ENABLED) {
       return;
@@ -5772,7 +6205,7 @@ export function WebMessenger({
       createdAt: Date.now(),
       pending: true,
     };
-    const conversation: AiAssistantRequestMessage[] = [
+    const conversationBase: AiAssistantRequestMessage[] = [
       ...aiMessages
         .filter((message) => !message.pending && message.content.trim().length > 0)
         .slice(-20)
@@ -5780,6 +6213,9 @@ export function WebMessenger({
           role: message.role,
           content: message.content.trim(),
         })),
+    ];
+    const conversation: AiAssistantRequestMessage[] = [
+      ...conversationBase,
       {
         role: "user",
         content: prompt,
@@ -5792,6 +6228,33 @@ export function WebMessenger({
     setAiMessages((prev) => [...prev, userMessage, pendingAssistantMessage]);
 
     try {
+      const multiSegmentResult = await executeAiPromptSegments(
+        prompt,
+        aiMessages,
+        conversationBase
+      );
+      if (multiSegmentResult) {
+        if (multiSegmentResult.errorMessage) {
+          setAiError(multiSegmentResult.errorMessage);
+        }
+        setAiMessages((prev) =>
+          prev.map((message) =>
+            message.id === pendingAssistantId
+              ? {
+                  ...message,
+                  content: multiSegmentResult.message,
+                  pending: false,
+                  error: Boolean(multiSegmentResult.errorMessage),
+                }
+              : message
+          )
+        );
+        if (multiSegmentResult.hasMutation) {
+          setAiPendingSyncVersion((prev) => prev + 1);
+        }
+        return;
+      }
+
       const localCommandResult = await tryExecuteAiSettingsCommand(prompt, aiMessages);
       if (localCommandResult) {
         setAiMessages((prev) =>
@@ -5872,6 +6335,7 @@ export function WebMessenger({
     isAiSubmitting,
     language,
     t,
+    executeAiPromptSegments,
     tryExecuteAiSettingsCommand,
   ]);
   const dismissToast = useCallback(() => {
@@ -6986,11 +7450,6 @@ export function WebMessenger({
   }, [query, visibleChatItems]);
 
   useEffect(() => {
-    if (isArchiveViewOpen && archivedChatItems.length === 0) {
-      setIsArchiveViewOpen(false);
-    }
-  }, [archivedChatItems.length, isArchiveViewOpen]);
-  useEffect(() => {
     if (!isArchiveVisible && isArchiveViewOpen) {
       setIsArchiveViewOpen(false);
     }
@@ -7654,66 +8113,24 @@ export function WebMessenger({
 
     let inputStream: MediaStream | null = null;
     try {
-      const callAudioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
-      const supportedConstraints = navigator.mediaDevices.getSupportedConstraints?.() ?? {};
-      const extendedSupportedConstraints = supportedConstraints as MediaTrackSupportedConstraints & {
-        voiceIsolation?: boolean;
-      };
-      const supportsVoiceIsolation = Boolean(extendedSupportedConstraints.voiceIsolation);
-      if (supportedConstraints?.channelCount) {
-        callAudioConstraints.channelCount = { ideal: 1, max: 1 };
-      }
-      if (supportedConstraints?.sampleRate) {
-        callAudioConstraints.sampleRate = { ideal: 48000 };
-      }
-      if (supportedConstraints?.sampleSize) {
-        callAudioConstraints.sampleSize = { ideal: 16 };
-      }
-      const advancedConstraints: MediaTrackConstraintSet[] = [
-        {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        {
-          googEchoCancellation: true,
-          googAutoGainControl: true,
-          googNoiseSuppression: true,
-          googHighpassFilter: true,
-          googTypingNoiseDetection: true,
-        } as MediaTrackConstraintSet,
-      ];
-      if (supportsVoiceIsolation) {
-        advancedConstraints.unshift({ voiceIsolation: true } as MediaTrackConstraintSet);
-      }
-      callAudioConstraints.advanced = advancedConstraints;
+      const preferredAudioConstraints = buildPreferredSpeechAudioConstraints();
 
       inputStream = await navigator.mediaDevices.getUserMedia({
-        audio: callAudioConstraints,
+        audio: preferredAudioConstraints.capture,
         video: false,
       });
-      const preparedStream = prepareCallAudioStream(inputStream);
+      for (const track of inputStream.getAudioTracks()) {
+        track.enabled = !isCallMicMuted;
+        track.contentHint = "speech";
+        void track.applyConstraints(preferredAudioConstraints.track).catch(() => undefined);
+      }
+
+      const preparedStream = await prepareCallAudioStream(inputStream);
       const stream = preparedStream.stream;
 
-      const trackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      } as MediaTrackConstraints & { voiceIsolation?: boolean };
-      if (supportsVoiceIsolation) {
-        trackConstraints.voiceIsolation = true;
-      }
       for (const track of stream.getAudioTracks()) {
         track.enabled = !isCallMicMuted;
         track.contentHint = "speech";
-        void track.applyConstraints(trackConstraints).catch(() => undefined);
-      }
-      for (const track of inputStream.getAudioTracks()) {
-        track.enabled = !isCallMicMuted;
       }
 
       localCallInputStreamRef.current = inputStream;
@@ -10845,13 +11262,27 @@ export function WebMessenger({
   }, []);
 
   const releaseVoiceRecorderStream = useCallback(() => {
-    if (!voiceRecorderStreamRef.current) {
-      return;
+    const recorderStream = voiceRecorderStreamRef.current;
+    if (recorderStream) {
+      for (const track of recorderStream.getTracks()) {
+        track.stop();
+      }
+      voiceRecorderStreamRef.current = null;
     }
-    for (const track of voiceRecorderStreamRef.current.getTracks()) {
-      track.stop();
+
+    const inputStream = voiceRecorderInputStreamRef.current;
+    if (inputStream && inputStream !== recorderStream) {
+      for (const track of inputStream.getTracks()) {
+        track.stop();
+      }
     }
-    voiceRecorderStreamRef.current = null;
+    voiceRecorderInputStreamRef.current = null;
+
+    const cleanup = voiceRecorderCleanupRef.current;
+    if (cleanup) {
+      cleanup();
+      voiceRecorderCleanupRef.current = null;
+    }
   }, []);
 
   const stopVoiceRecording = useCallback(
@@ -10902,7 +11333,17 @@ export function WebMessenger({
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredAudioConstraints = buildPreferredSpeechAudioConstraints();
+      const inputStream = await navigator.mediaDevices.getUserMedia({
+        audio: preferredAudioConstraints.capture,
+      });
+      for (const track of inputStream.getAudioTracks()) {
+        track.contentHint = "speech";
+        void track.applyConstraints(preferredAudioConstraints.track).catch(() => undefined);
+      }
+
+      const preparedStream = await prepareCallAudioStream(inputStream);
+      const stream = preparedStream.stream;
       const mimeType = pickVoiceMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
@@ -10910,6 +11351,8 @@ export function WebMessenger({
 
       voiceRecorderRef.current = recorder;
       voiceRecorderStreamRef.current = stream;
+      voiceRecorderInputStreamRef.current = inputStream;
+      voiceRecorderCleanupRef.current = preparedStream.cleanup;
       voiceRecorderChunksRef.current = [];
       voiceRecorderDiscardRef.current = false;
 
@@ -13819,11 +14262,11 @@ export function WebMessenger({
                           <span className="block truncate text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">
                             {t("archivedChats")}
                           </span>
-                          <span className="mt-0.5 block truncate text-[11px] text-zinc-500 md:hidden">
-                            {archivedChatItems.length > 0
-                              ? t("archivedChatsHint")
-                              : t("archiveEmptyState")}
-                          </span>
+                          {archivedChatItems.length > 0 ? (
+                            <span className="mt-0.5 block truncate text-[11px] text-zinc-500 md:hidden">
+                              {t("archivedChatsHint")}
+                            </span>
+                          ) : null}
                         </span>
                       </div>
                     </button>
@@ -13855,11 +14298,6 @@ export function WebMessenger({
                       </span>
                     </div>
                   </button>
-                ) : null}
-                {isArchiveViewOpen && filteredChats.length === 0 ? (
-                  <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 px-4 py-5 text-center text-sm text-zinc-400">
-                    {t("archiveEmptyState")}
-                  </div>
                 ) : null}
                 {filteredChats.map((chat) => {
                   const selected = chat.id === activeChat?.id;
@@ -16270,6 +16708,21 @@ export function WebMessenger({
                               >
                                 <Bookmark className="size-4" />
                                 {t("favorites")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  if (typeof window !== "undefined") {
+                                    window.location.href = "/prime";
+                                  }
+                                }}
+                                aria-label={t("clorePrime")}
+                                title={`${t("clorePrime")} • ${t("clorePrimePrice")}`}
+                                className="h-9 w-9 rounded-lg border border-amber-300/30 bg-amber-300/10 text-amber-100 hover:bg-amber-300/15 hover:text-amber-50 disabled:cursor-not-allowed disabled:opacity-100"
+                              >
+                                <Crown className="size-4" />
                               </Button>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>

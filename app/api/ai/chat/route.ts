@@ -238,6 +238,17 @@ type SetGroupMemberAccessActionSummary = {
   updatedMemberRoles: number;
 };
 
+type WorkspaceQueryRequest = {
+  wantsChatCount: boolean;
+  wantsChatList: boolean;
+  wantsDirectCount: boolean;
+  wantsDirectList: boolean;
+  wantsGroupCount: boolean;
+  wantsGroupList: boolean;
+  wantsChannelCount: boolean;
+  wantsChannelList: boolean;
+};
+
 type PlannedSendIntentPayload = {
   recipientQuery?: unknown;
   recipient?: unknown;
@@ -257,6 +268,8 @@ type PlannedSendIntentPayload = {
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_LENGTH = 4000;
 const RESPONSE_TIMEOUT_MS = 12_000;
+const ASSISTANT_RESPONSE_BASE_TOKENS = 700;
+const ASSISTANT_RESPONSE_MAX_TOKENS = 1_200;
 const SEND_AI_PLANNER_TIMEOUT_MS = 9_000;
 const SEND_AI_COMPOSE_TIMEOUT_MS = 9_000;
 const MAX_SEND_AI_USER_CONTEXT_MESSAGES = 5;
@@ -391,6 +404,69 @@ const LATEST_GROUP_QUERY_ALIASES = new Set(
 );
 const FAVORITES_RECIPIENT_PREFIX_REGEX =
   /^(?:(?:в|во|to|for|into)\s+)?((?:мо[её]\s+)?избран(?:ное|ном|ку)|(?:сохран[её]н(?:ное|ные))|saved(?:\s+messages)?|favorites?|my\s+favorites)(?:\s+(.+))?$/iu;
+const WORKSPACE_QUERY_SPLIT_REGEX = /[,.!?;\n]+/u;
+const WORKSPACE_SHOW_SIGNAL_REGEX =
+  /(?:^|\s)(?:show|list|display|\u043f\u043e\u043a\u0430\u0436(?:\u0438|\u0438\u0442\u0435)?|\u043f\u043e\u043a\u0430\u0437\u0430\u0442\u044c|\u0432\u044b\u0432\u0435\u0434(?:\u0438|\u0438\u0442\u0435)?|\u043f\u0435\u0440\u0435\u0447\u0438\u0441\u043b(?:\u0438|\u0438\u0442\u0435)?|\u0441\u043f\u0438\u0441\u043e\u043a|\u043a\u0430\u043a\u0438\u0435)(?=\s|$)/iu;
+const WORKSPACE_COUNT_SIGNAL_REGEX =
+  /(?:^|\s)(?:count|how\s+many|number\s+of|\u0441\u043a\u043e\u043b\u044c\u043a\u043e|\u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e)(?=\s|$)/iu;
+const WORKSPACE_CHAT_ENTITY_REGEX =
+  /(?:^|\s)(?:chat(?:s)?|conversation(?:s)?|dialog(?:s)?|\u0447\u0430\u0442(?:\u044b|\u0430|\u043e\u0432|\u0435|\u0430\u043c)?|\u0434\u0438\u0430\u043b\u043e\u0433(?:\u0438|\u043e\u0432|\u0430\u043c)?|\u043f\u0435\u0440\u0435\u043f\u0438\u0441(?:\u043a\u0430|\u043a\u0438|\u043e\u043a)?)(?=\s|$)/iu;
+const WORKSPACE_GROUP_ENTITY_REGEX =
+  /(?:^|\s)(?:group(?:s)?|\u0433\u0440\u0443\u043f\u043f(?:\u0430|\u044b|\u0435|\u0443|\u043e\u0439|\u0430\u043c)?)(?=\s|$)/iu;
+const WORKSPACE_CHANNEL_ENTITY_REGEX =
+  /(?:^|\s)(?:channel(?:s)?|\u043a\u0430\u043d\u0430\u043b(?:\u044b|\u043e\u0432|\u0430\u043c|\u0435)?)(?=\s|$)/iu;
+const WORKSPACE_DIRECT_ENTITY_REGEX =
+  /(?:^|\s)(?:direct|private|personal|\u043b\u0438\u0447\u043d(?:\u044b\u0439|\u044b\u0435|\u044b\u0445|\u043e\u043c)|\u043f\u0440\u044f\u043c(?:\u043e\u0439|\u044b\u0435|\u044b\u0445|\u043e\u043c))(?=\s|$)/iu;
+const WORKSPACE_QUERY_ALLOWED_STEMS = new Set(
+  [
+    "show",
+    "list",
+    "display",
+    "count",
+    "how",
+    "many",
+    "number",
+    "of",
+    "chat",
+    "conversation",
+    "dialog",
+    "group",
+    "channel",
+    "direct",
+    "private",
+    "personal",
+    "my",
+    "mine",
+    "me",
+    "have",
+    "got",
+    "and",
+    "\u043f\u043e\u043a\u0430\u0436\u0438",
+    "\u043f\u043e\u043a\u0430\u0437\u0430\u0442\u044c",
+    "\u0432\u044b\u0432\u0435\u0434\u0438",
+    "\u043f\u0435\u0440\u0435\u0447\u0438\u0441\u043b\u0438",
+    "\u0441\u043f\u0438\u0441\u043e\u043a",
+    "\u043a\u0430\u043a\u0438\u0435",
+    "\u0441\u043a\u043e\u043b\u044c\u043a\u043e",
+    "\u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e",
+    "\u0447\u0430\u0442",
+    "\u0434\u0438\u0430\u043b\u043e\u0433",
+    "\u043f\u0435\u0440\u0435\u043f\u0438\u0441\u043a\u0430",
+    "\u0433\u0440\u0443\u043f\u043f\u0430",
+    "\u043a\u0430\u043d\u0430\u043b",
+    "\u043b\u0438\u0447\u043d\u044b\u0439",
+    "\u043f\u0440\u044f\u043c\u043e\u0439",
+    "\u0443",
+    "\u043c\u0435\u043d\u044f",
+    "\u043c\u043e\u0439",
+    "\u043c\u043e\u0438",
+    "\u043c\u043e\u0438\u0445",
+    "\u0435\u0441\u0442\u044c",
+    "\u0438",
+  ]
+    .map((word) => stemToken(word))
+    .filter((token) => token.length > 0)
+);
 const NON_RECIPIENT_LEAD_STEMS = new Set(
   [
     "please",
@@ -2927,6 +3003,238 @@ function formatThreadLabel(thread: StoredChatThread): string {
   return title || thread.id;
 }
 
+function hasWorkspaceQueryRequest(request: WorkspaceQueryRequest): boolean {
+  return (
+    request.wantsChatCount ||
+    request.wantsChatList ||
+    request.wantsDirectCount ||
+    request.wantsDirectList ||
+    request.wantsGroupCount ||
+    request.wantsGroupList ||
+    request.wantsChannelCount ||
+    request.wantsChannelList
+  );
+}
+
+function isLikelyWorkspaceQueryClause(clause: string): boolean {
+  const normalized = normalizeForMatching(clause);
+  if (!normalized) {
+    return false;
+  }
+
+  const tokens = normalized.split(/\s+/).filter((token) => token.length > 0);
+  if (tokens.length === 0 || tokens.length > 8) {
+    return false;
+  }
+
+  return tokens.every((token) => {
+    const stem = stemToken(token);
+    return stem.length > 0 && WORKSPACE_QUERY_ALLOWED_STEMS.has(stem);
+  });
+}
+
+function parseWorkspaceQueryRequest(prompt: string): WorkspaceQueryRequest | null {
+  const request: WorkspaceQueryRequest = {
+    wantsChatCount: false,
+    wantsChatList: false,
+    wantsDirectCount: false,
+    wantsDirectList: false,
+    wantsGroupCount: false,
+    wantsGroupList: false,
+    wantsChannelCount: false,
+    wantsChannelList: false,
+  };
+
+  const parts = prompt
+    .split(WORKSPACE_QUERY_SPLIT_REGEX)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  const clauses = parts.length > 0 ? parts : [prompt.trim()];
+
+  for (const clause of clauses) {
+    if (!clause) {
+      continue;
+    }
+
+    const wantsList = WORKSPACE_SHOW_SIGNAL_REGEX.test(clause);
+    const wantsCount = WORKSPACE_COUNT_SIGNAL_REGEX.test(clause);
+    if (!wantsList && !wantsCount) {
+      continue;
+    }
+    if (!isLikelyWorkspaceQueryClause(clause)) {
+      continue;
+    }
+
+    const mentionsGroup = WORKSPACE_GROUP_ENTITY_REGEX.test(clause);
+    const mentionsChannel = WORKSPACE_CHANNEL_ENTITY_REGEX.test(clause);
+    const mentionsDirect = WORKSPACE_DIRECT_ENTITY_REGEX.test(clause);
+    const mentionsChat = WORKSPACE_CHAT_ENTITY_REGEX.test(clause);
+    const hasSpecificCategory = mentionsGroup || mentionsChannel || mentionsDirect;
+
+    if (wantsCount) {
+      if (mentionsDirect) {
+        request.wantsDirectCount = true;
+      }
+      if (mentionsGroup) {
+        request.wantsGroupCount = true;
+      }
+      if (mentionsChannel) {
+        request.wantsChannelCount = true;
+      }
+      if (mentionsChat && !hasSpecificCategory) {
+        request.wantsChatCount = true;
+      }
+    }
+
+    if (wantsList) {
+      if (mentionsDirect) {
+        request.wantsDirectList = true;
+      }
+      if (mentionsGroup) {
+        request.wantsGroupList = true;
+      }
+      if (mentionsChannel) {
+        request.wantsChannelList = true;
+      }
+      if (mentionsChat && !hasSpecificCategory) {
+        request.wantsChatList = true;
+      }
+    }
+  }
+
+  return hasWorkspaceQueryRequest(request) ? request : null;
+}
+
+function formatWorkspaceList(labels: string[], language: "en" | "ru"): string {
+  if (labels.length === 0) {
+    return language === "ru" ? "\u043d\u0435\u0442" : "none";
+  }
+
+  const visible = labels.slice(0, 10);
+  const remainder = labels.length - visible.length;
+  if (remainder <= 0) {
+    return visible.join("; ");
+  }
+
+  return `${visible.join("; ")}; +${remainder} ${
+    language === "ru" ? "\u0435\u0449\u0435" : "more"
+  }`;
+}
+
+function formatWorkspaceThreadLabel(
+  thread: StoredChatThread,
+  userId: string,
+  usersById: Map<string, StoreData["users"][number]>,
+  language: "en" | "ru"
+): string {
+  if (thread.threadType === "direct") {
+    const peer = thread.memberIds
+      .filter((memberId) => memberId !== userId)
+      .map((memberId) => usersById.get(memberId))
+      .find((candidate) => candidate !== undefined);
+    if (peer) {
+      return formatAssistantUserLabel(peer.name, peer.username);
+    }
+  }
+
+  return formatAssistantGroupLabel(thread, language);
+}
+
+function buildWorkspaceQueryReply(
+  store: StoreData,
+  userId: string,
+  language: "en" | "ru",
+  request: WorkspaceQueryRequest
+): string {
+  const usersById = new Map(store.users.map((user) => [user.id, user]));
+  const threads = store.threads
+    .filter((thread) => thread.memberIds.includes(userId))
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  const directThreads = threads.filter((thread) => thread.threadType === "direct");
+  const groupThreads = threads.filter(
+    (thread) => thread.threadType === "group" && thread.groupKind !== "channel"
+  );
+  const channelThreads = threads.filter(
+    (thread) => thread.threadType === "group" && thread.groupKind === "channel"
+  );
+
+  const chatLabels = threads.map((thread) =>
+    formatWorkspaceThreadLabel(thread, userId, usersById, language)
+  );
+  const directLabels = directThreads.map((thread) =>
+    formatWorkspaceThreadLabel(thread, userId, usersById, language)
+  );
+  const groupLabels = groupThreads.map((thread) =>
+    formatWorkspaceThreadLabel(thread, userId, usersById, language)
+  );
+  const channelLabels = channelThreads.map((thread) =>
+    formatWorkspaceThreadLabel(thread, userId, usersById, language)
+  );
+
+  const lines: string[] = [];
+  if (request.wantsChatCount) {
+    lines.push(
+      language === "ru"
+        ? `\u0427\u0430\u0442\u043e\u0432: ${threads.length} (\u043b\u0438\u0447\u043d\u044b\u0445: ${directThreads.length}, \u0433\u0440\u0443\u043f\u043f: ${groupThreads.length}, \u043a\u0430\u043d\u0430\u043b\u043e\u0432: ${channelThreads.length}).`
+        : `Chats: ${threads.length} (direct: ${directThreads.length}, groups: ${groupThreads.length}, channels: ${channelThreads.length}).`
+    );
+  }
+  if (request.wantsDirectCount) {
+    lines.push(
+      language === "ru"
+        ? `\u041b\u0438\u0447\u043d\u044b\u0445 \u0447\u0430\u0442\u043e\u0432: ${directThreads.length}.`
+        : `Direct chats: ${directThreads.length}.`
+    );
+  }
+  if (request.wantsGroupCount) {
+    lines.push(
+      language === "ru"
+        ? `\u0413\u0440\u0443\u043f\u043f: ${groupThreads.length}.`
+        : `Groups: ${groupThreads.length}.`
+    );
+  }
+  if (request.wantsChannelCount) {
+    lines.push(
+      language === "ru"
+        ? `\u041a\u0430\u043d\u0430\u043b\u043e\u0432: ${channelThreads.length}.`
+        : `Channels: ${channelThreads.length}.`
+    );
+  }
+  if (request.wantsChatList) {
+    lines.push(
+      language === "ru"
+        ? `\u0427\u0430\u0442\u044b: ${formatWorkspaceList(chatLabels, language)}.`
+        : `Chats: ${formatWorkspaceList(chatLabels, language)}.`
+    );
+  }
+  if (request.wantsDirectList) {
+    lines.push(
+      language === "ru"
+        ? `\u041b\u0438\u0447\u043d\u044b\u0435 \u0447\u0430\u0442\u044b: ${formatWorkspaceList(
+            directLabels,
+            language
+          )}.`
+        : `Direct chats: ${formatWorkspaceList(directLabels, language)}.`
+    );
+  }
+  if (request.wantsGroupList) {
+    lines.push(
+      language === "ru"
+        ? `\u0413\u0440\u0443\u043f\u043f\u044b: ${formatWorkspaceList(groupLabels, language)}.`
+        : `Groups: ${formatWorkspaceList(groupLabels, language)}.`
+    );
+  }
+  if (request.wantsChannelList) {
+    lines.push(
+      language === "ru"
+        ? `\u041a\u0430\u043d\u0430\u043b\u044b: ${formatWorkspaceList(channelLabels, language)}.`
+        : `Channels: ${formatWorkspaceList(channelLabels, language)}.`
+    );
+  }
+
+  return lines.join("\n");
+}
+
 function resolveThreadByTitleForDelete(
   threads: StoredChatThread[],
   rawQuery: string
@@ -4227,6 +4535,27 @@ async function planSendIntentsWithAi(
           "If user asks for details, make the message detailed and concrete.",
           `Maximum actions: ${MAX_AUTOMATION_TARGETS}.`,
         ].join(" ");
+  const defaultMessageLanguage =
+    language === "ru"
+      ? "When you need to draft messageText, default to Russian unless the command clearly asks for another language."
+      : "When you need to draft messageText, default to English unless the command clearly asks for another language.";
+  const smarterSystemPrompt = [
+    systemPrompt,
+    "You are the send-command orchestrator in a messenger app.",
+    "Input includes the user's command plus known contacts and groups.",
+    "Return JSON only, with no markdown and no explanations.",
+    'Strict format: {"actions":[{"recipientQuery":"...","messageText":"...","scheduledFor":1234567890000}]}',
+    "If the command is missing either a usable recipient or usable message content, return an empty actions array.",
+    "scheduledFor is optional and should be set only for clearly delayed messages using Unix time in milliseconds.",
+    "Do not guess a schedule when the timing is vague.",
+    "Preserve names, usernames, group titles, dates, times, numbers, and links from the command unless the user explicitly changes them.",
+    "If the user refers to multiple recipients, return multiple actions.",
+    "recipientQuery should match a known contact or known group as closely as possible.",
+    "If the user gives an instruction instead of final text, generate the final outgoing message.",
+    "If the user asks for detail, make messageText detailed and concrete.",
+    defaultMessageLanguage,
+    `Maximum actions: ${MAX_AUTOMATION_TARGETS}.`,
+  ].join(" ");
 
   for (const model of modelCandidates) {
     const controller = new AbortController();
@@ -4244,7 +4573,7 @@ async function planSendIntentsWithAi(
           messages: [
             {
               role: "system" as const,
-              content: systemPrompt,
+              content: smarterSystemPrompt,
             },
             {
               role: "user" as const,
@@ -4338,6 +4667,23 @@ async function rewriteSendMessageText(
           "Do not add assistant-style refusals, moralizing, or safety lectures.",
           "No explanations, no markdown, no wrapper quotes.",
         ].join(" ");
+  const defaultDraftLanguage =
+    language === "ru"
+      ? "Default to Russian unless the instruction clearly asks for another language."
+      : "Default to English unless the instruction clearly asks for another language.";
+  const smarterSystemPrompt = [
+    systemPrompt,
+    "You are an outgoing-message writer/editor.",
+    "Input can be an instruction or a draft.",
+    "Return only the final outgoing message text.",
+    "Preserve user intent and do not invent unrelated facts.",
+    "Keep names, dates, times, numbers, and links intact unless the instruction explicitly asks to change them.",
+    "Match the user's requested tone and level of detail.",
+    defaultDraftLanguage,
+    "If the user asks for detail, produce a detailed message of at least 5 sentences.",
+    "Do not add assistant-style refusals, moralizing, or safety lectures.",
+    "No explanations, no markdown, no wrapper quotes.",
+  ].join(" ");
 
   const minLength = wantsDetailed
     ? Math.max(160, Math.floor(locallyCleaned.length * 1.1))
@@ -4364,7 +4710,7 @@ async function rewriteSendMessageText(
           messages: [
             {
               role: "system" as const,
-              content: systemPrompt,
+              content: smarterSystemPrompt,
             },
             {
               role: "user" as const,
@@ -6195,6 +6541,95 @@ function buildAssistantRuntimeWorkspaceContext(
   return lines.join("\n");
 }
 
+function countMeaningfulWords(input: string): number {
+  return input
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0).length;
+}
+
+function buildAssistantExecutionGuidance(
+  language: "en" | "ru",
+  messages: NormalizedAiChatMessage[],
+  latestUserPrompt: string,
+  searchEnabled: boolean,
+  agentEnabled: boolean
+): string {
+  const wordCount = countMeaningfulWords(latestUserPrompt);
+  const previousUserMessage = [...messages]
+    .slice(0, -1)
+    .reverse()
+    .find(
+      (message) =>
+        message.role === "user" && message.content.trim().length > 0
+    );
+  const lines: string[] = [
+    "Start with the direct answer, decision, or best next action in the first sentence.",
+    "Use bullets or numbered steps only when they make the answer easier to scan.",
+    "Separate confirmed app facts from suggestions or inference.",
+  ];
+
+  if (previousUserMessage && wordCount <= 10) {
+    lines.push(
+      "This may be a short follow-up. Reuse the immediate conversation context instead of restarting the topic."
+    );
+  }
+
+  if (!searchEnabled) {
+    lines.push(
+      "Do not claim you searched the web or verified live external information."
+    );
+  }
+
+  if (agentEnabled) {
+    lines.push(
+      "If the user appears to want a messenger action but a required detail is missing, ask exactly one targeted clarifying question instead of guessing."
+    );
+  } else {
+    lines.push(
+      "If the user asks for a messenger action, provide a draft or steps and never imply the action already ran."
+    );
+  }
+
+  if (wordCount >= 18) {
+    lines.push(
+      "The request is detailed. Cover the main constraint, tradeoff, and the most practical next step."
+    );
+  } else if (wordCount <= 4) {
+    lines.push("The request is short. Keep the answer compact and avoid generic preambles.");
+  }
+
+  if (language === "ru") {
+    lines.push("Keep the final answer in Russian unless the user clearly switched languages.");
+  }
+
+  return lines.join(" ");
+}
+
+function computeAssistantResponseMaxTokens(
+  latestUserPrompt: string,
+  messages: NormalizedAiChatMessage[]
+): number {
+  const promptLength = latestUserPrompt.trim().length;
+  const wordCount = countMeaningfulWords(latestUserPrompt);
+  let maxTokens = ASSISTANT_RESPONSE_BASE_TOKENS;
+
+  if (promptLength >= 160 || wordCount >= 24) {
+    maxTokens += 160;
+  }
+  if (promptLength >= 360 || wordCount >= 48) {
+    maxTokens += 180;
+  }
+  if (messages.length >= 10) {
+    maxTokens += 80;
+  }
+  if (/\n/u.test(latestUserPrompt)) {
+    maxTokens += 80;
+  }
+
+  return Math.min(ASSISTANT_RESPONSE_MAX_TOKENS, maxTokens);
+}
+
 async function generateAssistantReply(
   store: StoreData,
   userId: string,
@@ -6207,8 +6642,8 @@ async function generateAssistantReply(
   const { apiKey, baseUrl, model: modelFromEnv } = getAiProviderConfig();
   const systemPrompt =
     language === "ru"
-      ? "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Prefer Russian unless the user writes in another language. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, or chats."
-      : "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, or chats.";
+      ? "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Start with the direct answer, then add only the detail that materially helps. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Prefer Russian unless the user writes in another language. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, chats, or completed actions."
+      : "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Start with the direct answer, then add only the detail that materially helps. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, chats, or completed actions.";
   const knowledgeContext = buildAiKnowledgeContext({
     query: latestUserPrompt,
     language,
@@ -6223,6 +6658,17 @@ async function generateAssistantReply(
     query: latestUserPrompt,
     language,
   });
+  const executionGuidance = buildAssistantExecutionGuidance(
+    language,
+    messages,
+    latestUserPrompt,
+    searchEnabled,
+    agentEnabled
+  );
+  const responseMaxTokens = computeAssistantResponseMaxTokens(
+    latestUserPrompt,
+    messages
+  );
   const systemMessages: Array<{ role: "system"; content: string }> = [
     {
       role: "system",
@@ -6233,6 +6679,12 @@ async function generateAssistantReply(
     systemMessages.push({
       role: "system",
       content: responseGuidance,
+    });
+  }
+  if (executionGuidance) {
+    systemMessages.push({
+      role: "system",
+      content: executionGuidance,
     });
   }
   if (runtimeWorkspaceContext) {
@@ -6276,7 +6728,7 @@ async function generateAssistantReply(
             ...systemMessages,
             ...messages,
           ],
-          max_tokens: 700,
+          max_tokens: responseMaxTokens,
         }),
         signal: controller.signal,
       });
@@ -6344,6 +6796,18 @@ export async function POST(request: Request) {
     }
 
     const latestUserPrompt = messages[messages.length - 1]?.content ?? "";
+    const workspaceQueryRequest = parseWorkspaceQueryRequest(latestUserPrompt);
+    if (workspaceQueryRequest) {
+      return NextResponse.json({
+        message: buildWorkspaceQueryReply(
+          store,
+          userId,
+          language,
+          workspaceQueryRequest
+        ),
+      });
+    }
+
     if (agentEnabled) {
       const recentUserMessages = collectRecentUserMessages(messages);
       const isDeleteCommand = isLikelyDeleteCommandStart(latestUserPrompt);

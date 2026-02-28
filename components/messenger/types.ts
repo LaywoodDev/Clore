@@ -1,4 +1,5 @@
 export type PrivacyVisibility = "everyone" | "selected" | "nobody";
+export type PrimeSubscriptionStatus = "inactive" | "pending" | "active" | "canceled";
 
 export type AuthUser = {
   id: string;
@@ -27,4 +28,7 @@ export type AuthUser = {
   avatarUrl: string;
   bannerUrl: string;
   archiveLockEnabled: boolean;
+  primeStatus: PrimeSubscriptionStatus;
+  primeExpiresAt: number;
+  primeAutoRenew: boolean;
 };
