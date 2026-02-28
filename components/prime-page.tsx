@@ -361,6 +361,17 @@ export function PrimePage() {
                 </div>
               </div>
 
+              <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                  Billing mode
+                </p>
+                <p className="mt-3 text-sm leading-6 text-zinc-300">
+                  The current setup uses a one-time YooKassa payment for each 30-day Prime
+                  period. Auto-renew should be enabled only after YooKassa approves recurring
+                  payments for your store.
+                </p>
+              </div>
+
               {notice ? (
                 <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
                   {notice}

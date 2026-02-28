@@ -59,6 +59,11 @@ function getPrimePriceValue(): string {
   return `${whole}.${fraction.padEnd(2, "0").slice(0, 2)}`;
 }
 
+function isRecurringEnabled(): boolean {
+  const raw = process.env.YOOKASSA_ENABLE_RECURRING?.trim().toLowerCase() ?? "";
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
 function getAuthHeader(): string {
   const shopId = getRequiredEnv("YOOKASSA_SHOP_ID");
   const secretKey = getRequiredEnv("YOOKASSA_SECRET_KEY");
@@ -102,6 +107,10 @@ export function getPrimePriceRub(): string {
   return getPrimePriceValue();
 }
 
+export function getYooKassaRecurringEnabled(): boolean {
+  return isRecurringEnabled();
+}
+
 export function getPrimeReturnUrl(): string {
   const appUrl = getRequiredEnv("APP_URL").replace(/\/+$/, "");
   return `${appUrl}/prime?payment=return`;
@@ -125,7 +134,7 @@ export async function createPrimePayment({
         currency: "RUB",
       },
       capture: true,
-      save_payment_method: true,
+      save_payment_method: isRecurringEnabled(),
       confirmation: {
         type: "redirect",
         return_url: returnUrl?.trim() || getPrimeReturnUrl(),
