@@ -46,9 +46,10 @@ export default function RootLayout({
               (function () {
                 try {
                   var theme = localStorage.getItem("clore_ui_theme_v1");
-                  var resolved = theme === "dark" ? "dark" : "light";
+                  var supportedThemes = ["light", "dark", "obsidian", "titanium"];
+                  var resolved = supportedThemes.indexOf(theme) >= 0 ? theme : "light";
                   document.documentElement.setAttribute("data-clore-theme", resolved);
-                  document.documentElement.classList.toggle("dark", resolved === "dark");
+                  document.documentElement.classList.toggle("dark", resolved !== "light");
                 } catch (error) {
                   document.documentElement.setAttribute("data-clore-theme", "light");
                   document.documentElement.classList.remove("dark");
@@ -64,4 +65,3 @@ export default function RootLayout({
     </html>
   );
 }
-

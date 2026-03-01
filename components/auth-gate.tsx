@@ -12,6 +12,7 @@ type SessionData = {
 };
 
 type AuthMode = "login" | "register";
+type AuthUiTheme = "light" | "dark" | "obsidian" | "titanium";
 
 type LegacyStoredUser = {
   id?: string;
@@ -26,6 +27,49 @@ type AuthResponse = {
   error?: string;
 };
 
+const SUPPORTED_UI_THEMES = ["light", "dark", "obsidian", "titanium"] as const;
+
+function isSupportedUiTheme(value: string | null): value is AuthUiTheme {
+  return SUPPORTED_UI_THEMES.includes(value as AuthUiTheme);
+}
+
+function getAuthThemeBackgroundClassName(uiTheme: AuthUiTheme): string {
+  if (uiTheme === "light") {
+    return "bg-[radial-gradient(circle_at_12%_10%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(160deg,#f8fbff_0%,#f1f6fd_58%,#ebf1fa_100%)]";
+  }
+  if (uiTheme === "obsidian") {
+    return "bg-[radial-gradient(circle_at_14%_12%,rgba(56,189,248,0.12),transparent_34%),linear-gradient(160deg,#0b0f14_0%,#121820_58%,#1a232d_100%)]";
+  }
+  if (uiTheme === "titanium") {
+    return "bg-[radial-gradient(circle_at_12%_10%,rgba(148,163,184,0.16),transparent_34%),linear-gradient(160deg,#1e232b_0%,#2a3038_58%,#39424d_100%)]";
+  }
+  return "bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,0.16),transparent_34%),linear-gradient(160deg,#18181b_0%,#232326_60%,#2f2f35_100%)]";
+}
+
+function readStoredSessionUserId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const sessionRaw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!sessionRaw) {
+      return null;
+    }
+
+    const session = JSON.parse(sessionRaw) as SessionData;
+    if (!session || typeof session.userId !== "string" || !session.userId.trim()) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    return session.userId;
+  } catch {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
 function SkeletonBlock({
   className,
 }: {
@@ -37,15 +81,11 @@ function SkeletonBlock({
 function AppLoadingSkeleton({
   uiTheme,
 }: {
-  uiTheme: "light" | "dark";
+  uiTheme: AuthUiTheme;
 }) {
   return (
     <main
-      className={`h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${
-        uiTheme === "light"
-          ? "bg-[radial-gradient(circle_at_12%_10%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(160deg,#f8fbff_0%,#f1f6fd_58%,#ebf1fa_100%)]"
-          : "bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,0.16),transparent_34%),linear-gradient(160deg,#18181b_0%,#232326_60%,#2f2f35_100%)]"
-      } pt-[env(safe-area-inset-top)] text-zinc-100`}
+      className={`h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${getAuthThemeBackgroundClassName(uiTheme)} pt-[env(safe-area-inset-top)] text-zinc-100`}
     >
       <section className="grid h-full w-full md:grid-cols-[1.1fr_0.9fr]">
         <div className="hidden border-r border-zinc-700/70 bg-zinc-900/40 p-10 md:flex md:flex-col md:justify-between">
@@ -283,13 +323,14 @@ async function parseAuthResponse(response: Response): Promise<AuthResponse> {
 }
 
 export function AuthGate() {
+  const [storedSessionUserId] = useState<string | null>(() => readStoredSessionUserId());
   const [mode, setMode] = useState<AuthMode>("login");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => storedSessionUserId !== null);
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState("");
   const [suspensionMessage, setSuspensionMessage] = useState("");
-  const [uiTheme, setUiTheme] = useState<"light" | "dark">("light");
+  const [uiTheme, setUiTheme] = useState<AuthUiTheme>("light");
 
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
@@ -339,44 +380,41 @@ export function AuthGate() {
 
   useEffect(() => {
     const rootTheme = document.documentElement.getAttribute("data-clore-theme");
-    if (rootTheme === "dark" || rootTheme === "light") {
+    if (isSupportedUiTheme(rootTheme)) {
       setUiTheme(rootTheme);
       return;
     }
 
     const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
-    setUiTheme(stored === "dark" ? "dark" : "light");
+    setUiTheme(isSupportedUiTheme(stored) ? stored : "light");
   }, []);
 
   useEffect(() => {
+    const legacyUsers = readLegacyUsers();
+    if (legacyUsers.length === 0) {
+      return;
+    }
+
+    void fetch("/api/auth/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ users: legacyUsers }),
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!storedSessionUserId) {
+      return;
+    }
+
     let cancelled = false;
 
     const bootstrap = async () => {
       try {
-        const legacyUsers = readLegacyUsers();
-        if (legacyUsers.length > 0) {
-          await fetch("/api/auth/import", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ users: legacyUsers }),
-          }).catch(() => undefined);
-        }
-
-        const sessionRaw = window.localStorage.getItem(SESSION_STORAGE_KEY);
-        if (!sessionRaw) {
-          return;
-        }
-
-        const session = JSON.parse(sessionRaw) as SessionData;
-        if (!session || typeof session.userId !== "string" || !session.userId) {
-          window.localStorage.removeItem(SESSION_STORAGE_KEY);
-          return;
-        }
-
         const response = await fetch(
-          `/api/auth/user?userId=${encodeURIComponent(session.userId)}`,
+          `/api/auth/user?userId=${encodeURIComponent(storedSessionUserId)}`,
           {
             cache: "no-store",
           }
@@ -409,7 +447,7 @@ export function AuthGate() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [storedSessionUserId]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -691,7 +729,7 @@ export function AuthGate() {
   };
 
   if (loading) {
-    return <AppLoadingSkeleton uiTheme={uiTheme} />;
+    return storedSessionUserId ? <MessengerLoadingSkeleton /> : <AppLoadingSkeleton uiTheme={uiTheme} />;
   }
 
   if (currentUser) {
@@ -748,11 +786,7 @@ export function AuthGate() {
 
   return (
     <main
-      className={`h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${
-        uiTheme === "light"
-          ? "bg-[radial-gradient(circle_at_12%_10%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(160deg,#f8fbff_0%,#f1f6fd_58%,#ebf1fa_100%)]"
-          : "bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,0.16),transparent_34%),linear-gradient(160deg,#18181b_0%,#232326_60%,#2f2f35_100%)]"
-      } pt-[env(safe-area-inset-top)] text-zinc-100`}
+      className={`h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${getAuthThemeBackgroundClassName(uiTheme)} pt-[env(safe-area-inset-top)] text-zinc-100`}
     >
       <section className="grid h-full w-full md:grid-cols-[1.1fr_0.9fr]">
         <div className="hidden border-r border-zinc-700/70 bg-zinc-900/40 p-10 md:flex md:flex-col md:justify-between">

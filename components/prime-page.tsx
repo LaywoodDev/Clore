@@ -225,7 +225,7 @@ export function PrimePage() {
         <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.018)_50%,transparent_100%)] opacity-60" />
 
         <div className="relative grid min-h-[100dvh] lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="flex flex-col justify-between border-b border-white/8 bg-zinc-950/52 p-6 sm:p-8 lg:border-b-0 lg:border-r lg:p-12">
+          <div className="flex flex-col justify-between border-b border-white/8 bg-zinc-950/52 px-5 py-6 sm:p-8 lg:border-b-0 lg:border-r lg:p-12">
             <div>
               <div className="flex items-center justify-between gap-3">
                 <Link href="/" className="inline-flex">
@@ -240,62 +240,62 @@ export function PrimePage() {
                 </Link>
               </div>
 
-              <div className="mt-10 sm:mt-14">
+              <div className="mt-8 sm:mt-14">
                 <p className="text-xs font-semibold uppercase tracking-[0.26em] text-amber-200/85">
                   Clore Prime
                 </p>
-                <h1 className="mt-4 max-w-xl text-5xl font-semibold tracking-[-0.04em] text-zinc-50 sm:text-6xl lg:max-w-2xl lg:text-7xl">
+                <h1 className="mt-4 max-w-xl text-[clamp(2.5rem,13vw,4.5rem)] font-semibold leading-[0.95] tracking-[-0.04em] text-zinc-50 sm:text-6xl lg:max-w-2xl lg:text-7xl">
                   Один план.
                   <br />
                   Никакого лишнего.
                 </h1>
-                <p className="mt-5 max-w-xl text-sm leading-7 text-zinc-300 sm:text-base lg:max-w-2xl lg:text-lg">
+                <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-300 sm:mt-5 sm:text-base sm:leading-7 lg:max-w-2xl lg:text-lg">
                   Премиум-подписка для тех, кто хочет чистый статус, ранний доступ и
                   аккуратный премиум-слой внутри Clore.
                 </p>
               </div>
 
-              <div className="mt-10 grid gap-3 sm:max-w-xl lg:max-w-2xl">
+              <div className="mt-8 grid gap-2.5 sm:mt-10 sm:max-w-xl sm:gap-3 lg:max-w-2xl">
                 {PRIME_PERKS.map((perk) => (
                   <div
                     key={perk}
-                    className="flex items-center gap-3 rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3 lg:px-5 lg:py-4"
+                    className="flex items-start gap-3 rounded-2xl border border-white/6 bg-white/[0.03] px-3.5 py-3 sm:px-4 lg:px-5 lg:py-4"
                   >
-                    <span className="inline-flex rounded-full bg-emerald-400/10 p-1.5 text-emerald-300">
+                    <span className="inline-flex shrink-0 rounded-full bg-emerald-400/10 p-1.5 text-emerald-300">
                       <Check className="size-3.5" />
                     </span>
-                    <span className="text-sm text-zinc-200 lg:text-base">{perk}</span>
+                    <span className="text-sm leading-6 text-zinc-200 lg:text-base">{perk}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="relative flex min-h-full flex-col justify-center bg-[linear-gradient(180deg,rgba(245,158,11,0.07),rgba(10,10,12,0.82)_24%,rgba(10,10,12,0.96)_100%)] p-6 sm:p-8 lg:p-12">
-            <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-amber-300/10 blur-3xl" />
+          <div className="relative flex min-h-full flex-col justify-start bg-[linear-gradient(180deg,rgba(245,158,11,0.07),rgba(10,10,12,0.82)_24%,rgba(10,10,12,0.96)_100%)] px-5 py-6 sm:p-8 lg:justify-center lg:p-12">
+            <div className="absolute right-0 top-0 h-36 w-36 rounded-full bg-amber-300/10 blur-3xl sm:h-48 sm:w-48" />
 
-            <div className="relative flex min-h-full w-full flex-col justify-center">
+            <div className="relative mx-auto flex min-h-full w-full max-w-xl flex-col justify-center">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-medium text-zinc-300">Текущий план</p>
               </div>
 
-              <div className="mt-10">
-                <div className="flex items-end gap-2">
-                  <span className="text-6xl font-semibold tracking-[-0.06em] text-zinc-50 sm:text-7xl">
+              <div className="mt-8 sm:mt-10">
+                <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-end sm:gap-2">
+                  <span className="break-words text-[clamp(2.75rem,16vw,4.5rem)] font-semibold tracking-[-0.06em] text-zinc-50 sm:text-7xl">
                     {priceLabel}
                   </span>
                   <span className="pb-2 text-sm text-zinc-400">/ месяц</span>
                 </div>
-                <p className="mt-5 max-w-lg text-sm leading-7 text-zinc-300 sm:text-base">
+                <p className="mt-4 max-w-lg text-sm leading-6 text-zinc-300 sm:mt-5 sm:text-base sm:leading-7">
                   Оплата через YooKassa. После успешного платежа Prime активируется
                   автоматически.
                 </p>
               </div>
 
-              <div className="mt-10 rounded-3xl border border-white/6 bg-white/[0.03] p-5 lg:p-6">
-                <div className="flex items-center justify-between gap-3 text-sm">
+              <div className="mt-8 rounded-3xl border border-white/6 bg-white/[0.03] p-4 sm:mt-10 sm:p-5 lg:p-6">
+                <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                   <span className="text-zinc-500">Действует до</span>
-                  <span className="text-right text-zinc-200">{expiresLabel}</span>
+                  <span className="text-left text-zinc-200 sm:text-right">{expiresLabel}</span>
                 </div>
               </div>
 
@@ -319,7 +319,7 @@ export function PrimePage() {
                 type="button"
                 onClick={() => void handlePurchase()}
                 disabled={!sessionUserId || isSubmitting}
-                className="mt-6 h-12 w-full rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-6 h-12 w-full rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 shadow-[0_18px_45px_-22px_rgba(251,191,36,0.55)] hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {actionLabel}
               </Button>

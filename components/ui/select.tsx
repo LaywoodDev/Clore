@@ -159,7 +159,7 @@ function SelectScrollUpButton({
   return (
     <SelectPrimitive.ScrollUpArrow
       data-slot="select-scroll-up-button"
-      className={cn("z-10 mx-auto my-1 inline-flex h-6 min-w-8 cursor-default items-center justify-center rounded-md border border-zinc-700 bg-zinc-800/90 px-1 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 [&_svg:not([class*='size-'])]:size-3.5", className)}
+      className={cn("z-10 mx-auto my-1 inline-flex h-6 min-w-8 cursor-default items-center justify-center rounded-md border border-border bg-popover px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground [&_svg:not([class*='size-'])]:size-3.5", className)}
       {...props}
     >
       <ChevronUpIcon
@@ -175,7 +175,7 @@ function SelectScrollDownButton({
   return (
     <SelectPrimitive.ScrollDownArrow
       data-slot="select-scroll-down-button"
-      className={cn("z-10 mx-auto my-1 inline-flex h-6 min-w-8 cursor-default items-center justify-center rounded-md border border-zinc-700 bg-zinc-800/90 px-1 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 [&_svg:not([class*='size-'])]:size-3.5", className)}
+      className={cn("z-10 mx-auto my-1 inline-flex h-6 min-w-8 cursor-default items-center justify-center rounded-md border border-border bg-popover px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground [&_svg:not([class*='size-'])]:size-3.5", className)}
       {...props}
     >
       <ChevronDownIcon

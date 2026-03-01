@@ -208,6 +208,25 @@ const ChatProfileSidebarIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const GalleryHangerIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M14 6a2 2 0 1 0 -4 0c0 1.667 .67 3 2 4h-.008l7.971 4.428a2 2 0 0 1 1.029 1.749v.823a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-.823a2 2 0 0 1 1.029 -1.749l7.971 -4.428" />
+  </svg>
+);
+
 const PinFilledIcon = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -553,7 +572,7 @@ type ArchivePullGestureState = {
 };
 
 type AppLanguage = "en" | "ru";
-type UiTheme = "dark" | "light";
+type UiTheme = "dark" | "light" | "obsidian" | "titanium";
 type UiAccent = "violet" | "blue" | "emerald" | "rose" | "amber";
 type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
@@ -987,6 +1006,16 @@ const AI_THEME_OPTIONS: AiCommandOption<UiTheme>[] = [
     value: "dark",
     label: { en: "dark", ru: "темная" },
     aliases: ["dark", "темная", "темный", "тёмная", "тёмный"],
+  },
+  {
+    value: "obsidian",
+    label: { en: "obsidian", ru: "obsidian" },
+    aliases: ["obsidian", "obsidian theme"],
+  },
+  {
+    value: "titanium",
+    label: { en: "titanium", ru: "titanium" },
+    aliases: ["titanium", "titanium theme"],
   },
 ];
 const AI_DENSITY_OPTIONS: AiCommandOption<UiDensity>[] = [
@@ -1651,6 +1680,14 @@ const DEFAULT_CHAT_PERSONALIZATION: ChatPersonalization = {
 const MOBILE_VIEWPORT_MEDIA_QUERY = "(max-width: 767px)";
 const MOBILE_BACK_SWIPE_EDGE_WIDTH = 28;
 const MOBILE_BACK_SWIPE_TRIGGER_DISTANCE = 72;
+const MOBILE_NAVIGATION_HISTORY_STATE_KEY = "__cloreMobileNavigation";
+
+function getHistoryStateRecord(state: unknown): Record<string, unknown> {
+  if (!state || typeof state !== "object") {
+    return {};
+  }
+  return { ...(state as Record<string, unknown>) };
+}
 const accentPalette = [
   "from-orange-500 to-amber-400",
   "from-cyan-500 to-sky-400",
@@ -1679,11 +1716,14 @@ const PUSH_NOTIFICATIONS_STORAGE_KEY = "clore_push_notifications_v1";
 const MESSAGE_SOUND_STORAGE_KEY = "clore_message_sound_v1";
 const SEND_MESSAGE_SOUND_STORAGE_KEY = "clore_send_message_sound_v1";
 const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
+const UI_THEME_VALUES = ["light", "dark", "obsidian", "titanium"] as const;
 const UI_ACCENT_STORAGE_KEY = "clore_ui_accent_v1";
 const UI_DENSITY_STORAGE_KEY = "clore_ui_density_v1";
 const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
 const UI_RADIUS_STORAGE_KEY = "clore_ui_radius_v1";
 const UI_FONT_FAMILY_STORAGE_KEY = "clore_ui_font_family_v1";
+const HIDE_PRIME_BUTTON_IN_PROFILE_STORAGE_KEY_PREFIX =
+  "clore_hide_prime_button_in_profile_v1_";
 const GLOBAL_CHAT_WALLPAPER_STORAGE_KEY = "clore_global_chat_wallpaper_v1";
 const PINNED_MESSAGE_ALIGNMENT_STORAGE_KEY = "clore_pinned_message_alignment_v1";
 const ARCHIVE_VISIBILITY_STORAGE_KEY_PREFIX = "clore_archive_visibility_v1_";
@@ -1717,7 +1757,7 @@ const TYPING_PING_INTERVAL_MS = 2_500;
 const MESSAGE_APPEAR_ANIMATION_MS = 220;
 const MESSAGE_TARGET_HIGHLIGHT_MS = 1_200;
 const UNDO_WINDOW_MS = 5_000;
-const APP_VERSION = "- Release Candidate 1.0.0";
+const APP_VERSION = "Release Candidate 1.0.1";
 const SCHEDULE_MIN_LEAD_MS = 60_000;
 const SCHEDULE_DEFAULT_LEAD_MS = 60 * 60 * 1000;
 const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) =>
@@ -1944,6 +1984,13 @@ const translations = {
     clorePrimeHint: "Premium subscription. Billing and benefits are not connected yet.",
     clorePrimePrice: "150 ₽/month",
     clorePrimeComingSoon: "Coming soon",
+    hidePrimeButtonInProfile: "Hide Prime button in profile",
+    hidePrimeButtonInProfileHint:
+      "Hide the Prime shortcut from your own profile action bar while your subscription is active",
+    hidePrimeButtonInProfilePrimeHint:
+      "Available only with an active Clore Prime subscription",
+    hidePrimeButtonInProfilePrimeToast:
+      "Buy Clore Prime to hide the Prime button in your profile",
     pushNotifications: "Push notifications",
     pushNotificationsHint: "Get notified about new messages",
     archivedChats: "Archived chats",
@@ -1992,12 +2039,15 @@ const translations = {
     language: "Language",
     languageHint: "Choose interface language",
     theme: "Theme",
-    themeHint: "Switch between dark and light appearance",
+    themeHint: "Choose an interface theme",
     themeDark: "Dark",
     themeLight: "Light",
+    themeObsidian: "Obsidian",
+    themeTitanium: "Titanium",
     accentColor: "Accent color",
     accentColorHint: "Choose the main color for buttons and highlights",
     accentColorPrimeHint: "Available only with an active Clore Prime subscription",
+    accentColorPrimeToast: "Buy Clore Prime to change the accent color",
     accentViolet: "Violet",
     accentBlue: "Blue",
     accentEmerald: "Emerald",
@@ -2339,6 +2389,13 @@ const translations = {
     clorePrimeHint: "Премиум-подписка. Оплата и преимущества пока не подключены.",
     clorePrimePrice: "150 ₽/мес",
     clorePrimeComingSoon: "Скоро",
+    hidePrimeButtonInProfile: "Скрыть кнопку Prime в профиле",
+    hidePrimeButtonInProfileHint:
+      "Скрыть ярлык Prime из панели действий в вашем профиле, пока подписка активна",
+    hidePrimeButtonInProfilePrimeHint:
+      "Доступно только с активной подпиской Clore Prime",
+    hidePrimeButtonInProfilePrimeToast:
+      "Купите Clore Prime, чтобы скрыть кнопку Prime в профиле",
     pushNotifications: "Push-уведомления",
     pushNotificationsHint: "Получать уведомления о новых сообщениях",
     messageSound: "Звук сообщений",
@@ -2368,10 +2425,13 @@ const translations = {
     language: "Язык",
     languageHint: "Выберите язык интерфейса",
     theme: "\u0422\u0435\u043c\u0430",
-    themeHint: "\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043c\u0435\u0436\u0434\u0443 \u0442\u0435\u043c\u043d\u043e\u0439 \u0438 \u0441\u0432\u0435\u0442\u043b\u043e\u0439 \u0442\u0435\u043c\u043e\u0439",
+    themeHint: "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0442\u0435\u043c\u0443 \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430",
     themeDark: "\u0422\u0435\u043c\u043d\u0430\u044f",
     themeLight: "\u0421\u0432\u0435\u0442\u043b\u0430\u044f",
+    themeObsidian: "Obsidian",
+    themeTitanium: "Titanium",
     accentColorPrimeHint: "\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u043e \u0442\u043e\u043b\u044c\u043a\u043e \u0441 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u043e\u0439 Clore Prime",
+    accentColorPrimeToast: "\u041a\u0443\u043f\u0438\u0442\u0435 Clore Prime, \u0447\u0442\u043e\u0431\u044b \u043c\u0435\u043d\u044f\u0442\u044c \u0430\u043a\u0446\u0435\u043d\u0442\u043d\u044b\u0439 \u0446\u0432\u0435\u0442",
     accentColor: "Акцентный цвет",
     accentColorHint: "Выберите основной цвет кнопок и акцентов",
     accentViolet: "Фиолетовый",
@@ -2583,6 +2643,21 @@ type PublicGroupSearchResult = {
   memberCount: number;
   updatedAt: number;
   groupKind: "group" | "channel";
+};
+type MobileNavigationSnapshot = {
+  key: string;
+  activeSidebar: SidebarItem["id"];
+  mobileView: "list" | "chat";
+  activeChatId: string | null;
+  activeChatPreviewUserId: string | null;
+  activePublicGroupPreview: PublicGroupSearchResult | null;
+  profileUserId: string | null;
+  profileTab: ProfileTabId;
+  isEditingProfile: boolean;
+  isActiveChatProfileSidebarOpen: boolean;
+  isPinnedUserProfileFromMessage: boolean;
+  viewerImageId: string | null;
+  viewerSource: "chat" | "profile" | "profile-avatar";
 };
 type SearchPublicGroupsResponse = {
   groups: PublicGroupSearchResult[];
@@ -4396,6 +4471,9 @@ export function WebMessenger({
   const mobileBackSwipeGestureRef = useRef<MobileBackSwipeGestureState>(
     createIdleMobileBackSwipeGestureState()
   );
+  const hasInitializedMobileHistoryRef = useRef(false);
+  const isApplyingMobileHistoryRef = useRef(false);
+  const lastMobileNavigationKeyRef = useRef<string | null>(null);
   const archivePullGestureRef = useRef<ArchivePullGestureState>(
     createIdleArchivePullGestureState()
   );
@@ -4419,6 +4497,7 @@ export function WebMessenger({
   const lastFullSyncAtRef = useRef(0);
   const baseDocumentTitleRef = useRef("Clore");
   const toastTimerRef = useRef<number | null>(null);
+  const toastDismissTimerRef = useRef<number | null>(null);
   const toastProgressAnimationRef = useRef<number | null>(null);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceRecorderStreamRef = useRef<MediaStream | null>(null);
@@ -4443,6 +4522,7 @@ export function WebMessenger({
   >(new Map());
   const [toast, setToast] = useState<InlineToast | null>(null);
   const [toastProgress, setToastProgress] = useState(0);
+  const [isToastClosing, setIsToastClosing] = useState(false);
   const toastCounterRef = useRef(0);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isAdminPanelLoading, setIsAdminPanelLoading] = useState(false);
@@ -4719,6 +4799,8 @@ export function WebMessenger({
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isAvatarDecorationGalleryOpen, setIsAvatarDecorationGalleryOpen] = useState(false);
+  const [avatarDecorationPurchasePendingId, setAvatarDecorationPurchasePendingId] =
+    useState<AvatarDecorationId | null>(null);
   const [birthdayDraft, setBirthdayDraft] = useState<BirthdayParts>(() =>
     parseBirthdayParts(currentUser.birthday)
   );
@@ -4756,7 +4838,7 @@ export function WebMessenger({
       return "light";
     }
     const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
-    return stored === "dark" ? "dark" : "light";
+    return UI_THEME_VALUES.includes(stored as UiTheme) ? (stored as UiTheme) : "light";
   });
   const [uiAccent, setUiAccent] = useState<UiAccent>(() => {
     if (typeof window === "undefined") {
@@ -4810,9 +4892,27 @@ export function WebMessenger({
         ? stored
         : "left";
     });
-  const hasPrimeAccentAccess =
+  const [hidePrimeButtonInProfile, setHidePrimeButtonInProfile] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return (
+      window.localStorage.getItem(
+        `${HIDE_PRIME_BUTTON_IN_PROFILE_STORAGE_KEY_PREFIX}${currentUser.id}`
+      ) === "1"
+    );
+  });
+  const hasActivePrimeSubscription =
     currentUser.primeStatus === "active" && currentUser.primeExpiresAt > serverTimeMs;
+  const hasPrimeAccentAccess = hasActivePrimeSubscription;
+  const hasPrimeAvatarDecorationsAccess = hasActivePrimeSubscription;
+  const purchasedAvatarDecorationIds = useMemo(
+    () => new Set(currentUser.purchasedAvatarDecorations ?? []),
+    [currentUser.purchasedAvatarDecorations]
+  );
   const effectiveUiAccent: UiAccent = hasPrimeAccentAccess ? uiAccent : "violet";
+  const shouldHidePrimeButtonInProfile =
+    hasActivePrimeSubscription && hidePrimeButtonInProfile;
   const [globalChatWallpaper, setGlobalChatWallpaper] = useState<ChatWallpaper>(() => {
     if (typeof window === "undefined") {
       return "none";
@@ -6384,22 +6484,38 @@ export function WebMessenger({
       window.clearTimeout(toastTimerRef.current);
       toastTimerRef.current = null;
     }
+    if (toastDismissTimerRef.current) {
+      window.clearTimeout(toastDismissTimerRef.current);
+      toastDismissTimerRef.current = null;
+    }
     if (toastProgressAnimationRef.current) {
       window.cancelAnimationFrame(toastProgressAnimationRef.current);
       toastProgressAnimationRef.current = null;
     }
     setToastProgress(0);
-    setToast(null);
+    setIsToastClosing(true);
+    toastDismissTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      setIsToastClosing(false);
+      toastDismissTimerRef.current = null;
+    }, 220);
   }, []);
   const showToast = useCallback(
     (message: string, action?: ToastAction) => {
       if (toastTimerRef.current) {
         window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+      if (toastDismissTimerRef.current) {
+        window.clearTimeout(toastDismissTimerRef.current);
+        toastDismissTimerRef.current = null;
       }
       if (toastProgressAnimationRef.current) {
         window.cancelAnimationFrame(toastProgressAnimationRef.current);
+        toastProgressAnimationRef.current = null;
       }
       toastCounterRef.current += 1;
+      setIsToastClosing(false);
       setToast({
         id: toastCounterRef.current,
         message,
@@ -6411,12 +6527,20 @@ export function WebMessenger({
         toastProgressAnimationRef.current = null;
       });
       toastTimerRef.current = window.setTimeout(() => {
-        setToastProgress(0);
-        setToast(null);
-        toastTimerRef.current = null;
+        dismissToast();
       }, UNDO_WINDOW_MS);
     },
-    []
+    [dismissToast]
+  );
+  const handleHidePrimeButtonInProfileChange = useCallback(
+    (checked: boolean) => {
+      if (!hasActivePrimeSubscription) {
+        showToast(t("hidePrimeButtonInProfilePrimeToast"));
+        return;
+      }
+      setHidePrimeButtonInProfile(checked);
+    },
+    [hasActivePrimeSubscription, showToast, t]
   );
   const applyModerationSnapshot = useCallback((snapshot: ModerationPanelSnapshot) => {
     setAdminReports(snapshot.reports);
@@ -6963,6 +7087,12 @@ export function WebMessenger({
     );
   }, [uiPinnedMessageAlignment]);
   useEffect(() => {
+    window.localStorage.setItem(
+      `${HIDE_PRIME_BUTTON_IN_PROFILE_STORAGE_KEY_PREFIX}${currentUser.id}`,
+      hidePrimeButtonInProfile ? "1" : "0"
+    );
+  }, [currentUser.id, hidePrimeButtonInProfile]);
+  useEffect(() => {
     window.localStorage.setItem(GLOBAL_CHAT_WALLPAPER_STORAGE_KEY, globalChatWallpaper);
   }, [globalChatWallpaper]);
   useEffect(() => {
@@ -7001,7 +7131,7 @@ export function WebMessenger({
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-clore-theme", uiTheme);
-    root.classList.toggle("dark", uiTheme === "dark");
+    root.classList.toggle("dark", uiTheme !== "light");
   }, [uiTheme]);
   useEffect(() => {
     const root = document.documentElement;
@@ -7190,7 +7320,7 @@ export function WebMessenger({
       nextUrl.searchParams.delete("invite");
       const nextQuery = nextUrl.searchParams.toString();
       window.history.replaceState(
-        {},
+        window.history.state,
         "",
         `${nextUrl.pathname}${nextQuery ? `?${nextQuery}` : ""}${nextUrl.hash}`
       );
@@ -8548,7 +8678,7 @@ export function WebMessenger({
       nextUrl.searchParams.delete("adminCallTargets");
       const nextQuery = nextUrl.searchParams.toString();
       window.history.replaceState(
-        {},
+        window.history.state,
         "",
         `${nextUrl.pathname}${nextQuery ? `?${nextQuery}` : ""}${nextUrl.hash}`
       );
@@ -12726,6 +12856,163 @@ export function WebMessenger({
     ]
   );
 
+  const captureMobileNavigationSnapshot = useCallback((): MobileNavigationSnapshot => {
+    const previewKey = activePublicGroupPreview
+      ? `${activePublicGroupPreview.chatId}:${activePublicGroupPreview.username}`
+      : "";
+    const chatTargetKey =
+      activeChatId ??
+      activeChatPreviewUserId ??
+      (previewKey ? `preview:${previewKey}` : "");
+    const key = viewerImageId
+      ? `viewer:${viewerSource}:${viewerImageId}`
+      : activeSidebar !== "home"
+        ? `sidebar:${activeSidebar}:${profileUserId ?? "self"}:${profileTab}:${isEditingProfile ? "edit" : "view"}`
+        : mobileView === "chat"
+          ? `chat:${chatTargetKey || "active"}`
+          : "list";
+
+    return {
+      key,
+      activeSidebar,
+      mobileView,
+      activeChatId,
+      activeChatPreviewUserId,
+      activePublicGroupPreview,
+      profileUserId,
+      profileTab,
+      isEditingProfile,
+      isActiveChatProfileSidebarOpen,
+      isPinnedUserProfileFromMessage,
+      viewerImageId,
+      viewerSource,
+    };
+  }, [
+    activeChatId,
+    activeChatPreviewUserId,
+    activePublicGroupPreview,
+    activeSidebar,
+    isActiveChatProfileSidebarOpen,
+    isEditingProfile,
+    isPinnedUserProfileFromMessage,
+    mobileView,
+    profileTab,
+    profileUserId,
+    viewerImageId,
+    viewerSource,
+  ]);
+
+  const applyMobileNavigationSnapshot = useCallback((snapshot: MobileNavigationSnapshot) => {
+    setActiveSidebar(snapshot.activeSidebar);
+    setMobileView(snapshot.mobileView);
+    setActiveChatId(snapshot.activeChatId);
+    setActiveChatPreviewUserId(snapshot.activeChatPreviewUserId);
+    setActivePublicGroupPreview(snapshot.activePublicGroupPreview);
+    setProfileUserId(snapshot.profileUserId);
+    setProfileTab(snapshot.profileTab);
+    setIsEditingProfile(snapshot.isEditingProfile);
+    setIsActiveChatProfileSidebarOpen(snapshot.isActiveChatProfileSidebarOpen);
+    setIsPinnedUserProfileFromMessage(snapshot.isPinnedUserProfileFromMessage);
+    setViewerImageId(snapshot.viewerImageId);
+    setViewerSource(snapshot.viewerSource);
+  }, []);
+
+  const performMobileBackNavigation = useCallback(() => {
+    if (typeof window !== "undefined" && hasInitializedMobileHistoryRef.current) {
+      window.history.back();
+      return;
+    }
+
+    if (activeSidebar !== "home") {
+      setIsActiveChatProfileSidebarOpen(false);
+      setActiveSidebar("home");
+      return;
+    }
+
+    setIsActiveChatSearchOpen(false);
+    setIsActiveChatProfileSidebarOpen(false);
+    setMobileView("list");
+  }, [activeSidebar]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!window.matchMedia(MOBILE_VIEWPORT_MEDIA_QUERY).matches) {
+      hasInitializedMobileHistoryRef.current = false;
+      isApplyingMobileHistoryRef.current = false;
+      lastMobileNavigationKeyRef.current = null;
+      return;
+    }
+
+    const snapshot = captureMobileNavigationSnapshot();
+    const historyState = getHistoryStateRecord(window.history.state);
+    const currentSnapshot =
+      historyState[MOBILE_NAVIGATION_HISTORY_STATE_KEY] as MobileNavigationSnapshot | undefined;
+
+    if (!hasInitializedMobileHistoryRef.current || !currentSnapshot) {
+      window.history.replaceState(
+        {
+          ...historyState,
+          [MOBILE_NAVIGATION_HISTORY_STATE_KEY]: snapshot,
+        },
+        "",
+        window.location.href
+      );
+      hasInitializedMobileHistoryRef.current = true;
+      lastMobileNavigationKeyRef.current = snapshot.key;
+      return;
+    }
+
+    hasInitializedMobileHistoryRef.current = true;
+
+    if (isApplyingMobileHistoryRef.current) {
+      isApplyingMobileHistoryRef.current = false;
+      lastMobileNavigationKeyRef.current = snapshot.key;
+      return;
+    }
+
+    if (snapshot.key === lastMobileNavigationKeyRef.current) {
+      return;
+    }
+
+    window.history.pushState(
+      {
+        ...historyState,
+        [MOBILE_NAVIGATION_HISTORY_STATE_KEY]: snapshot,
+      },
+      "",
+      window.location.href
+    );
+    lastMobileNavigationKeyRef.current = snapshot.key;
+  }, [captureMobileNavigationSnapshot]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (!window.matchMedia(MOBILE_VIEWPORT_MEDIA_QUERY).matches) {
+        return;
+      }
+
+      const historyState = getHistoryStateRecord(event.state);
+      const snapshot = historyState[MOBILE_NAVIGATION_HISTORY_STATE_KEY];
+      if (!snapshot || typeof snapshot !== "object") {
+        return;
+      }
+
+      isApplyingMobileHistoryRef.current = true;
+      lastMobileNavigationKeyRef.current = (snapshot as MobileNavigationSnapshot).key;
+      applyMobileNavigationSnapshot(snapshot as MobileNavigationSnapshot);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [applyMobileNavigationSnapshot]);
+
   const resetMobileBackSwipeGesture = useCallback(() => {
     mobileBackSwipeGestureRef.current = createIdleMobileBackSwipeGestureState();
   }, []);
@@ -12807,8 +13094,7 @@ export function WebMessenger({
       if (
         typeof window === "undefined" ||
         !window.matchMedia(MOBILE_VIEWPORT_MEDIA_QUERY).matches ||
-        activeSidebar !== "home" ||
-        mobileView !== "chat" ||
+        (activeSidebar === "home" && mobileView === "list") ||
         touch.clientX > MOBILE_BACK_SWIPE_EDGE_WIDTH
       ) {
         resetMobileBackSwipeGesture();
@@ -12863,13 +13149,11 @@ export function WebMessenger({
 
       if (deltaX >= MOBILE_BACK_SWIPE_TRIGGER_DISTANCE && Math.abs(deltaY) < 120) {
         gesture.activated = true;
-        setIsActiveChatSearchOpen(false);
-        setIsActiveChatProfileSidebarOpen(false);
-        setMobileView("list");
+        performMobileBackNavigation();
         resetMobileBackSwipeGesture();
       }
     },
-    [resetMobileBackSwipeGesture]
+    [performMobileBackNavigation, resetMobileBackSwipeGesture]
   );
 
   const handleMobileBackSwipeEnd = useCallback(() => {
@@ -13499,6 +13783,63 @@ export function WebMessenger({
   };
 
   const applyAvatarDecoration = async (avatarDecoration: AvatarDecorationId) => {
+    const isUnlocked =
+      avatarDecoration === "none" ||
+      hasPrimeAvatarDecorationsAccess ||
+      purchasedAvatarDecorationIds.has(avatarDecoration);
+
+    if (!isUnlocked) {
+      if (avatarDecorationPurchasePendingId) {
+        return;
+      }
+
+      setAvatarDecorationPurchasePendingId(avatarDecoration);
+      try {
+        const response = await fetch("/api/payments/yookassa/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            product: "avatar_decoration",
+            avatarDecoration,
+          }),
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | { confirmationUrl?: string; error?: string }
+          | null;
+
+        if (!response.ok || !payload?.confirmationUrl) {
+          showToast(
+            payload?.error?.trim() ||
+              (language === "ru"
+                ? "Не удалось создать платёж."
+                : "Unable to create payment.")
+          );
+          return;
+        }
+
+        if (typeof window !== "undefined") {
+          window.location.href = payload.confirmationUrl;
+        }
+      } catch {
+        showToast(
+          language === "ru" ? "Не удалось создать платёж." : "Unable to create payment."
+        );
+      } finally {
+        setAvatarDecorationPurchasePendingId(null);
+      }
+      return;
+
+      showToast(
+        language === "ru"
+          ? "Эта рамка доступна только с активным Clore Prime."
+          : "This frame is available only with active Clore Prime."
+      );
+      return;
+    }
+
     const nextProfile: ProfileData = {
       ...profile,
       avatarDecoration,
@@ -13770,8 +14111,11 @@ export function WebMessenger({
   const shouldShowMobileNavigation =
     activeSidebar !== "home" || mobileView === "list";
   const mobileMainPaddingClass = shouldShowMobileNavigation
-    ? "pb-[calc(4rem+max(env(safe-area-inset-bottom),0.5rem))] md:pb-0"
+    ? "pb-[calc(5.5rem+max(env(safe-area-inset-bottom),0.75rem))] md:pb-0"
     : "";
+  const mobileFloatingBottomClass = shouldShowMobileNavigation
+    ? "bottom-[calc(5.5rem+max(env(safe-area-inset-bottom),0.75rem))] md:bottom-[calc(env(safe-area-inset-bottom)+1rem)]"
+    : "bottom-[calc(env(safe-area-inset-bottom)+1rem)]";
   const renderableSidebarItems =
     visibleSidebarItems.length > 0 ? visibleSidebarItems : orderedSidebarItems;
   const activateSidebarItem = useCallback(
@@ -13828,6 +14172,12 @@ export function WebMessenger({
     }
     if (value === "light") {
       return t("themeLight");
+    }
+    if (value === "obsidian") {
+      return t("themeObsidian");
+    }
+    if (value === "titanium") {
+      return t("themeTitanium");
     }
     return value;
   };
@@ -13974,6 +14324,10 @@ export function WebMessenger({
             ? "bg-[radial-gradient(circle_at_10%_8%,rgba(59,130,246,0.12),transparent_36%),radial-gradient(circle_at_88%_0%,rgba(14,165,233,0.1),transparent_30%),linear-gradient(160deg,#f8fbff_0%,#f2f6fd_56%,#eef3fb_100%)]"
             : "bg-[radial-gradient(circle_at_10%_8%,rgba(139,92,246,0.1),transparent_34%),radial-gradient(circle_at_88%_0%,rgba(139,92,246,0.06),transparent_30%),linear-gradient(160deg,#0b0b0d_0%,#101014_55%,#141419_100%)]"
         } pt-[env(safe-area-inset-top)] text-zinc-100 ${mobileMainPaddingClass}`}
+        onTouchStart={handleMobileBackSwipeStart}
+        onTouchMove={handleMobileBackSwipeMove}
+        onTouchEnd={handleMobileBackSwipeEnd}
+        onTouchCancel={handleMobileBackSwipeEnd}
       >
       <section className="flex min-h-0 w-full flex-1">
         <div
@@ -14709,10 +15063,6 @@ export function WebMessenger({
                   className={`${
                     mobileView === "list" ? "hidden" : "flex"
                   } min-h-0 min-w-0 flex-1 flex-col bg-transparent md:flex ${activeChatFontClassName}`}
-                  onTouchStart={handleMobileBackSwipeStart}
-                  onTouchMove={handleMobileBackSwipeMove}
-                  onTouchEnd={handleMobileBackSwipeEnd}
-                  onTouchCancel={handleMobileBackSwipeEnd}
                 >
               {activeChat ? (
                 <>
@@ -16409,7 +16759,7 @@ export function WebMessenger({
                   )}
                 </div>
                 <form
-                  className="px-3 py-3 sm:px-6 sm:py-4"
+                  className="px-3 py-3 pb-5 sm:px-6 sm:py-4 md:pb-4"
                   onSubmit={(event) => {
                     event.preventDefault();
                     void sendAiPrompt();
@@ -16827,6 +17177,7 @@ export function WebMessenger({
                                 <Bookmark className="size-4" />
                                 {t("favorites")}
                               </Button>
+                              {shouldHidePrimeButtonInProfile ? null : (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -16842,6 +17193,7 @@ export function WebMessenger({
                               >
                                 <Crown className="size-4" />
                               </Button>
+                              )}
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button
@@ -16860,14 +17212,10 @@ export function WebMessenger({
                                 >
                                   <DropdownMenuItem
                                     className={profileActionMenuItemClassName}
-                                    onSelect={() => {
-                                      if (typeof window !== "undefined") {
-                                        window.location.href = "/avatar-gallery";
-                                      }
-                                    }}
+                                    onSelect={() => setIsAvatarDecorationGalleryOpen(true)}
                                   >
-                                    <Crown className="size-4" />
-                                    Avatar Gallery
+                                    <GalleryHangerIcon className="size-4" />
+                                    Gallery
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator
                                     className={profileActionMenuSeparatorClassName}
@@ -16883,11 +17231,12 @@ export function WebMessenger({
                               </DropdownMenu>
                             </div>
                             </div>
-                            <div className="hidden">
+                            {false ? (
+                            <div className="mt-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-3 ring-1 ring-white/5 backdrop-blur-lg">
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <p className="text-base font-semibold text-zinc-100">
-                                    Avatar Gallery
+                                    Gallery
                                   </p>
                                   <p className="mt-1 text-xs text-zinc-400">
                                     Отдельная галерея украшений. Выбор применяется сразу.
@@ -16976,6 +17325,7 @@ export function WebMessenger({
                                 })}
                               </div>
                             </div>
+                            ) : null}
                           </>
                         ) : !isGroupProfile && !isOwnProfile && viewedUserId ? (
                           <div className="mt-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-2 ring-1 ring-white/5 backdrop-blur-lg">
@@ -17408,6 +17758,27 @@ export function WebMessenger({
 
                 <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
                   <div className="mx-auto w-full max-w-5xl space-y-4 pb-8">
+                    {isAdminAccount ? (
+                      <section className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-4 md:hidden">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-amber-100">{adminDashboardLabel}</p>
+                            <p className="mt-1 text-xs text-amber-200/80">
+                              {language === "ru"
+                                ? "Открыть панель модерации и управления."
+                                : "Open moderation and control tools."}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={openAdminDashboard}
+                            className="h-10 shrink-0 rounded-md border border-amber-400/70 bg-amber-500/15 px-4 text-amber-100 hover:bg-amber-500/25"
+                          >
+                            <Shield className="size-4" />
+                          </Button>
+                        </div>
+                      </section>
+                    ) : null}
                   {activeSettingsSection === "privacy" ? (
                   <section className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-4 sm:px-5">
                     <div className="mb-4 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5">
@@ -17998,8 +18369,8 @@ export function WebMessenger({
                               <Select
                                 value={uiTheme}
                                 onValueChange={(value) => {
-                                  if (value === "dark" || value === "light") {
-                                    setUiTheme(value);
+                                  if (UI_THEME_VALUES.includes(value as UiTheme)) {
+                                    setUiTheme(value as UiTheme);
                                   }
                                 }}
                               >
@@ -18014,6 +18385,12 @@ export function WebMessenger({
                                   </SelectItem>
                                   <SelectItem value="light" className={unifiedSelectItemClassName}>
                                     {t("themeLight")}
+                                  </SelectItem>
+                                  <SelectItem value="obsidian" className={unifiedSelectItemClassName}>
+                                    {t("themeObsidian")}
+                                  </SelectItem>
+                                  <SelectItem value="titanium" className={unifiedSelectItemClassName}>
+                                    {t("themeTitanium")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -18030,59 +18407,103 @@ export function WebMessenger({
                                   : t("accentColorPrimeHint")}
                               </p>
                             </div>
-                            {hasPrimeAccentAccess ? (
-                              <div className="w-full sm:w-[220px]">
-                                <Select
-                                  value={uiAccent}
-                                  onValueChange={(value) => {
-                                    if (
-                                      value === "violet" ||
-                                      value === "blue" ||
-                                      value === "emerald" ||
-                                      value === "rose" ||
-                                      value === "amber"
-                                    ) {
-                                      setUiAccent(value);
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
-                                    <SelectValue className="text-zinc-100">
-                                      {(value) => getAccentLabel(value)}
-                                    </SelectValue>
-                                  </SelectTrigger>
-                                  <SelectContent className={unifiedSelectContentClassName}>
-                                    <SelectItem value="violet" className={unifiedSelectItemClassName}>
-                                      {t("accentViolet")}
-                                    </SelectItem>
-                                    <SelectItem value="blue" className={unifiedSelectItemClassName}>
-                                      {t("accentBlue")}
-                                    </SelectItem>
-                                    <SelectItem value="emerald" className={unifiedSelectItemClassName}>
-                                      {t("accentEmerald")}
-                                    </SelectItem>
-                                    <SelectItem value="rose" className={unifiedSelectItemClassName}>
-                                      {t("accentRose")}
-                                    </SelectItem>
-                                    <SelectItem value="amber" className={unifiedSelectItemClassName}>
-                                      {t("accentAmber")}
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            ) : (
-                              <Button
-                                type="button"
-                                onClick={() => {
-                                  window.location.href = "/prime";
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={effectiveUiAccent}
+                                onValueChange={(value) => {
+                                  if (
+                                    value !== "violet" &&
+                                    value !== "blue" &&
+                                    value !== "emerald" &&
+                                    value !== "rose" &&
+                                    value !== "amber"
+                                  ) {
+                                    return;
+                                  }
+
+                                  if (!hasPrimeAccentAccess) {
+                                    showToast(t("accentColorPrimeToast"));
+                                    return;
+                                  }
+
+                                  setUiAccent(value);
                                 }}
-                                className="h-9 w-full rounded-lg border border-amber-500/60 bg-amber-500/10 px-3 text-xs text-amber-100 hover:bg-amber-500/20 sm:w-auto"
                               >
-                                {language === "ru"
-                                  ? "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0441 Clore Prime"
-                                  : "Unlock with Prime"}
-                              </Button>
-                            )}
+                                <SelectTrigger
+                                  className={`h-9 w-full px-2.5 text-xs font-medium ${
+                                    hasPrimeAccentAccess
+                                      ? unifiedSelectTriggerClassName
+                                      : "rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-500 transition-colors hover:border-zinc-700 hover:bg-zinc-900 focus-visible:border-zinc-700 focus-visible:ring-0 data-[state=open]:border-zinc-700 data-[state=open]:bg-zinc-900"
+                                  }`}
+                                >
+                                  <SelectValue
+                                    className={
+                                      hasPrimeAccentAccess ? "text-zinc-100" : "text-zinc-500"
+                                    }
+                                  >
+                                    {(value) => getAccentLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent
+                                  className={
+                                    hasPrimeAccentAccess
+                                      ? unifiedSelectContentClassName
+                                      : "overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-zinc-500 shadow-xl"
+                                  }
+                                >
+                                  <SelectItem
+                                    value="violet"
+                                    className={
+                                      hasPrimeAccentAccess
+                                        ? unifiedSelectItemClassName
+                                        : "rounded-md px-7 py-1.5 text-xs text-zinc-500 outline-none data-[highlighted]:bg-zinc-800 data-[highlighted]:text-zinc-400 data-[state=checked]:bg-zinc-800 data-[state=checked]:text-zinc-300"
+                                    }
+                                  >
+                                    {t("accentViolet")}
+                                  </SelectItem>
+                                  <SelectItem
+                                    value="blue"
+                                    className={
+                                      hasPrimeAccentAccess
+                                        ? unifiedSelectItemClassName
+                                        : "rounded-md px-7 py-1.5 text-xs text-zinc-500 outline-none data-[highlighted]:bg-zinc-800 data-[highlighted]:text-zinc-400 data-[state=checked]:bg-zinc-800 data-[state=checked]:text-zinc-300"
+                                    }
+                                  >
+                                    {t("accentBlue")}
+                                  </SelectItem>
+                                  <SelectItem
+                                    value="emerald"
+                                    className={
+                                      hasPrimeAccentAccess
+                                        ? unifiedSelectItemClassName
+                                        : "rounded-md px-7 py-1.5 text-xs text-zinc-500 outline-none data-[highlighted]:bg-zinc-800 data-[highlighted]:text-zinc-400 data-[state=checked]:bg-zinc-800 data-[state=checked]:text-zinc-300"
+                                    }
+                                  >
+                                    {t("accentEmerald")}
+                                  </SelectItem>
+                                  <SelectItem
+                                    value="rose"
+                                    className={
+                                      hasPrimeAccentAccess
+                                        ? unifiedSelectItemClassName
+                                        : "rounded-md px-7 py-1.5 text-xs text-zinc-500 outline-none data-[highlighted]:bg-zinc-800 data-[highlighted]:text-zinc-400 data-[state=checked]:bg-zinc-800 data-[state=checked]:text-zinc-300"
+                                    }
+                                  >
+                                    {t("accentRose")}
+                                  </SelectItem>
+                                  <SelectItem
+                                    value="amber"
+                                    className={
+                                      hasPrimeAccentAccess
+                                        ? unifiedSelectItemClassName
+                                        : "rounded-md px-7 py-1.5 text-xs text-zinc-500 outline-none data-[highlighted]:bg-zinc-800 data-[highlighted]:text-zinc-400 data-[state=checked]:bg-zinc-800 data-[state=checked]:text-zinc-300"
+                                    }
+                                  >
+                                    {t("accentAmber")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                           <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                             <div className="min-w-0">
@@ -18347,6 +18768,28 @@ export function WebMessenger({
                               aria-label={t("sendMessageSound")}
                             />
                           </div>
+                          <div className="flex items-center justify-between gap-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">
+                                {t("hidePrimeButtonInProfile")}
+                              </p>
+                              <p className="mt-0.5 text-xs text-zinc-500">
+                                {hasActivePrimeSubscription
+                                  ? t("hidePrimeButtonInProfileHint")
+                                  : t("hidePrimeButtonInProfilePrimeHint")}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={shouldHidePrimeButtonInProfile}
+                              onCheckedChange={handleHidePrimeButtonInProfileChange}
+                              aria-label={t("hidePrimeButtonInProfile")}
+                              className={
+                                hasActivePrimeSubscription
+                                  ? ""
+                                  : "border-zinc-700 bg-zinc-800 data-[state=checked]:bg-zinc-700 data-[state=unchecked]:bg-zinc-800"
+                              }
+                            />
+                          </div>
                           <div className="hidden items-center justify-between gap-4 py-3 md:flex">
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-zinc-100">{t("sidebarVisibility")}</p>
@@ -18416,16 +18859,6 @@ export function WebMessenger({
               );
             })}
           </div>
-          {isAdminAccount ? (
-            <button
-              type="button"
-              onClick={openAdminDashboard}
-              className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-amber-500/70 bg-amber-500/15 text-xs font-medium text-amber-100"
-            >
-              <Shield className="size-4" />
-              <span>{adminDashboardLabel}</span>
-            </button>
-          ) : null}
         </nav>
       ) : null}
       <AlertDialog
@@ -18733,6 +19166,28 @@ export function WebMessenger({
                   }`}
                 >
                   {t("themeLight")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setUiTheme("obsidian")}
+                  className={`h-10 rounded-lg border ${
+                    uiTheme === "obsidian"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("themeObsidian")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setUiTheme("titanium")}
+                  className={`h-10 rounded-lg border ${
+                    uiTheme === "titanium"
+                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {t("themeTitanium")}
                 </Button>
               </div>
             </div>
@@ -19913,37 +20368,46 @@ export function WebMessenger({
         formatDateTime={formatAbsoluteDateTime}
       />
       {toast ? (
-        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-1/2 z-[125] flex w-[min(92vw,560px)] -translate-x-1/2 items-center justify-between gap-3 overflow-hidden rounded-xl border border-zinc-600 bg-zinc-900/95 px-4 py-3 text-sm text-zinc-100 shadow-2xl backdrop-blur">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-primary/80"
-            style={{
-              width: `${toastProgress}%`,
-              transition: `width ${UNDO_WINDOW_MS}ms linear`,
-            }}
-          />
-          <p className="min-w-0 flex-1 truncate">{toast.message}</p>
-          <div className="flex items-center gap-2">
-            {toast.action ? (
+        <div
+          className={`fixed left-1/2 z-[125] w-[min(92vw,560px)] -translate-x-1/2 ${mobileFloatingBottomClass}`}
+        >
+          <div
+            key={toast.id}
+            className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-xl border border-zinc-600 bg-zinc-900/95 px-4 py-3 text-sm text-zinc-100 shadow-2xl backdrop-blur ${
+              isToastClosing ? "clore-toast-slide-out" : "clore-toast-rise-in"
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-primary/80"
+              style={{
+                width: `${toastProgress}%`,
+                transition: `width ${UNDO_WINDOW_MS}ms linear`,
+              }}
+            />
+            <p className="min-w-0 flex-1 truncate">{toast.message}</p>
+            <div className="flex items-center gap-2">
+              {toast.action ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 rounded-md border border-zinc-500 !bg-zinc-800 px-3 text-xs font-medium text-zinc-100 hover:!border-primary hover:!bg-zinc-700 hover:!text-primary"
+                  onClick={toast.action.onClick}
+                >
+                  {toast.action.label}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
-                className="h-8 rounded-md border border-zinc-500 !bg-zinc-800 px-3 text-xs font-medium text-zinc-100 hover:!border-primary hover:!bg-zinc-700 hover:!text-primary"
-                onClick={toast.action.onClick}
+                size="icon"
+                aria-label={t("cancel")}
+                className="h-8 w-8 rounded-md border border-zinc-600 !bg-zinc-800 text-zinc-300 hover:!border-zinc-500 hover:!bg-zinc-700 hover:!text-zinc-100"
+                onClick={dismissToast}
               >
-                {toast.action.label}
+                <X className="size-4" />
               </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={t("cancel")}
-              className="h-8 w-8 rounded-md border border-zinc-600 !bg-zinc-800 text-zinc-300 hover:!border-zinc-500 hover:!bg-zinc-700 hover:!text-zinc-100"
-              onClick={dismissToast}
-            >
-              <X className="size-4" />
-            </Button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -19955,7 +20419,7 @@ export function WebMessenger({
               ? uiTheme === "light"
                 ? "fixed inset-0 z-[130] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.14),rgba(241,245,249,0.95)_60%)] p-3 sm:p-5"
                 : "fixed inset-0 z-[130] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(63,63,70,0.35),rgba(9,9,11,0.98)_55%)] p-3 sm:p-5"
-              : "fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-[120] w-[min(96vw,460px)] rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4 text-zinc-100 shadow-2xl backdrop-blur"
+              : `fixed right-4 z-[120] w-[min(96vw,460px)] rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4 text-zinc-100 shadow-2xl backdrop-blur ${mobileFloatingBottomClass}`
           }
         >
           <div
@@ -20358,6 +20822,112 @@ export function WebMessenger({
           </div>
         </div>
       ) : null}
+      <AlertDialog
+        open={isAvatarDecorationGalleryOpen}
+        onOpenChange={(open) => setIsAvatarDecorationGalleryOpen(open)}
+      >
+        <AlertDialogContent className="w-[min(94vw,760px)] max-w-none border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">Gallery</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {language === "ru"
+                ? "Выберите рамку для аватара. Без Clore Prime доступные рамки можно купить отдельно за 49.90 ₽."
+                : "Choose an avatar frame. Without Clore Prime, locked frames can be purchased separately for 49.90 RUB."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-[min(68vh,720px)] overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {AVATAR_DECORATION_OPTIONS.map((option) => {
+                const frameClassName = getAvatarDecorationFrameClassName(option.id);
+                const overlayClassName = getAvatarDecorationOverlayClassName(option.id);
+                const imageDecorationUrl = getAvatarDecorationImageUrl(option.id);
+                const isSelected = profile.avatarDecoration === option.id;
+                const isUnlocked =
+                  option.id === "none" ||
+                  hasPrimeAvatarDecorationsAccess ||
+                  purchasedAvatarDecorationIds.has(option.id);
+                const isPurchasePending = avatarDecorationPurchasePendingId === option.id;
+
+                return (
+                  <button
+                    key={`avatar-gallery-modal-${option.id}`}
+                    type="button"
+                    onClick={() => void applyAvatarDecoration(option.id)}
+                    disabled={isPurchasePending}
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      isSelected
+                        ? "border-primary bg-primary/10"
+                        : isUnlocked
+                          ? "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
+                          : "border-zinc-800/80 bg-zinc-900/40 opacity-75"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-zinc-100">{option.label}</span>
+                      {option.id !== "none" ? (
+                        isUnlocked ? (
+                          <GalleryHangerIcon className="size-4 text-zinc-300" />
+                        ) : (
+                          <Crown className="size-4 text-amber-300" />
+                        )
+                      ) : null}
+                    </div>
+                    <div className="mt-4 flex justify-center">
+                      <span className={`relative inline-flex rounded-full ${frameClassName}`}>
+                        <span
+                          className={`relative inline-flex size-20 items-center justify-center rounded-full bg-primary text-lg font-semibold text-zinc-50 ${getAvatarDecorationSurfaceClassName(
+                            option.id
+                          )} ${overlayClassName}`}
+                        >
+                          {profileInitials || "LW"}
+                        </span>
+                        {imageDecorationUrl ? (
+                          <span
+                            className="pointer-events-none absolute inset-[-10%] rounded-full bg-contain bg-center bg-no-repeat"
+                            style={{
+                              backgroundImage: `url('${imageDecorationUrl}')`,
+                            }}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </span>
+                    </div>
+                    <div className="mt-4 text-xs font-medium">
+                      {isSelected ? (
+                        <span className="text-primary">Applied</span>
+                      ) : isUnlocked ? (
+                        <span className="text-zinc-500">
+                          {language === "ru" ? "Нажмите, чтобы применить" : "Click to apply"}
+                        </span>
+                      ) : (
+                        <span className="text-amber-300">
+                          {language === "ru" ? "Требуется Clore Prime" : "Requires Clore Prime"}
+                        </span>
+                      )}
+                    </div>
+                    {!isSelected && !isUnlocked ? (
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        {isPurchasePending
+                          ? language === "ru"
+                            ? "Переход к оплате..."
+                            : "Opening payment..."
+                          : language === "ru"
+                            ? "Нажмите, чтобы купить за 49.90 ₽"
+                            : "Tap to buy for 49.90 RUB"}
+                      </p>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:!text-zinc-100">
+              {language === "ru" ? "Закрыть" : "Close"}
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <style jsx global>{`
         html[data-clore-font-family="default"] body {
           font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;

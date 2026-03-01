@@ -240,12 +240,115 @@
   --sidebar-accent-foreground: oklch(0.98 0.01 82);
 }
 
+:root[data-clore-theme="obsidian"] {
+  --background: oklch(0.13 0.01 255);
+  --foreground: oklch(0.96 0.01 255);
+  --card: oklch(0.17 0.012 250);
+  --card-foreground: oklch(0.96 0.01 255);
+  --popover: oklch(0.17 0.012 250);
+  --popover-foreground: oklch(0.96 0.01 255);
+  --primary: oklch(0.74 0.12 235);
+  --primary-foreground: oklch(0.98 0.01 255);
+  --accent: oklch(0.28 0.03 240);
+  --accent-foreground: oklch(0.95 0.01 255);
+  --border: oklch(0.3 0.01 245 / 70%);
+  --input: oklch(0.24 0.01 245 / 85%);
+  --ring: oklch(0.68 0.08 235);
+  --sidebar: oklch(0.16 0.012 248);
+  --sidebar-foreground: oklch(0.96 0.01 255);
+  --sidebar-primary: oklch(0.74 0.12 235);
+  --sidebar-primary-foreground: oklch(0.98 0.01 255);
+  --sidebar-accent: oklch(0.28 0.03 240);
+  --sidebar-accent-foreground: oklch(0.95 0.01 255);
+}
+
+:root[data-clore-theme="titanium"] {
+  --background: oklch(0.22 0.004 255);
+  --foreground: oklch(0.95 0.003 255);
+  --card: oklch(0.27 0.004 255);
+  --card-foreground: oklch(0.95 0.003 255);
+  --popover: oklch(0.27 0.004 255);
+  --popover-foreground: oklch(0.95 0.003 255);
+  --primary: oklch(0.78 0.02 250);
+  --primary-foreground: oklch(0.2 0.002 255);
+  --accent: oklch(0.34 0.006 255);
+  --accent-foreground: oklch(0.96 0.003 255);
+  --border: oklch(0.45 0.003 255 / 70%);
+  --input: oklch(0.31 0.004 255 / 88%);
+  --ring: oklch(0.74 0.015 255);
+  --sidebar: oklch(0.25 0.004 255);
+  --sidebar-foreground: oklch(0.95 0.003 255);
+  --sidebar-primary: oklch(0.78 0.02 250);
+  --sidebar-primary-foreground: oklch(0.2 0.002 255);
+  --sidebar-accent: oklch(0.34 0.006 255);
+  --sidebar-accent-foreground: oklch(0.96 0.003 255);
+}
+
 html[data-clore-theme="dark"] {
   color-scheme: dark;
 }
 
 html[data-clore-theme="light"] {
   color-scheme: light;
+}
+
+html[data-clore-theme="obsidian"],
+html[data-clore-theme="titanium"] {
+  color-scheme: dark;
+}
+
+html[data-clore-theme="obsidian"] body {
+  background: #0d1117;
+  color: #e7edf6;
+}
+
+html[data-clore-theme="titanium"] body {
+  background: #2b3139;
+  color: #eef2f7;
+}
+
+html[data-clore-theme="obsidian"] [class*="bg-zinc-950"] {
+  background-color: rgb(10 14 20 / 1) !important;
+}
+
+html[data-clore-theme="obsidian"] [class*="bg-zinc-900"] {
+  background-color: rgb(17 24 33 / 1) !important;
+}
+
+html[data-clore-theme="obsidian"] [class*="bg-zinc-800"] {
+  background-color: rgb(25 34 46 / 1) !important;
+}
+
+html[data-clore-theme="obsidian"] [class*="bg-zinc-700"] {
+  background-color: rgb(34 46 61 / 1) !important;
+}
+
+html[data-clore-theme="obsidian"] [class*="border-zinc-800"],
+html[data-clore-theme="obsidian"] [class*="border-zinc-700"],
+html[data-clore-theme="obsidian"] [class*="border-zinc-600"] {
+  border-color: rgb(58 78 102 / 0.78) !important;
+}
+
+html[data-clore-theme="titanium"] [class*="bg-zinc-950"] {
+  background-color: rgb(33 38 45 / 1) !important;
+}
+
+html[data-clore-theme="titanium"] [class*="bg-zinc-900"] {
+  background-color: rgb(46 53 62 / 1) !important;
+}
+
+html[data-clore-theme="titanium"] [class*="bg-zinc-800"] {
+  background-color: rgb(58 67 78 / 1) !important;
+}
+
+html[data-clore-theme="titanium"] [class*="bg-zinc-700"] {
+  background-color: rgb(74 85 98 / 1) !important;
+}
+
+html[data-clore-theme="titanium"] [class*="border-zinc-800"],
+html[data-clore-theme="titanium"] [class*="border-zinc-700"],
+html[data-clore-theme="titanium"] [class*="border-zinc-600"] {
+  border-color: rgb(129 140 153 / 0.78) !important;
 }
 
 html[data-clore-theme="light"] body {
@@ -599,6 +702,45 @@ html[data-clore-theme="light"] .clore-skeleton {
   100% {
     opacity: 0;
     transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes clore-toast-rise-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.clore-toast-rise-in {
+  animation: clore-toast-rise-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes clore-toast-slide-out {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+}
+
+.clore-toast-slide-out {
+  animation: clore-toast-slide-out 220ms cubic-bezier(0.7, 0, 0.84, 0) both;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clore-toast-rise-in,
+  .clore-toast-slide-out {
+    animation: none;
   }
 }
 
