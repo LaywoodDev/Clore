@@ -144,6 +144,40 @@
   --sidebar-accent-foreground: oklch(0.38 0.08 82);
 }
 
+:root[data-clore-accent="obsidian"] {
+  --primary: oklch(0.54 0.05 240);
+  --primary-foreground: oklch(0.98 0.01 255);
+  --accent: oklch(0.95 0.01 240);
+  --accent-foreground: oklch(0.33 0.03 240);
+  --ring: oklch(0.56 0.04 238);
+  --chart-1: oklch(0.88 0.03 245);
+  --chart-2: oklch(0.78 0.05 242);
+  --chart-3: oklch(0.68 0.07 239);
+  --chart-4: oklch(0.58 0.06 236);
+  --chart-5: oklch(0.48 0.05 233);
+  --sidebar-primary: oklch(0.54 0.05 240);
+  --sidebar-primary-foreground: oklch(0.98 0.01 255);
+  --sidebar-accent: oklch(0.95 0.01 240);
+  --sidebar-accent-foreground: oklch(0.33 0.03 240);
+}
+
+:root[data-clore-accent="titanium"] {
+  --primary: oklch(0.7 0.01 255);
+  --primary-foreground: oklch(0.24 0.003 255);
+  --accent: oklch(0.97 0.003 255);
+  --accent-foreground: oklch(0.36 0.004 255);
+  --ring: oklch(0.72 0.008 255);
+  --chart-1: oklch(0.9 0.004 255);
+  --chart-2: oklch(0.82 0.006 255);
+  --chart-3: oklch(0.74 0.008 255);
+  --chart-4: oklch(0.66 0.007 255);
+  --chart-5: oklch(0.58 0.006 255);
+  --sidebar-primary: oklch(0.7 0.01 255);
+  --sidebar-primary-foreground: oklch(0.24 0.003 255);
+  --sidebar-accent: oklch(0.97 0.003 255);
+  --sidebar-accent-foreground: oklch(0.36 0.004 255);
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -238,6 +272,40 @@
   --sidebar-primary-foreground: oklch(0.24 0.03 82);
   --sidebar-accent: oklch(0.38 0.06 82);
   --sidebar-accent-foreground: oklch(0.98 0.01 82);
+}
+
+:root.dark[data-clore-accent="obsidian"] {
+  --primary: oklch(0.74 0.08 235);
+  --primary-foreground: oklch(0.98 0.01 255);
+  --accent: oklch(0.28 0.03 240);
+  --accent-foreground: oklch(0.95 0.01 255);
+  --ring: oklch(0.68 0.08 235);
+  --chart-1: oklch(0.82 0.04 244);
+  --chart-2: oklch(0.73 0.05 241);
+  --chart-3: oklch(0.64 0.06 238);
+  --chart-4: oklch(0.55 0.05 235);
+  --chart-5: oklch(0.46 0.04 232);
+  --sidebar-primary: oklch(0.74 0.08 235);
+  --sidebar-primary-foreground: oklch(0.98 0.01 255);
+  --sidebar-accent: oklch(0.28 0.03 240);
+  --sidebar-accent-foreground: oklch(0.95 0.01 255);
+}
+
+:root.dark[data-clore-accent="titanium"] {
+  --primary: oklch(0.78 0.02 250);
+  --primary-foreground: oklch(0.2 0.002 255);
+  --accent: oklch(0.34 0.006 255);
+  --accent-foreground: oklch(0.96 0.003 255);
+  --ring: oklch(0.74 0.015 255);
+  --chart-1: oklch(0.84 0.01 255);
+  --chart-2: oklch(0.76 0.012 255);
+  --chart-3: oklch(0.68 0.01 255);
+  --chart-4: oklch(0.6 0.008 255);
+  --chart-5: oklch(0.52 0.006 255);
+  --sidebar-primary: oklch(0.78 0.02 250);
+  --sidebar-primary-foreground: oklch(0.2 0.002 255);
+  --sidebar-accent: oklch(0.34 0.006 255);
+  --sidebar-accent-foreground: oklch(0.96 0.003 255);
 }
 
 :root[data-clore-theme="obsidian"] {

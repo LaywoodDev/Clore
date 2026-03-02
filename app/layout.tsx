@@ -46,12 +46,18 @@ export default function RootLayout({
               (function () {
                 try {
                   var theme = localStorage.getItem("clore_ui_theme_v1");
-                  var supportedThemes = ["light", "dark", "obsidian", "titanium"];
-                  var resolved = supportedThemes.indexOf(theme) >= 0 ? theme : "light";
-                  document.documentElement.setAttribute("data-clore-theme", resolved);
-                  document.documentElement.classList.toggle("dark", resolved !== "light");
+                  var accent = localStorage.getItem("clore_ui_accent_v1");
+                  var legacyAccent = theme === "obsidian" || theme === "titanium" ? theme : null;
+                  var supportedThemes = ["light", "dark"];
+                  var supportedAccents = ["violet", "blue", "emerald", "rose", "amber", "obsidian", "titanium"];
+                  var resolvedTheme = supportedThemes.indexOf(theme) >= 0 ? theme : legacyAccent ? "dark" : "light";
+                  var resolvedAccent = supportedAccents.indexOf(accent) >= 0 ? accent : legacyAccent || "violet";
+                  document.documentElement.setAttribute("data-clore-theme", resolvedTheme);
+                  document.documentElement.setAttribute("data-clore-accent", resolvedAccent);
+                  document.documentElement.classList.toggle("dark", resolvedTheme !== "light");
                 } catch (error) {
                   document.documentElement.setAttribute("data-clore-theme", "light");
+                  document.documentElement.setAttribute("data-clore-accent", "violet");
                   document.documentElement.classList.remove("dark");
                 }
               })();

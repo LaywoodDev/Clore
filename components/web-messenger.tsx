@@ -572,8 +572,15 @@ type ArchivePullGestureState = {
 };
 
 type AppLanguage = "en" | "ru";
-type UiTheme = "dark" | "light" | "obsidian" | "titanium";
-type UiAccent = "violet" | "blue" | "emerald" | "rose" | "amber";
+type UiTheme = "dark" | "light";
+type UiAccent =
+  | "violet"
+  | "blue"
+  | "emerald"
+  | "rose"
+  | "amber"
+  | "obsidian"
+  | "titanium";
 type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
 type UiRadius = "sharp" | "normal" | "rounded";
@@ -1006,16 +1013,6 @@ const AI_THEME_OPTIONS: AiCommandOption<UiTheme>[] = [
     value: "dark",
     label: { en: "dark", ru: "темная" },
     aliases: ["dark", "темная", "темный", "тёмная", "тёмный"],
-  },
-  {
-    value: "obsidian",
-    label: { en: "obsidian", ru: "obsidian" },
-    aliases: ["obsidian", "obsidian theme"],
-  },
-  {
-    value: "titanium",
-    label: { en: "titanium", ru: "titanium" },
-    aliases: ["titanium", "titanium theme"],
   },
 ];
 const AI_DENSITY_OPTIONS: AiCommandOption<UiDensity>[] = [
@@ -1664,8 +1661,76 @@ const CHAT_WALLPAPER_OPTIONS: ChatWallpaper[] = [
   "dither",
   "gradient-blinds",
 ];
+const CHAT_WALLPAPER_TINTS: Record<
+  UiAccent,
+  {
+    background: string;
+    colorBends: string[];
+    pixelBlast: string;
+    plasma: string;
+    dither: [number, number, number];
+    gradientBlinds: string[];
+  }
+> = {
+  violet: {
+    background: "radial-gradient(circle at top, rgba(139,92,246,0.1), transparent 45%)",
+    colorBends: ["#1e1b4b", "#6d28d9", "#c4b5fd"],
+    pixelBlast: "#8b5cf6",
+    plasma: "#8e51ff",
+    dither: [0.56, 0.32, 1],
+    gradientBlinds: ["#09090b", "#6d28d9", "#312e81"],
+  },
+  blue: {
+    background: "radial-gradient(circle at top, rgba(59,130,246,0.12), transparent 45%)",
+    colorBends: ["#082f49", "#2563eb", "#93c5fd"],
+    pixelBlast: "#3b82f6",
+    plasma: "#3b82f6",
+    dither: [0.24, 0.51, 0.96],
+    gradientBlinds: ["#09090b", "#1d4ed8", "#155e75"],
+  },
+  emerald: {
+    background: "radial-gradient(circle at top, rgba(16,185,129,0.12), transparent 45%)",
+    colorBends: ["#022c22", "#059669", "#6ee7b7"],
+    pixelBlast: "#10b981",
+    plasma: "#10b981",
+    dither: [0.06, 0.72, 0.51],
+    gradientBlinds: ["#07130f", "#047857", "#065f46"],
+  },
+  rose: {
+    background: "radial-gradient(circle at top, rgba(244,63,94,0.11), transparent 45%)",
+    colorBends: ["#4c0519", "#e11d48", "#fda4af"],
+    pixelBlast: "#f43f5e",
+    plasma: "#f43f5e",
+    dither: [0.96, 0.24, 0.42],
+    gradientBlinds: ["#12070a", "#be123c", "#881337"],
+  },
+  amber: {
+    background: "radial-gradient(circle at top, rgba(245,158,11,0.13), transparent 45%)",
+    colorBends: ["#451a03", "#d97706", "#fde68a"],
+    pixelBlast: "#f59e0b",
+    plasma: "#f59e0b",
+    dither: [0.96, 0.62, 0.04],
+    gradientBlinds: ["#140d05", "#b45309", "#92400e"],
+  },
+  obsidian: {
+    background: "radial-gradient(circle at top, rgba(96,165,250,0.09), transparent 45%)",
+    colorBends: ["#0b1120", "#1e3a8a", "#475569"],
+    pixelBlast: "#64748b",
+    plasma: "#64748b",
+    dither: [0.39, 0.45, 0.55],
+    gradientBlinds: ["#020617", "#1e293b", "#334155"],
+  },
+  titanium: {
+    background: "radial-gradient(circle at top, rgba(203,213,225,0.11), transparent 45%)",
+    colorBends: ["#1f2937", "#6b7280", "#e2e8f0"],
+    pixelBlast: "#94a3b8",
+    plasma: "#94a3b8",
+    dither: [0.58, 0.64, 0.72],
+    gradientBlinds: ["#111827", "#475569", "#94a3b8"],
+  },
+};
 const CHAT_WALLPAPER_BACKGROUNDS: Record<ChatWallpaper, string> = {
-  none: "radial-gradient(circle at top, rgba(139,92,246,0.1), transparent 45%)",
+  none: "tint",
   "color-bends": "none",
   "pixel-blast": "none",
   plasma: "none",
@@ -1711,13 +1776,42 @@ function getAvatarDecorationImageUrl(_decoration: AvatarDecorationId): string {
   return "";
 }
 
+function resolveStoredUiTheme(value: string | null): UiTheme {
+  if (value === "dark" || value === "light") {
+    return value;
+  }
+  if (value === "obsidian" || value === "titanium") {
+    return "dark";
+  }
+  return "light";
+}
+
+function resolveStoredUiAccent(value: string | null, legacyThemeValue?: string | null): UiAccent {
+  if (UI_ACCENT_VALUES.includes(value as UiAccent)) {
+    return value as UiAccent;
+  }
+  if (legacyThemeValue === "obsidian" || legacyThemeValue === "titanium") {
+    return legacyThemeValue;
+  }
+  return "violet";
+}
+
 const LANGUAGE_STORAGE_KEY = "clore_app_language_v1";
 const PUSH_NOTIFICATIONS_STORAGE_KEY = "clore_push_notifications_v1";
 const MESSAGE_SOUND_STORAGE_KEY = "clore_message_sound_v1";
 const SEND_MESSAGE_SOUND_STORAGE_KEY = "clore_send_message_sound_v1";
 const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
-const UI_THEME_VALUES = ["light", "dark", "obsidian", "titanium"] as const;
+const UI_THEME_VALUES = ["light", "dark"] as const;
 const UI_ACCENT_STORAGE_KEY = "clore_ui_accent_v1";
+const UI_ACCENT_VALUES = [
+  "violet",
+  "blue",
+  "emerald",
+  "rose",
+  "amber",
+  "obsidian",
+  "titanium",
+] as const;
 const UI_DENSITY_STORAGE_KEY = "clore_ui_density_v1";
 const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
 const UI_RADIUS_STORAGE_KEY = "clore_ui_radius_v1";
@@ -2053,6 +2147,8 @@ const translations = {
     accentEmerald: "Emerald",
     accentRose: "Rose",
     accentAmber: "Amber",
+    accentObsidian: "Obsidian",
+    accentTitanium: "Titanium",
     sidebarVisibility: "Sidebar",
     sidebarVisibilityHint: "Show or hide the main left sidebar",
     hideSidebar: "Hide sidebar",
@@ -2125,11 +2221,11 @@ const translations = {
     autoLoadMedia: "Auto-load media",
     autoLoadMediaHint: "Automatically load images and videos in this chat",
     loadMedia: "Load media",
-    aiAssistantTitle: "ChatGPT",
-    aiAssistantSubtitle: "Built-in AI assistant for ideas, writing, and coding help.",
+    aiAssistantTitle: "Gemini",
+    aiAssistantSubtitle: "Built-in Gemini assistant for ideas, writing, and in-app actions.",
     aiAssistantPlaceholder: "Ask anything...",
     aiAssistantEmptyTitle: "Start a new conversation",
-    aiAssistantEmptyHint: "Ask a question and ChatGPT will answer right here.",
+    aiAssistantEmptyHint: "Ask a question and Gemini will answer right here.",
     aiAssistantClear: "Clear chat",
     aiAssistantSearchMode: "Search",
     aiAssistantSearchHint: "Allow web search for up-to-date answers",
@@ -2439,6 +2535,8 @@ const translations = {
     accentEmerald: "Изумрудный",
     accentRose: "Розовый",
     accentAmber: "Янтарный",
+    accentObsidian: "Обсидиановый",
+    accentTitanium: "Титановый",
     sidebarVisibility: "Сайдбар",
     sidebarVisibilityHint: "Показывать или скрывать левый основной сайдбар",
     hideSidebar: "Скрыть сайдбар",
@@ -2511,11 +2609,11 @@ const translations = {
     autoLoadMedia: "Автозагрузка медиа",
     autoLoadMediaHint: "Автоматически загружать изображения и видео в этом чате",
     loadMedia: "Загрузить медиа",
-    aiAssistantTitle: "ChatGPT",
+    aiAssistantTitle: "Gemini",
     aiAssistantSubtitle: "Встроенный AI-помощник для идей, текста и кода.",
     aiAssistantPlaceholder: "Спросите что угодно...",
     aiAssistantEmptyTitle: "Начните новый диалог",
-    aiAssistantEmptyHint: "Задайте вопрос, и ChatGPT ответит прямо здесь.",
+    aiAssistantEmptyHint: "Задайте вопрос, и Gemini ответит прямо здесь.",
     aiAssistantClear: "Очистить чат",
     aiAssistantSearchMode: "Поиск",
     aiAssistantSearchHint: "Разрешить веб-поиск для актуальных ответов",
@@ -2681,6 +2779,24 @@ type AiAssistantSegmentExecutionResult = {
   hasMutation: boolean;
   errorMessage?: string;
 };
+type AiAssistantScreenCapture = {
+  isActive: boolean;
+  previewUrl: string;
+  imageDataUrl: string;
+  error: string;
+};
+type BrowserSpeechRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: unknown) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+type AiVoiceState = "idle" | "listening" | "thinking" | "speaking";
 
 function normalizeAiAssistantMessages(value: unknown): AiAssistantMessage[] {
   if (!Array.isArray(value)) {
@@ -4437,6 +4553,7 @@ export function WebMessenger({
   const groupInviteUsageInputRef = useRef<HTMLInputElement | null>(null);
   const activeMessagesScrollRef = useRef<HTMLDivElement | null>(null);
   const aiMessagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const aiCallMessagesScrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const chatPersonalizationDialogContentRef = useRef<HTMLDivElement | null>(null);
   const emojiMenuRef = useRef<HTMLDivElement | null>(null);
@@ -4453,6 +4570,13 @@ export function WebMessenger({
   const localCallInputStreamRef = useRef<MediaStream | null>(null);
   const localCallAudioCleanupRef = useRef<(() => void) | null>(null);
   const screenShareStreamRef = useRef<MediaStream | null>(null);
+  const aiScreenShareStreamRef = useRef<MediaStream | null>(null);
+  const aiScreenPreviewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const aiSpeechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const aiVoiceInputStreamRef = useRef<MediaStream | null>(null);
+  const aiMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const aiRecordedChunksRef = useRef<Blob[]>([]);
+  const aiVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const callPeerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const incomingOffersRef = useRef<Map<string, RTCSessionDescriptionInit>>(new Map());
   const pendingRemoteIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(
@@ -4646,6 +4770,16 @@ export function WebMessenger({
   const [isAiAgentWarningOpen, setIsAiAgentWarningOpen] = useState(false);
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [isAiCallOpen, setIsAiCallOpen] = useState(false);
+  const [isAiVoiceListening, setIsAiVoiceListening] = useState(false);
+  const [isAiVoiceSupported, setIsAiVoiceSupported] = useState(false);
+  const [aiVoiceState, setAiVoiceState] = useState<AiVoiceState>("idle");
+  const [aiScreenCapture, setAiScreenCapture] = useState<AiAssistantScreenCapture>({
+    isActive: false,
+    previewUrl: "",
+    imageDataUrl: "",
+    error: "",
+  });
   const [aiPendingSyncVersion, setAiPendingSyncVersion] = useState(0);
   const [query, setQuery] = useState("");
   const [publicGroupSearchResults, setPublicGroupSearchResults] = useState<
@@ -4838,19 +4972,15 @@ export function WebMessenger({
       return "light";
     }
     const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
-    return UI_THEME_VALUES.includes(stored as UiTheme) ? (stored as UiTheme) : "light";
+    return resolveStoredUiTheme(stored);
   });
   const [uiAccent, setUiAccent] = useState<UiAccent>(() => {
     if (typeof window === "undefined") {
       return "violet";
     }
+    const legacyTheme = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
     const stored = window.localStorage.getItem(UI_ACCENT_STORAGE_KEY);
-    return stored === "blue" ||
-      stored === "emerald" ||
-      stored === "rose" ||
-      stored === "amber"
-      ? stored
-      : "violet";
+    return resolveStoredUiAccent(stored, legacyTheme);
   });
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(() => {
     if (typeof window === "undefined") {
@@ -5222,15 +5352,46 @@ export function WebMessenger({
     );
   }, [aiAgentEnabled, currentUser.id]);
   useEffect(() => {
-    if (activeSidebar !== "assistant") {
+    if (activeSidebar !== "assistant" && !isAiCallOpen) {
       return;
     }
-    const node = aiMessagesScrollRef.current;
-    if (!node) {
+    const nodes = [aiMessagesScrollRef.current, aiCallMessagesScrollRef.current];
+    for (const node of nodes) {
+      if (!node) {
+        continue;
+      }
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [activeSidebar, aiMessages, isAiCallOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
       return;
     }
-    node.scrollTop = node.scrollHeight;
-  }, [activeSidebar, aiMessages]);
+    setIsAiVoiceSupported(
+      typeof MediaRecorder !== "undefined" &&
+        typeof navigator !== "undefined" &&
+        Boolean(navigator.mediaDevices?.getUserMedia)
+    );
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      const recognition = aiSpeechRecognitionRef.current;
+      aiSpeechRecognitionRef.current = null;
+      if (recognition) {
+        recognition.onend = null;
+        recognition.onerror = null;
+        recognition.onresult = null;
+        recognition.stop();
+      }
+      const stream = aiScreenShareStreamRef.current;
+      aiScreenShareStreamRef.current = null;
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeChatId) {
@@ -5533,6 +5694,155 @@ export function WebMessenger({
     }
     return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }, []);
+  const scrollAiAssistantPanelsToBottom = useCallback(() => {
+    const nodes = [aiMessagesScrollRef.current, aiCallMessagesScrollRef.current];
+    for (const node of nodes) {
+      if (!node) {
+        continue;
+      }
+      node.scrollTop = node.scrollHeight;
+    }
+  }, []);
+  const stopAiVoiceCapture = useCallback(() => {
+    const recorder = aiMediaRecorderRef.current;
+    aiMediaRecorderRef.current = null;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    const inputStream = aiVoiceInputStreamRef.current;
+    aiVoiceInputStreamRef.current = null;
+    if (inputStream) {
+      inputStream.getTracks().forEach((track) => track.stop());
+    }
+    setIsAiVoiceListening(false);
+    setAiVoiceState((prev) => (prev === "listening" ? "idle" : prev));
+  }, []);
+  const stopAiScreenShare = useCallback(() => {
+    const stream = aiScreenShareStreamRef.current;
+    aiScreenShareStreamRef.current = null;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    const previewNode = aiScreenPreviewVideoRef.current;
+    if (previewNode) {
+      previewNode.srcObject = null;
+    }
+    setAiScreenCapture((prev) => {
+      if (prev.previewUrl) {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      return {
+        isActive: false,
+        previewUrl: "",
+        imageDataUrl: "",
+        error: "",
+      };
+    });
+  }, []);
+  const openAiAssistantCall = useCallback(() => {
+    setIsAiCallOpen(true);
+  }, []);
+  const closeAiAssistantCall = useCallback(() => {
+    stopAiVoiceCapture();
+    stopAiScreenShare();
+    const audio = aiVoiceAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.src = "";
+    }
+    setAiVoiceState("idle");
+    setIsAiCallOpen(false);
+  }, [stopAiScreenShare, stopAiVoiceCapture]);
+  const playAiReplyAudio = useCallback(async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    setAiVoiceState("speaking");
+    try {
+      const response = await fetch("/api/ai/speech", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: trimmed,
+          language,
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error || "Voice playback request failed.");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      let audio = aiVoiceAudioRef.current;
+      if (!audio) {
+        audio = new Audio();
+        aiVoiceAudioRef.current = audio;
+      }
+      const previousUrl = audio.src;
+      audio.src = audioUrl;
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        setAiVoiceState("idle");
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(audioUrl);
+        setAiVoiceState("idle");
+      };
+      if (previousUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previousUrl);
+      }
+      await audio.play();
+    } catch (error) {
+      setAiVoiceState("idle");
+      setAiError(
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : language === "ru"
+            ? "Не удалось озвучить ответ."
+            : "Unable to play the voice response."
+      );
+    }
+  }, [language]);
+  const getAiLiveScreenSummary = useCallback(() => {
+    const area =
+      activeSidebar === "home"
+        ? "chat workspace"
+        : activeSidebar === "settings"
+          ? "settings"
+          : activeSidebar === "profile"
+            ? "profile"
+            : "assistant";
+    const activeThread =
+      threads.find((thread) => thread.id === activeChatId && thread.memberIds.includes(currentUser.id)) ??
+      null;
+    let activeLabel = language === "ru" ? "нет активного чата" : "no active chat";
+    let scope = "no active chat";
+
+    if (activeThread) {
+      if (activeThread.threadType === "group") {
+        activeLabel = activeThread.title.trim() || t("groupChat");
+        scope = activeThread.groupKind === "channel" ? "channel" : "group";
+      } else {
+        const peerId =
+          activeThread.memberIds.find((memberId) => memberId !== currentUser.id) ?? "";
+        const peer = knownUsers.find((candidate) => candidate.id === peerId) ?? null;
+        activeLabel = peer?.name || peer?.username || t("unknownUser");
+        scope = "direct chat";
+      }
+    }
+
+    if (language === "ru") {
+      return `Пользователь сейчас в разделе "${area}". Активный контекст: ${scope} "${activeLabel}".`;
+    }
+    return `The user is currently in "${area}". Active context: ${scope} "${activeLabel}".`;
+  }, [activeChatId, activeSidebar, currentUser.id, knownUsers, language, t, threads]);
   const clearAiConversation = useCallback(() => {
     setAiMessages([]);
     setAiError("");
@@ -5554,6 +5864,134 @@ export function WebMessenger({
     setAiAgentEnabled(true);
     setIsAiAgentWarningOpen(false);
   }, []);
+  const runAiNavigationCommand = useCallback(
+    async (rawPrompt: string) => {
+      const normalizedPrompt = normalizeAiCommandText(rawPrompt);
+      if (!normalizedPrompt) {
+        return null;
+      }
+
+      const openSignals = [
+        "open",
+        "show",
+        "go to",
+        "switch to",
+        "перейди",
+        "открой",
+        "покажи",
+      ];
+      const hasOpenSignal = openSignals.some((signal) => normalizedPrompt.includes(signal));
+      if (!hasOpenSignal) {
+        return null;
+      }
+
+      if (
+        normalizedPrompt.includes("settings") ||
+        normalizedPrompt.includes("настрой")
+      ) {
+        setActiveSidebar("settings");
+        return {
+          message:
+            language === "ru"
+              ? "Готово: открыл настройки."
+              : "Done: opened settings.",
+        };
+      }
+      if (
+        normalizedPrompt.includes("profile") ||
+        normalizedPrompt.includes("профил")
+      ) {
+        setActiveSidebar("profile");
+        return {
+          message:
+            language === "ru"
+              ? "Готово: открыл профиль."
+              : "Done: opened profile.",
+        };
+      }
+      if (
+        normalizedPrompt.includes("assistant") ||
+        normalizedPrompt.includes("ai") ||
+        normalizedPrompt.includes("ассист")
+      ) {
+        openAiAssistantCall();
+        return {
+          message:
+            language === "ru"
+              ? "Готово: открыл AI-ассистента."
+              : "Done: opened the AI assistant.",
+        };
+      }
+      if (
+        normalizedPrompt.includes("home") ||
+        normalizedPrompt.includes("chat") ||
+        normalizedPrompt.includes("чат") ||
+        normalizedPrompt.includes("главн")
+      ) {
+        setActiveSidebar("home");
+        return {
+          message:
+            language === "ru"
+              ? "Готово: открыл список чатов."
+              : "Done: opened the chat workspace.",
+        };
+      }
+
+      const chatOpenMatch = normalizedPrompt.match(
+        /(?:open|show|go to|switch to|открой|покажи|перейди)\s+(?:chat|dialog|conversation|чат|диалог)?\s*(?:with|for|c|с)?\s*(.+)$/i
+      );
+      const chatQuery = chatOpenMatch?.[1]?.trim().replace(/^@+/, "") ?? "";
+      if (!chatQuery) {
+        return null;
+      }
+
+      const matchedThread =
+        threads.find((thread) => {
+          if (!thread.memberIds.includes(currentUser.id)) {
+            return false;
+          }
+          if (thread.threadType === "group") {
+            return thread.title.trim().toLowerCase().includes(chatQuery);
+          }
+          const peerId =
+            thread.memberIds.find((memberId) => memberId !== currentUser.id) ?? "";
+          const peer = knownUsers.find((candidate) => candidate.id === peerId);
+          if (!peer) {
+            return false;
+          }
+          const peerName = peer.name.trim().toLowerCase();
+          const peerUsername = peer.username.trim().replace(/^@+/, "").toLowerCase();
+          return peerName.includes(chatQuery) || peerUsername.includes(chatQuery);
+        }) ?? null;
+      if (!matchedThread) {
+        return {
+          message:
+            language === "ru"
+              ? `Не нашёл чат: ${chatQuery}.`
+              : `I could not find a chat for: ${chatQuery}.`,
+        };
+      }
+
+      setActiveSidebar("home");
+      setActiveChatId(matchedThread.id);
+      const matchedLabel =
+        matchedThread.threadType === "group"
+          ? matchedThread.title
+          : (() => {
+              const peerId =
+                matchedThread.memberIds.find((memberId) => memberId !== currentUser.id) ?? "";
+              const peer = knownUsers.find((candidate) => candidate.id === peerId);
+              return peer?.name || peer?.username || "chat";
+            })();
+      return {
+        message:
+          language === "ru"
+            ? `Готово: открыл чат "${matchedLabel}".`
+            : `Done: opened "${matchedLabel}".`,
+      };
+    },
+    [currentUser.id, knownUsers, language, openAiAssistantCall, threads]
+  );
   const runAiSettingsCommand = useCallback(
     async (rawPrompt: string, messageHistory: AiAssistantMessage[]) => {
       const normalizedPrompt = normalizeAiCommandText(rawPrompt);
@@ -5897,6 +6335,10 @@ export function WebMessenger({
   );
   const tryExecuteAiSettingsCommand = useCallback(
     async (rawPrompt: string, messageHistory: AiAssistantMessage[]) => {
+      const navigationResult = await runAiNavigationCommand(rawPrompt);
+      if (navigationResult) {
+        return navigationResult;
+      }
       return runAiSettingsCommand(rawPrompt, messageHistory);
       /*
       const normalizedPrompt = normalizeAiCommandText(rawPrompt);
@@ -6242,7 +6684,14 @@ export function WebMessenger({
       return null;
       */
     },
-    [currentUser, knownUsers, language, onPrivacyUpdate, runAiSettingsCommand]
+    [
+      currentUser,
+      knownUsers,
+      language,
+      onPrivacyUpdate,
+      runAiNavigationCommand,
+      runAiSettingsCommand,
+    ]
   );
   const executeAiPromptSegments = useCallback(
     async (
@@ -6323,162 +6772,471 @@ export function WebMessenger({
       tryExecuteAiSettingsCommand,
     ]
   );
-  const sendAiPrompt = useCallback(async () => {
-    if (!AI_FEATURE_ENABLED) {
-      return;
+  const captureAiSharedScreenFrame = useCallback(async () => {
+    const video = aiScreenPreviewVideoRef.current;
+    if (!video || !aiScreenShareStreamRef.current) {
+      return "";
     }
-    const prompt = aiDraft.trim();
-    if (!prompt || isAiSubmitting) {
+    if (!video.videoWidth || !video.videoHeight) {
+      return aiScreenCapture.imageDataUrl;
+    }
+
+    const scale = Math.min(1, 960 / video.videoWidth);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return aiScreenCapture.imageDataUrl;
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+    setAiScreenCapture((prev) => ({
+      ...prev,
+      imageDataUrl,
+      error: "",
+    }));
+    return imageDataUrl;
+  }, [aiScreenCapture.imageDataUrl]);
+  const startAiScreenShare = useCallback(async () => {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getDisplayMedia !== "function"
+    ) {
+      setAiScreenCapture((prev) => ({
+        ...prev,
+        error:
+          language === "ru"
+            ? "Браузер не поддерживает захват экрана."
+            : "This browser does not support screen capture.",
+      }));
       return;
     }
 
-    const userMessage: AiAssistantMessage = {
-      id: createAiMessageId(),
-      role: "user",
-      content: prompt,
-      createdAt: Date.now(),
-    };
-    const pendingAssistantId = createAiMessageId();
-    const pendingAssistantMessage: AiAssistantMessage = {
-      id: pendingAssistantId,
-      role: "assistant",
-      content: t("aiAssistantThinking"),
-      createdAt: Date.now(),
-      pending: true,
-    };
-    const conversationBase: AiAssistantRequestMessage[] = [
-      ...aiMessages
-        .filter((message) => !message.pending && message.content.trim().length > 0)
-        .slice(-20)
-        .map((message) => ({
-          role: message.role,
-          content: message.content.trim(),
-        })),
-    ];
-    const conversation: AiAssistantRequestMessage[] = [
-      ...conversationBase,
-      {
-        role: "user",
-        content: prompt,
-      },
-    ];
-
-    setAiDraft("");
-    setAiError("");
-    setIsAiSubmitting(true);
-    setAiMessages((prev) => [...prev, userMessage, pendingAssistantMessage]);
+    stopAiScreenShare();
 
     try {
-      const multiSegmentResult = await executeAiPromptSegments(
-        prompt,
-        aiMessages,
-        conversationBase
-      );
-      if (multiSegmentResult) {
-        if (multiSegmentResult.errorMessage) {
-          setAiError(multiSegmentResult.errorMessage);
-        }
-        setAiMessages((prev) =>
-          prev.map((message) =>
-            message.id === pendingAssistantId
-              ? {
-                  ...message,
-                  content: multiSegmentResult.message,
-                  pending: false,
-                  error: Boolean(multiSegmentResult.errorMessage),
-                }
-              : message
-          )
-        );
-        if (multiSegmentResult.hasMutation) {
-          setAiPendingSyncVersion((prev) => prev + 1);
-        }
-        return;
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false,
+      });
+      aiScreenShareStreamRef.current = stream;
+      const previewNode = aiScreenPreviewVideoRef.current;
+      if (previewNode) {
+        previewNode.srcObject = stream;
+        previewNode.muted = true;
+        await previewNode.play().catch(() => undefined);
+      }
+      const [track] = stream.getVideoTracks();
+      if (track) {
+        track.onended = () => {
+          stopAiScreenShare();
+        };
+      }
+      setAiScreenCapture({
+        isActive: true,
+        previewUrl: "",
+        imageDataUrl: "",
+        error: "",
+      });
+      window.setTimeout(() => {
+        void captureAiSharedScreenFrame();
+      }, 350);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : language === "ru"
+            ? "Не удалось открыть доступ к экрану."
+            : "Unable to access screen sharing.";
+      setAiScreenCapture({
+        isActive: false,
+        previewUrl: "",
+        imageDataUrl: "",
+        error: message,
+      });
+    }
+  }, [captureAiSharedScreenFrame, language, stopAiScreenShare]);
+  const sendAiPromptFromText = useCallback(
+    async (rawPrompt: string): Promise<string | null> => {
+      if (!AI_FEATURE_ENABLED) {
+        return null;
+      }
+      const prompt = rawPrompt.trim();
+      if (!prompt || isAiSubmitting) {
+        return null;
       }
 
-      const localCommandResult = await tryExecuteAiSettingsCommand(prompt, aiMessages);
-      if (localCommandResult) {
+      const userMessage: AiAssistantMessage = {
+        id: createAiMessageId(),
+        role: "user",
+        content: prompt,
+        createdAt: Date.now(),
+      };
+      const pendingAssistantId = createAiMessageId();
+      const pendingAssistantMessage: AiAssistantMessage = {
+        id: pendingAssistantId,
+        role: "assistant",
+        content: t("aiAssistantThinking"),
+        createdAt: Date.now(),
+        pending: true,
+      };
+      const messageHistory = [...aiMessages];
+      const conversationBase: AiAssistantRequestMessage[] = [
+        ...messageHistory
+          .filter((message) => !message.pending && message.content.trim().length > 0)
+          .slice(-20)
+          .map((message) => ({
+            role: message.role,
+            content: message.content.trim(),
+          })),
+      ];
+      const conversation: AiAssistantRequestMessage[] = [
+        ...conversationBase,
+        {
+          role: "user",
+          content: prompt,
+        },
+      ];
+
+      setAiDraft("");
+      setAiError("");
+      setIsAiSubmitting(true);
+      setAiVoiceState("thinking");
+      setAiMessages((prev) => [...prev, userMessage, pendingAssistantMessage]);
+      scrollAiAssistantPanelsToBottom();
+
+      try {
+        const multiSegmentResult = await executeAiPromptSegments(
+          prompt,
+          messageHistory,
+          conversationBase
+        );
+        if (multiSegmentResult) {
+          if (multiSegmentResult.errorMessage) {
+            setAiError(multiSegmentResult.errorMessage);
+          }
+          setAiMessages((prev) =>
+            prev.map((message) =>
+              message.id === pendingAssistantId
+                ? {
+                    ...message,
+                    content: multiSegmentResult.message,
+                    pending: false,
+                    error: Boolean(multiSegmentResult.errorMessage),
+                  }
+                : message
+            )
+          );
+          if (multiSegmentResult.hasMutation) {
+            setAiPendingSyncVersion((prev) => prev + 1);
+          }
+          if (isAiCallOpen) {
+            void playAiReplyAudio(multiSegmentResult.message);
+          } else {
+            setAiVoiceState("idle");
+          }
+          return multiSegmentResult.message;
+        }
+
+        const localCommandResult = await tryExecuteAiSettingsCommand(prompt, messageHistory);
+        if (localCommandResult) {
+          setAiMessages((prev) =>
+            prev.map((message) =>
+              message.id === pendingAssistantId
+                ? {
+                    ...message,
+                    content: localCommandResult.message,
+                    pending: false,
+                    error: false,
+                  }
+                : message
+            )
+          );
+          if (isAiCallOpen) {
+            void playAiReplyAudio(localCommandResult.message);
+          } else {
+            setAiVoiceState("idle");
+          }
+          return localCommandResult.message;
+        }
+
+        const latestScreenImage =
+          aiScreenCapture.isActive || aiScreenShareStreamRef.current
+            ? await captureAiSharedScreenFrame()
+            : "";
+        const response = await requestJson<AiAssistantChatResponse>("/api/ai/chat", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: currentUser.id,
+            language,
+            searchEnabled: aiSearchEnabled,
+            agentEnabled: aiAgentEnabled,
+            messages: conversation,
+            screenContext: {
+              summary: getAiLiveScreenSummary(),
+              imageDataUrl: latestScreenImage || aiScreenCapture.imageDataUrl || undefined,
+            },
+          }),
+        });
+        const reply = response.message.trim() || t("actionFailed");
         setAiMessages((prev) =>
           prev.map((message) =>
             message.id === pendingAssistantId
               ? {
                   ...message,
-                  content: localCommandResult.message,
+                  content: reply,
                   pending: false,
                   error: false,
                 }
               : message
           )
         );
+        if (
+          (response.sentMessages ?? 0) > 0 ||
+          (response.deletedChats ?? 0) > 0 ||
+          (response.createdGroups ?? 0) > 0 ||
+          (response.invitedMembers ?? 0) > 0 ||
+          (response.removedMembers ?? 0) > 0 ||
+          (response.updatedGroups ?? 0) > 0 ||
+          (response.updatedMemberRoles ?? 0) > 0
+        ) {
+          setAiPendingSyncVersion((prev) => prev + 1);
+        }
+        if (isAiCallOpen) {
+          void playAiReplyAudio(reply);
+        } else {
+          setAiVoiceState("idle");
+        }
+        return reply;
+      } catch (error) {
+        const message = getRequestErrorMessage(error);
+        setAiError(message);
+        setAiVoiceState("idle");
+        setAiMessages((prev) =>
+          prev.map((item) =>
+            item.id === pendingAssistantId
+              ? {
+                  ...item,
+                  content: message,
+                  pending: false,
+                  error: true,
+                }
+            : item
+          )
+        );
+        return null;
+      } finally {
+        setIsAiSubmitting(false);
+      }
+    },
+    [
+      aiAgentEnabled,
+      aiMessages,
+      aiScreenCapture.imageDataUrl,
+      aiScreenCapture.isActive,
+      aiSearchEnabled,
+      captureAiSharedScreenFrame,
+      createAiMessageId,
+      currentUser.id,
+      executeAiPromptSegments,
+      getAiLiveScreenSummary,
+      getRequestErrorMessage,
+      isAiCallOpen,
+      isAiSubmitting,
+      language,
+      playAiReplyAudio,
+      scrollAiAssistantPanelsToBottom,
+      t,
+      tryExecuteAiSettingsCommand,
+    ]
+  );
+  const toggleAiVoiceCapture = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (isAiVoiceListening) {
+      stopAiVoiceCapture();
+      return;
+    }
+
+    const speechWindow = window as typeof window & {
+      SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+      webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    };
+    const RecognitionCtor =
+      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!RecognitionCtor) {
+      setIsAiVoiceSupported(false);
+      setAiError(
+        language === "ru"
+          ? "Голосовой ввод не поддерживается в этом браузере."
+          : "Voice input is not supported in this browser."
+      );
+      return;
+    }
+
+    setIsAiVoiceSupported(true);
+    setAiError("");
+    const recognition = new RecognitionCtor();
+    recognition.lang = language === "ru" ? "ru-RU" : "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      const resultEvent = event as {
+        results?: ArrayLike<
+          ArrayLike<{
+            transcript?: string;
+          }> & {
+            isFinal?: boolean;
+          }
+        >;
+      };
+      const results = resultEvent.results;
+      if (!results || results.length === 0) {
         return;
       }
-
-      const response = await requestJson<AiAssistantChatResponse>("/api/ai/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          userId: currentUser.id,
-          language,
-          searchEnabled: aiSearchEnabled,
-          agentEnabled: aiAgentEnabled,
-          messages: conversation,
-        }),
-      });
-      const reply = response.message.trim() || t("actionFailed");
-      setAiMessages((prev) =>
-        prev.map((message) =>
-          message.id === pendingAssistantId
-            ? {
-                ...message,
-                content: reply,
-                pending: false,
-                error: false,
-              }
-            : message
-        )
-      );
-      if (
-        (response.sentMessages ?? 0) > 0 ||
-        (response.deletedChats ?? 0) > 0 ||
-        (response.createdGroups ?? 0) > 0 ||
-        (response.invitedMembers ?? 0) > 0 ||
-        (response.removedMembers ?? 0) > 0 ||
-        (response.updatedGroups ?? 0) > 0 ||
-        (response.updatedMemberRoles ?? 0) > 0
-      ) {
-        setAiPendingSyncVersion((prev) => prev + 1);
+      let transcript = "";
+      let hasFinalResult = false;
+      for (let index = 0; index < results.length; index += 1) {
+        const result = results[index];
+        const alternative = result?.[0];
+        transcript += alternative?.transcript ?? "";
+        if (result?.isFinal) {
+          hasFinalResult = true;
+        }
       }
-    } catch (error) {
-      const message = getRequestErrorMessage(error);
-      setAiError(message);
-      setAiMessages((prev) =>
-        prev.map((item) =>
-          item.id === pendingAssistantId
-            ? {
-                ...item,
-                content: message,
-                pending: false,
-                error: true,
-              }
-            : item
-        )
-      );
-    } finally {
-      setIsAiSubmitting(false);
-    }
+      setAiDraft(transcript.trim());
+      if (hasFinalResult && transcript.trim()) {
+        stopAiVoiceCapture();
+        void sendAiPromptFromText(transcript);
+      }
+    };
+    recognition.onerror = () => {
+      setIsAiVoiceListening(false);
+    };
+    recognition.onend = () => {
+      aiSpeechRecognitionRef.current = null;
+      setIsAiVoiceListening(false);
+    };
+    aiSpeechRecognitionRef.current = recognition;
+    recognition.start();
+    setIsAiVoiceListening(true);
   }, [
-    aiAgentEnabled,
-    aiSearchEnabled,
-    aiDraft,
-    aiMessages,
-    createAiMessageId,
-    currentUser.id,
-    getRequestErrorMessage,
-    isAiSubmitting,
+    isAiVoiceListening,
     language,
-    t,
-    executeAiPromptSegments,
-    tryExecuteAiSettingsCommand,
+    sendAiPromptFromText,
+    stopAiVoiceCapture,
   ]);
+  const sendAiPrompt = useCallback(async () => {
+    await sendAiPromptFromText(aiDraft);
+  }, [aiDraft, sendAiPromptFromText]);
+  const handleAiOrbInteraction = useCallback(async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (isAiVoiceListening) {
+      stopAiVoiceCapture();
+      return;
+    }
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== "function" ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setIsAiVoiceSupported(false);
+      setAiError(
+        language === "ru"
+          ? "Браузер не поддерживает запись голоса."
+          : "This browser does not support voice recording."
+      );
+      return;
+    }
+
+    try {
+      setAiError("");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      aiVoiceInputStreamRef.current = stream;
+      aiRecordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      aiMediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          aiRecordedChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onerror = () => {
+        setIsAiVoiceListening(false);
+        setAiVoiceState("idle");
+      };
+      recorder.onstop = async () => {
+        setIsAiVoiceListening(false);
+        const inputStream = aiVoiceInputStreamRef.current;
+        aiVoiceInputStreamRef.current = null;
+        if (inputStream) {
+          inputStream.getTracks().forEach((track) => track.stop());
+        }
+        const recordedBlob = new Blob(aiRecordedChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        aiRecordedChunksRef.current = [];
+        if (recordedBlob.size === 0) {
+          setAiVoiceState("idle");
+          return;
+        }
+        setAiVoiceState("thinking");
+        try {
+          const formData = new FormData();
+          formData.set("audio", recordedBlob, "voice.webm");
+          formData.set("language", language === "ru" ? "ru" : "en");
+          const response = await fetch("/api/ai/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+          const payload = (await response.json().catch(() => null)) as
+            | { text?: string; error?: string }
+            | null;
+          if (!response.ok) {
+            throw new Error(payload?.error || "Voice transcription request failed.");
+          }
+          const transcript = payload?.text?.trim() ?? "";
+          if (!transcript) {
+            throw new Error(
+              language === "ru"
+                ? "Не удалось распознать речь."
+                : "Unable to transcribe speech."
+            );
+          }
+          await sendAiPromptFromText(transcript);
+        } catch (error) {
+          setAiVoiceState("idle");
+          setAiError(
+            error instanceof Error && error.message.trim().length > 0
+              ? error.message
+              : language === "ru"
+                ? "Голосовой запрос не удался."
+                : "Voice request failed."
+          );
+        }
+      };
+      recorder.start();
+      setIsAiVoiceSupported(true);
+      setIsAiVoiceListening(true);
+      setAiVoiceState("listening");
+    } catch (error) {
+      setIsAiVoiceSupported(false);
+      setAiVoiceState("idle");
+      setAiError(
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : language === "ru"
+            ? "Не удалось получить доступ к микрофону."
+            : "Unable to access the microphone."
+      );
+    }
+  }, [isAiVoiceListening, language, sendAiPromptFromText, stopAiVoiceCapture]);
   const dismissToast = useCallback(() => {
     if (toastTimerRef.current) {
       window.clearTimeout(toastTimerRef.current);
@@ -7798,6 +8556,7 @@ export function WebMessenger({
       ? uiFontSize
       : activeChatPersonalization.fontSize;
   const activeChatAutoLoadMediaEnabled = activeChatPersonalization.autoLoadMedia;
+  const activeChatWallpaperTint = CHAT_WALLPAPER_TINTS[effectiveUiAccent];
   const activeChatFontClassName =
     activeChatEffectiveFontSize === "small"
       ? "clore-chat-font-small"
@@ -7806,9 +8565,12 @@ export function WebMessenger({
         : "clore-chat-font-default";
   const activeChatBackgroundStyle = useMemo(
     () => ({
-      backgroundImage: CHAT_WALLPAPER_BACKGROUNDS[activeChatEffectiveWallpaper],
+      backgroundImage:
+        CHAT_WALLPAPER_BACKGROUNDS[activeChatEffectiveWallpaper] === "tint"
+          ? activeChatWallpaperTint.background
+          : CHAT_WALLPAPER_BACKGROUNDS[activeChatEffectiveWallpaper],
     }),
-    [activeChatEffectiveWallpaper]
+    [activeChatEffectiveWallpaper, activeChatWallpaperTint]
   );
 
   useEffect(() => {
@@ -13162,6 +13924,23 @@ export function WebMessenger({
 
   useEffect(() => {
     const handleHotkey = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (
+        AI_FEATURE_ENABLED &&
+        key === "q" &&
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+        if (isAiCallOpen) {
+          closeAiAssistantCall();
+        } else {
+          openAiAssistantCall();
+        }
+        return;
+      }
+
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
         return;
       }
@@ -13176,7 +13955,6 @@ export function WebMessenger({
         return;
       }
 
-      const key = event.key.toLowerCase();
       if (key === "q") {
         setActiveSidebar("home");
       } else if (key === "w") {
@@ -13194,13 +13972,26 @@ export function WebMessenger({
 
     window.addEventListener("keydown", handleHotkey);
     return () => window.removeEventListener("keydown", handleHotkey);
-  }, [openOwnProfile]);
+  }, [closeAiAssistantCall, isAiCallOpen, openAiAssistantCall, openOwnProfile]);
 
   useEffect(() => {
     if (activeSidebar !== "home") {
       setIsActiveChatProfileSidebarOpen(false);
     }
   }, [activeSidebar]);
+
+  useEffect(() => {
+    if (!isAiCallOpen) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeAiAssistantCall();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [closeAiAssistantCall, isAiCallOpen]);
 
   useEffect(() => {
     if (!isActiveChatProfileSidebarOpen) {
@@ -14110,9 +14901,6 @@ export function WebMessenger({
     activeSidebar === "profile" || isCompactActiveChatProfileSidebar;
   const shouldShowMobileNavigation =
     activeSidebar !== "home" || mobileView === "list";
-  const mobileMainPaddingClass = shouldShowMobileNavigation
-    ? "pb-[calc(5.5rem+max(env(safe-area-inset-bottom),0.75rem))] md:pb-0"
-    : "";
   const mobileFloatingBottomClass = shouldShowMobileNavigation
     ? "bottom-[calc(5.5rem+max(env(safe-area-inset-bottom),0.75rem))] md:bottom-[calc(env(safe-area-inset-bottom)+1rem)]"
     : "bottom-[calc(env(safe-area-inset-bottom)+1rem)]";
@@ -14173,12 +14961,6 @@ export function WebMessenger({
     if (value === "light") {
       return t("themeLight");
     }
-    if (value === "obsidian") {
-      return t("themeObsidian");
-    }
-    if (value === "titanium") {
-      return t("themeTitanium");
-    }
     return value;
   };
   const getAccentLabel = (value: string) => {
@@ -14196,6 +14978,12 @@ export function WebMessenger({
     }
     if (value === "amber") {
       return t("accentAmber");
+    }
+    if (value === "obsidian") {
+      return t("accentObsidian");
+    }
+    if (value === "titanium") {
+      return t("accentTitanium");
     }
     return value;
   };
@@ -14323,7 +15111,7 @@ export function WebMessenger({
           uiTheme === "light"
             ? "bg-[radial-gradient(circle_at_10%_8%,rgba(59,130,246,0.12),transparent_36%),radial-gradient(circle_at_88%_0%,rgba(14,165,233,0.1),transparent_30%),linear-gradient(160deg,#f8fbff_0%,#f2f6fd_56%,#eef3fb_100%)]"
             : "bg-[radial-gradient(circle_at_10%_8%,rgba(139,92,246,0.1),transparent_34%),radial-gradient(circle_at_88%_0%,rgba(139,92,246,0.06),transparent_30%),linear-gradient(160deg,#0b0b0d_0%,#101014_55%,#141419_100%)]"
-        } pt-[env(safe-area-inset-top)] text-zinc-100 ${mobileMainPaddingClass}`}
+        } pt-[env(safe-area-inset-top)] text-zinc-100`}
         onTouchStart={handleMobileBackSwipeStart}
         onTouchMove={handleMobileBackSwipeMove}
         onTouchEnd={handleMobileBackSwipeEnd}
@@ -15400,19 +16188,22 @@ export function WebMessenger({
                   >
                     {activeChatEffectiveWallpaper === "color-bends" ? (
                       <div className="absolute inset-0 z-0">
-                        <ColorBends className="h-full w-full" />
+                        <ColorBends className="h-full w-full" colors={activeChatWallpaperTint.colorBends} />
                       </div>
                     ) : null}
                     {activeChatEffectiveWallpaper === "pixel-blast" ? (
                       <div className="absolute inset-0 z-0">
-                        <PixelBlast className="h-full w-full" />
+                        <PixelBlast
+                          className="h-full w-full"
+                          color={activeChatWallpaperTint.pixelBlast}
+                        />
                       </div>
                     ) : null}
                     {activeChatEffectiveWallpaper === "plasma" ? (
                       <div className="absolute inset-0 z-0">
                         <Plasma
                           className="h-full w-full"
-                          color="#8e51ff"
+                          color={activeChatWallpaperTint.plasma}
                           speed={1}
                           scale={1}
                           opacity={1}
@@ -15422,14 +16213,14 @@ export function WebMessenger({
                     ) : null}
                     {activeChatEffectiveWallpaper === "dither" ? (
                       <div className="absolute inset-0 z-0">
-                        <Dither />
+                        <Dither waveColor={activeChatWallpaperTint.dither} />
                       </div>
                     ) : null}
                     {activeChatEffectiveWallpaper === "gradient-blinds" ? (
                       <div className="absolute inset-0 z-0">
                         <GradientBlinds
                           className="h-full w-full"
-                          gradientColors={["#09090b", "#1d4ed8", "#155e75"]}
+                          gradientColors={activeChatWallpaperTint.gradientBlinds}
                           angle={18}
                           noise={0.25}
                           blindMinWidth={34}
@@ -15437,54 +16228,56 @@ export function WebMessenger({
                         />
                       </div>
                     ) : null}
+                    {activePinnedMessage ? (
+                      <div className="pointer-events-none absolute inset-x-4 top-3 z-20 sm:inset-x-6 sm:top-5">
+                        <div
+                          className={`flex ${
+                            uiPinnedMessageAlignment === "right"
+                              ? "justify-end"
+                              : uiPinnedMessageAlignment === "center"
+                                ? "justify-center"
+                                : "justify-start"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              focusReplyTargetMessage(activePinnedMessage.id);
+                              if (pinnedActiveMessages.length > 1) {
+                                setPinnedMessageCursor(
+                                  (prev) => (prev + 1) % pinnedActiveMessages.length
+                                );
+                              }
+                            }}
+                            className="pointer-events-auto flex w-full max-w-sm items-center gap-2 rounded-full border border-zinc-700/80 bg-zinc-950/85 px-3 py-2 text-left shadow-xl backdrop-blur-xl hover:border-zinc-600 hover:bg-zinc-900/90 sm:w-72"
+                          >
+                            <PinFilledIcon className="size-3.5 shrink-0 text-zinc-400" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-zinc-200">
+                                {activePinnedMessage.text.trim() ||
+                                  (activePinnedMessage.attachments.length > 0
+                                    ? t("attachment")
+                                    : t("noMessagesYet"))}
+                              </p>
+                              {pinnedActiveMessages.length > 1 ? (
+                                <p className="mt-0.5 text-[11px] text-zinc-500">
+                                  {`${pinnedMessageCursor + 1}/${pinnedActiveMessages.length}`}
+                                </p>
+                              ) : null}
+                            </div>
+                            {pinnedActiveMessages.length > 1 ? (
+                              <ArrowRight className="size-3.5 shrink-0 text-zinc-500" />
+                            ) : null}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <div
                       ref={activeMessagesScrollRef}
                       className={`relative z-10 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
-                        uiDensity === "compact" ? "space-y-1.5 px-4 py-3" : "space-y-2 px-4 py-5"
-                      }`}
+                        uiDensity === "compact" ? "space-y-1.5 px-4 pb-3" : "space-y-2 px-4 pb-5"
+                      } ${activePinnedMessage ? "pt-16 sm:pt-20" : uiDensity === "compact" ? "pt-3" : "pt-5"}`}
                     >
-                    {activePinnedMessage ? (
-                      <div
-                        className={`mb-3 flex ${
-                          uiPinnedMessageAlignment === "right"
-                            ? "justify-end"
-                            : uiPinnedMessageAlignment === "center"
-                              ? "justify-center"
-                              : "justify-start"
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            focusReplyTargetMessage(activePinnedMessage.id);
-                            if (pinnedActiveMessages.length > 1) {
-                              setPinnedMessageCursor(
-                                (prev) => (prev + 1) % pinnedActiveMessages.length
-                              );
-                            }
-                          }}
-                          className="flex w-72 items-center gap-2 rounded-full border border-zinc-700/80 bg-zinc-950/80 px-3 py-2 text-left backdrop-blur hover:border-zinc-600 hover:bg-zinc-900/85"
-                        >
-                          <PinFilledIcon className="size-3.5 shrink-0 text-zinc-400" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-medium text-zinc-200">
-                              {activePinnedMessage.text.trim() ||
-                                (activePinnedMessage.attachments.length > 0
-                                  ? t("attachment")
-                                  : t("noMessagesYet"))}
-                            </p>
-                            {pinnedActiveMessages.length > 1 ? (
-                              <p className="mt-0.5 text-[11px] text-zinc-500">
-                                {`${pinnedMessageCursor + 1}/${pinnedActiveMessages.length}`}
-                              </p>
-                            ) : null}
-                          </div>
-                          {pinnedActiveMessages.length > 1 ? (
-                            <ArrowRight className="size-3.5 shrink-0 text-zinc-500" />
-                          ) : null}
-                        </button>
-                      </div>
-                    ) : null}
                     {filteredActiveMessages.length === 0 ? (
                       <div className={`text-center text-sm text-zinc-500 ${uiDensity === "compact" ? "py-7" : "py-10"}`}>
                         {activeChatSearchQuery.trim().length > 0
@@ -18386,12 +19179,6 @@ export function WebMessenger({
                                   <SelectItem value="light" className={unifiedSelectItemClassName}>
                                     {t("themeLight")}
                                   </SelectItem>
-                                  <SelectItem value="obsidian" className={unifiedSelectItemClassName}>
-                                    {t("themeObsidian")}
-                                  </SelectItem>
-                                  <SelectItem value="titanium" className={unifiedSelectItemClassName}>
-                                    {t("themeTitanium")}
-                                  </SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -18411,13 +19198,7 @@ export function WebMessenger({
                               <Select
                                 value={effectiveUiAccent}
                                 onValueChange={(value) => {
-                                  if (
-                                    value !== "violet" &&
-                                    value !== "blue" &&
-                                    value !== "emerald" &&
-                                    value !== "rose" &&
-                                    value !== "amber"
-                                  ) {
+                                  if (!UI_ACCENT_VALUES.includes(value as UiAccent)) {
                                     return;
                                   }
 
@@ -18426,7 +19207,7 @@ export function WebMessenger({
                                     return;
                                   }
 
-                                  setUiAccent(value);
+                                  setUiAccent(value as UiAccent);
                                 }}
                               >
                                 <SelectTrigger
@@ -18500,6 +19281,26 @@ export function WebMessenger({
                                     }
                                   >
                                     {t("accentAmber")}
+                                  </SelectItem>
+                                  <SelectItem
+                                    value="obsidian"
+                                    className={
+                                      hasPrimeAccentAccess
+                                        ? unifiedSelectItemClassName
+                                        : "rounded-md px-7 py-1.5 text-xs text-zinc-500 outline-none data-[highlighted]:bg-zinc-800 data-[highlighted]:text-zinc-400 data-[state=checked]:bg-zinc-800 data-[state=checked]:text-zinc-300"
+                                    }
+                                  >
+                                    {t("accentObsidian")}
+                                  </SelectItem>
+                                  <SelectItem
+                                    value="titanium"
+                                    className={
+                                      hasPrimeAccentAccess
+                                        ? unifiedSelectItemClassName
+                                        : "rounded-md px-7 py-1.5 text-xs text-zinc-500 outline-none data-[highlighted]:bg-zinc-800 data-[highlighted]:text-zinc-400 data-[state=checked]:bg-zinc-800 data-[state=checked]:text-zinc-300"
+                                    }
+                                  >
+                                    {t("accentTitanium")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -19166,28 +19967,6 @@ export function WebMessenger({
                   }`}
                 >
                   {t("themeLight")}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setUiTheme("obsidian")}
-                  className={`h-10 rounded-lg border ${
-                    uiTheme === "obsidian"
-                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
-                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                  }`}
-                >
-                  {t("themeObsidian")}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setUiTheme("titanium")}
-                  className={`h-10 rounded-lg border ${
-                    uiTheme === "titanium"
-                      ? "border-primary bg-primary text-zinc-50 hover:bg-primary/90"
-                      : "border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                  }`}
-                >
-                  {t("themeTitanium")}
                 </Button>
               </div>
             </div>
@@ -20746,6 +21525,292 @@ export function WebMessenger({
                   </Button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {isAiCallOpen ? (
+        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-3 z-[96] sm:right-4">
+          <div className="pointer-events-auto relative flex h-40 w-40 overflow-hidden rounded-[2rem] border border-zinc-700/70 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.16),transparent_34%),linear-gradient(180deg,rgba(9,9,11,0.96)_0%,rgba(17,24,39,0.96)_100%)] shadow-[0_24px_80px_-28px_rgba(0,0,0,0.9)]">
+            <button
+              type="button"
+              aria-label={language === "ru" ? "Закрыть" : "Close"}
+              onClick={closeAiAssistantCall}
+              className="absolute right-4 top-4 z-10 rounded-full border border-zinc-600 bg-zinc-950/80 p-2 text-zinc-200 hover:border-primary hover:text-primary"
+            >
+              <PhoneOff className="size-5" />
+            </button>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <button
+                type="button"
+                aria-label={
+                  aiVoiceState === "listening"
+                    ? language === "ru"
+                      ? "Остановить запись"
+                      : "Stop recording"
+                    : language === "ru"
+                      ? "Начать разговор"
+                      : "Start talking"
+                }
+                onClick={() => {
+                  void handleAiOrbInteraction();
+                }}
+                className={`relative flex size-24 items-center justify-center rounded-full border transition-all duration-300 ${
+                  aiVoiceState === "listening"
+                    ? "scale-105 border-emerald-400/80 bg-emerald-500/15 shadow-[0_0_0_10px_rgba(16,185,129,0.08),0_0_0_22px_rgba(16,185,129,0.05)]"
+                    : aiVoiceState === "thinking"
+                      ? "border-amber-300/80 bg-amber-400/10 shadow-[0_0_0_10px_rgba(251,191,36,0.08),0_0_0_22px_rgba(251,191,36,0.04)]"
+                      : aiVoiceState === "speaking"
+                        ? "border-sky-300/80 bg-sky-400/10 shadow-[0_0_0_10px_rgba(56,189,248,0.08),0_0_0_22px_rgba(56,189,248,0.04)]"
+                        : "border-zinc-500/80 bg-zinc-900/70 hover:border-primary/70 hover:bg-primary/10"
+                }`}
+              >
+                <span
+                  className={`absolute inset-2 rounded-full ${
+                    aiVoiceState === "listening"
+                      ? "animate-ping bg-emerald-400/10"
+                      : aiVoiceState === "thinking"
+                        ? "animate-pulse bg-amber-300/10"
+                        : aiVoiceState === "speaking"
+                          ? "animate-pulse bg-sky-300/10"
+                          : "bg-transparent"
+                  }`}
+                  aria-hidden="true"
+                />
+                <span
+                  className={`relative flex size-14 items-center justify-center rounded-full ${
+                    aiVoiceState === "listening"
+                      ? "bg-emerald-400/15 text-emerald-200"
+                      : aiVoiceState === "thinking"
+                        ? "bg-amber-300/15 text-amber-100"
+                        : aiVoiceState === "speaking"
+                          ? "bg-sky-300/15 text-sky-100"
+                          : "bg-primary/15 text-primary"
+                  }`}
+                >
+                  {aiVoiceState === "listening" ? (
+                    <MicOff className="size-6" />
+                  ) : aiVoiceState === "thinking" ? (
+                    <Spinner className="size-6" />
+                  ) : aiVoiceState === "speaking" ? (
+                    <Volume2 className="size-6" />
+                  ) : (
+                    <Mic className="size-6" />
+                  )}
+                </span>
+              </button>
+              <video ref={aiScreenPreviewVideoRef} autoPlay playsInline muted className="hidden" />
+            </div>
+            <div className="hidden min-w-0 flex-1 flex-col">
+              <div className="border-b border-zinc-800/80 px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  {language === "ru" ? "AI звонок" : "AI call"}
+                </p>
+                <div className="mt-2 flex items-center gap-3">
+                  <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+                    <AiSidebarIcon className="size-5" />
+                  </span>
+                  <div>
+                    <p className="text-lg font-semibold text-zinc-100">Gemini Live</p>
+                    <p className="text-sm text-zinc-400">
+                      {language === "ru"
+                        ? "Голосовой ассистент внутри приложения"
+                        : "In-app voice assistant"}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-zinc-500">
+                  {language === "ru"
+                    ? "Ctrl+Q открывает или закрывает этот режим."
+                    : "Press Ctrl+Q to open or close this mode."}
+                </p>
+              </div>
+              <div
+                ref={aiCallMessagesScrollRef}
+                className="flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5"
+              >
+                {aiMessages.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-zinc-700/80 bg-zinc-900/40 px-4 py-5 text-sm text-zinc-400">
+                    {language === "ru"
+                      ? "Говорите голосом или напишите запрос. Ассистент может использовать текущий контекст экрана, открывать разделы и выполнять поддерживаемые команды мессенджера."
+                      : "Speak or type a request. The assistant can use the current screen context, open sections, and run supported messenger commands."}
+                  </div>
+                ) : (
+                  aiMessages.map((message) => (
+                    <div
+                      key={`ai-call-${message.id}`}
+                      className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-[88%] rounded-3xl border px-4 py-3 text-sm ${
+                          message.role === "user"
+                            ? "border-primary/35 bg-primary/90 text-zinc-50"
+                            : message.error
+                              ? "border-red-500/35 bg-red-500/10 text-red-100"
+                              : "border-zinc-700/80 bg-zinc-900/85 text-zinc-100"
+                        }`}
+                      >
+                        {renderFormattedMessageText(message.content, handleMentionClick)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <form
+                className="border-t border-zinc-800/80 p-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void sendAiPrompt();
+                }}
+              >
+                {aiError ? (
+                  <p className="mb-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+                    {aiError}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2 pb-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={toggleAiVoiceCapture}
+                    className={`h-10 rounded-2xl border px-3 ${
+                      isAiVoiceListening
+                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-100"
+                        : "border-zinc-700 bg-zinc-900/80 text-zinc-200"
+                    }`}
+                  >
+                    {isAiVoiceListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+                    {isAiVoiceListening
+                      ? language === "ru"
+                        ? "Стоп"
+                        : "Stop"
+                      : language === "ru"
+                        ? "Голос"
+                        : "Voice"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      if (aiScreenCapture.isActive) {
+                        stopAiScreenShare();
+                        return;
+                      }
+                      void startAiScreenShare();
+                    }}
+                    className={`h-10 rounded-2xl border px-3 ${
+                      aiScreenCapture.isActive
+                        ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-100"
+                        : "border-zinc-700 bg-zinc-900/80 text-zinc-200"
+                    }`}
+                  >
+                    {aiScreenCapture.isActive ? (
+                      <ScreenShareOff className="size-4" />
+                    ) : (
+                      <ScreenShare className="size-4" />
+                    )}
+                    {aiScreenCapture.isActive
+                      ? language === "ru"
+                        ? "Экран подключён"
+                        : "Screen shared"
+                      : language === "ru"
+                        ? "Поделиться экраном"
+                        : "Share screen"}
+                  </Button>
+                  <label className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-300">
+                    <Search className="size-3.5 text-zinc-400" />
+                    <span className="font-medium text-zinc-200">{t("aiAssistantSearchMode")}</span>
+                    <Switch
+                      checked={aiSearchEnabled}
+                      onCheckedChange={setAiSearchEnabled}
+                      aria-label={t("aiAssistantSearchHint")}
+                      size="sm"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-300">
+                    <Shield className="size-3.5 text-zinc-400" />
+                    <span className="font-medium text-zinc-200">{t("aiAssistantAgentMode")}</span>
+                    <Switch
+                      checked={aiAgentEnabled}
+                      onCheckedChange={handleAiAgentToggle}
+                      aria-label={t("aiAssistantAgentModeHint")}
+                      size="sm"
+                    />
+                  </label>
+                </div>
+                <div className="flex items-end gap-2 rounded-3xl border border-zinc-700/80 bg-zinc-950/85 p-2">
+                  <Textarea
+                    value={aiDraft}
+                    placeholder={
+                      isAiVoiceSupported
+                        ? language === "ru"
+                          ? "Скажите или напишите, что нужно сделать..."
+                          : "Say or type what you want to do..."
+                        : t("aiAssistantPlaceholder")
+                    }
+                    onChange={(event) => setAiDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void sendAiPrompt();
+                      }
+                    }}
+                    className="min-h-[72px] flex-1 border-0 bg-transparent px-1 py-2 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-0"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={isAiSubmitting || aiDraft.trim().length === 0}
+                    className="h-11 rounded-2xl bg-primary px-4 text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isAiSubmitting ? t("aiAssistantThinking") : t("send")}
+                  </Button>
+                </div>
+              </form>
+            </div>
+            <div className="hidden w-[360px] shrink-0 flex-col bg-zinc-950/55 p-4">
+              <div className="rounded-3xl border border-zinc-800/80 bg-zinc-950/60 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  {language === "ru" ? "Текущий контекст" : "Live context"}
+                </p>
+                <p className="mt-3 text-sm leading-6 text-zinc-300">{getAiLiveScreenSummary()}</p>
+              </div>
+              <div className="mt-4 flex-1 overflow-hidden rounded-3xl border border-zinc-800/80 bg-zinc-950/60 p-3">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                    {language === "ru" ? "Экран" : "Screen"}
+                  </p>
+                  <span className="text-[11px] text-zinc-500">
+                    {aiScreenCapture.isActive
+                      ? language === "ru"
+                        ? "доступен"
+                        : "available"
+                      : language === "ru"
+                        ? "не подключён"
+                        : "not shared"}
+                  </span>
+                </div>
+                <div className="relative h-full min-h-[220px] overflow-hidden rounded-3xl border border-zinc-800/80 bg-zinc-900/70">
+                  <video
+                    ref={aiScreenPreviewVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`h-full w-full object-cover ${
+                      aiScreenCapture.isActive ? "opacity-100" : "opacity-0"
+                    }`}
+                  />
+                  {!aiScreenCapture.isActive ? (
+                    <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-zinc-500">
+                      {language === "ru"
+                        ? "Подключите демонстрацию экрана, чтобы Gemini видел текущий экран."
+                        : "Start screen sharing so Gemini can use the current screen."}
+                    </div>
+                  ) : null}
+                </div>
+                {aiScreenCapture.error ? (
+                  <p className="mt-3 text-xs text-red-200">{aiScreenCapture.error}</p>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

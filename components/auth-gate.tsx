@@ -12,7 +12,7 @@ type SessionData = {
 };
 
 type AuthMode = "login" | "register";
-type AuthUiTheme = "light" | "dark" | "obsidian" | "titanium";
+type AuthUiTheme = "light" | "dark";
 
 type LegacyStoredUser = {
   id?: string;
@@ -27,7 +27,7 @@ type AuthResponse = {
   error?: string;
 };
 
-const SUPPORTED_UI_THEMES = ["light", "dark", "obsidian", "titanium"] as const;
+const SUPPORTED_UI_THEMES = ["light", "dark"] as const;
 
 function isSupportedUiTheme(value: string | null): value is AuthUiTheme {
   return SUPPORTED_UI_THEMES.includes(value as AuthUiTheme);
@@ -37,13 +37,17 @@ function getAuthThemeBackgroundClassName(uiTheme: AuthUiTheme): string {
   if (uiTheme === "light") {
     return "bg-[radial-gradient(circle_at_12%_10%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(160deg,#f8fbff_0%,#f1f6fd_58%,#ebf1fa_100%)]";
   }
-  if (uiTheme === "obsidian") {
-    return "bg-[radial-gradient(circle_at_14%_12%,rgba(56,189,248,0.12),transparent_34%),linear-gradient(160deg,#0b0f14_0%,#121820_58%,#1a232d_100%)]";
-  }
-  if (uiTheme === "titanium") {
-    return "bg-[radial-gradient(circle_at_12%_10%,rgba(148,163,184,0.16),transparent_34%),linear-gradient(160deg,#1e232b_0%,#2a3038_58%,#39424d_100%)]";
-  }
   return "bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,0.16),transparent_34%),linear-gradient(160deg,#18181b_0%,#232326_60%,#2f2f35_100%)]";
+}
+
+function resolveAuthUiTheme(value: string | null): AuthUiTheme {
+  if (value === "light" || value === "dark") {
+    return value;
+  }
+  if (value === "obsidian" || value === "titanium") {
+    return "dark";
+  }
+  return "light";
 }
 
 function readStoredSessionUserId(): string | null {
@@ -380,13 +384,14 @@ export function AuthGate() {
 
   useEffect(() => {
     const rootTheme = document.documentElement.getAttribute("data-clore-theme");
-    if (isSupportedUiTheme(rootTheme)) {
-      setUiTheme(rootTheme);
+    const resolvedRootTheme = resolveAuthUiTheme(rootTheme);
+    if (isSupportedUiTheme(resolvedRootTheme)) {
+      setUiTheme(resolvedRootTheme);
       return;
     }
 
     const stored = window.localStorage.getItem(UI_THEME_STORAGE_KEY);
-    setUiTheme(isSupportedUiTheme(stored) ? stored : "light");
+    setUiTheme(resolveAuthUiTheme(stored));
   }, []);
 
   useEffect(() => {

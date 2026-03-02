@@ -1,5 +1,9 @@
-const DEFAULT_AI_MODEL = "openai/gpt-4o-mini";
-const DEFAULT_AI_BASE_URL = "https://openai.api.proxyapi.ru/v1";
+export type AiProviderKind = "openai-compatible" | "google-gemini";
+
+const DEFAULT_OPENAI_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_OPENAI_BASE_URL = "https://openai.api.proxyapi.ru/v1";
+const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
+const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_SEARCH_MODELS = [
   "openai/gpt-4o-mini-search-preview-2025-03-11",
   "gpt-4o-mini-search-preview-2025-03-11",
@@ -52,7 +56,20 @@ function assertValidUrl(name: string, value: string) {
   }
 }
 
-function readApiKeyFromEnv(): EnvEntry | null {
+function readGeminiApiKeyFromEnv(): EnvEntry | null {
+  const geminiKey = normalizeEnvValue(
+    process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY
+  );
+  if (geminiKey.length > 0) {
+    return {
+      name: process.env.GEMINI_API_KEY ? "GEMINI_API_KEY" : "GOOGLE_AI_API_KEY",
+      value: geminiKey,
+    };
+  }
+  return null;
+}
+
+function readOpenAiCompatibleApiKeyFromEnv(): EnvEntry | null {
   const candidates: EnvEntry[] = [
     {
       name: "PROXYAPI_API_KEY",
@@ -66,29 +83,91 @@ function readApiKeyFromEnv(): EnvEntry | null {
   return candidates.find((candidate) => candidate.value.length > 0) ?? null;
 }
 
-export function getAiProviderConfig(): {
+function buildProviderConfig(
+  provider: AiProviderKind,
+  apiKeyEntry: EnvEntry
+): {
+  provider: AiProviderKind;
   apiKey: string;
   baseUrl: string;
   model: string;
 } {
-  const apiKeyEntry = readApiKeyFromEnv();
-  if (!apiKeyEntry) {
-    throw new Error("AI provider key is not configured on the server.");
-  }
   assertHeaderSafeValue(apiKeyEntry.name, apiKeyEntry.value);
-
   const baseUrl =
-    normalizeEnvValue(process.env.CLORE_BOT_BASE_URL) || DEFAULT_AI_BASE_URL;
+    provider === "google-gemini"
+      ? normalizeEnvValue(process.env.GEMINI_BASE_URL) || DEFAULT_GEMINI_BASE_URL
+      : normalizeEnvValue(process.env.CLORE_BOT_BASE_URL) || DEFAULT_OPENAI_BASE_URL;
   assertHeaderSafeValue("CLORE_BOT_BASE_URL", baseUrl);
   assertValidUrl("CLORE_BOT_BASE_URL", baseUrl);
 
-  const model = normalizeEnvValue(process.env.CLORE_BOT_MODEL) || DEFAULT_AI_MODEL;
+  const model =
+    provider === "google-gemini"
+      ? normalizeEnvValue(process.env.GEMINI_MODEL) || DEFAULT_GEMINI_MODEL
+      : normalizeEnvValue(process.env.CLORE_BOT_MODEL) || DEFAULT_OPENAI_MODEL;
 
   return {
+    provider,
     apiKey: apiKeyEntry.value,
     baseUrl,
     model,
   };
+}
+
+export function getOpenAiCompatibleProviderConfig():
+  | {
+      provider: "openai-compatible";
+      apiKey: string;
+      baseUrl: string;
+      model: string;
+    }
+  | null {
+  const openAiKeyEntry = readOpenAiCompatibleApiKeyFromEnv();
+  if (!openAiKeyEntry) {
+    return null;
+  }
+  const config = buildProviderConfig("openai-compatible", openAiKeyEntry);
+  return {
+    ...config,
+    provider: "openai-compatible",
+  };
+}
+
+export function getAiProviderConfig(): {
+  provider: AiProviderKind;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+} {
+  const geminiKeyEntry = readGeminiApiKeyFromEnv();
+  if (geminiKeyEntry) {
+    return buildProviderConfig("google-gemini", geminiKeyEntry);
+  }
+  const openAiKeyEntry = readOpenAiCompatibleApiKeyFromEnv();
+  if (openAiKeyEntry) {
+    return buildProviderConfig("openai-compatible", openAiKeyEntry);
+  }
+  throw new Error("AI provider key is not configured on the server.");
+}
+
+export function getFallbackAiProviderConfig(
+  preferredProvider: AiProviderKind
+):
+  | {
+      provider: AiProviderKind;
+      apiKey: string;
+      baseUrl: string;
+      model: string;
+    }
+  | null {
+  if (preferredProvider === "google-gemini") {
+    const openAiKeyEntry = readOpenAiCompatibleApiKeyFromEnv();
+    return openAiKeyEntry
+      ? buildProviderConfig("openai-compatible", openAiKeyEntry)
+      : null;
+  }
+
+  const geminiKeyEntry = readGeminiApiKeyFromEnv();
+  return geminiKeyEntry ? buildProviderConfig("google-gemini", geminiKeyEntry) : null;
 }
 
 function isSearchModel(model: string): boolean {
@@ -110,8 +189,14 @@ function pushModelVariants(target: string[], model: string) {
 
 export function buildModelCandidates(
   modelFromEnv: string,
-  searchEnabled: boolean
+  searchEnabled: boolean,
+  provider: AiProviderKind
 ): string[] {
+  if (provider === "google-gemini") {
+    const model = modelFromEnv.trim() || DEFAULT_GEMINI_MODEL;
+    return [model];
+  }
+
   const candidates: string[] = [];
   if (searchEnabled) {
     if (isSearchModel(modelFromEnv)) {
@@ -123,13 +208,13 @@ export function buildModelCandidates(
     if (!isSearchModel(modelFromEnv)) {
       pushModelVariants(candidates, modelFromEnv);
     }
-    pushModelVariants(candidates, DEFAULT_AI_MODEL);
+    pushModelVariants(candidates, DEFAULT_OPENAI_MODEL);
     return Array.from(new Set(candidates));
   }
 
   if (!isSearchModel(modelFromEnv)) {
     pushModelVariants(candidates, modelFromEnv);
   }
-  pushModelVariants(candidates, DEFAULT_AI_MODEL);
+  pushModelVariants(candidates, DEFAULT_OPENAI_MODEL);
   return Array.from(new Set(candidates));
 }

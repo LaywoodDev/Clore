@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { assertUserCanSendMessages } from "@/lib/server/admin";
 import {
   buildModelCandidates,
+  getFallbackAiProviderConfig,
   getAiProviderConfig,
 } from "@/lib/server/ai-provider";
 import {
@@ -28,12 +29,18 @@ type AiChatMessagePayload = {
   content?: string;
 };
 
+type AiScreenContextPayload = {
+  summary?: string;
+  imageDataUrl?: string;
+};
+
 type AiChatPayload = {
   userId?: string;
   language?: string;
   messages?: AiChatMessagePayload[];
   searchEnabled?: boolean;
   agentEnabled?: boolean;
+  screenContext?: AiScreenContextPayload;
 };
 
 type NormalizedAiChatMessage = {
@@ -4478,6 +4485,9 @@ async function planSendIntentsWithAi(
   } catch {
     return [];
   }
+  if (providerConfig.provider !== "openai-compatible") {
+    return [];
+  }
 
   const candidates = buildRecipientCandidates(store, userId);
   const contactsCatalog = [...candidates]
@@ -4510,7 +4520,11 @@ async function planSendIntentsWithAi(
   const plannerNow = Date.now();
 
   const { apiKey, baseUrl, model: modelFromEnv } = providerConfig;
-  const modelCandidates = buildModelCandidates(modelFromEnv, false).slice(0, 2);
+  const modelCandidates = buildModelCandidates(
+    modelFromEnv,
+    false,
+    providerConfig.provider
+  ).slice(0, 2);
   const systemPrompt =
     language === "ru"
       ? [
@@ -4639,10 +4653,17 @@ async function rewriteSendMessageText(
   } catch {
     return locallyCleaned;
   }
+  if (providerConfig.provider !== "openai-compatible") {
+    return locallyCleaned;
+  }
 
   const wantsDetailed = wantsDetailedSendMessage(locallyCleaned);
   const { apiKey, baseUrl, model: modelFromEnv } = providerConfig;
-  const modelCandidates = buildModelCandidates(modelFromEnv, false).slice(0, 2);
+  const modelCandidates = buildModelCandidates(
+    modelFromEnv,
+    false,
+    providerConfig.provider
+  ).slice(0, 2);
   if (modelCandidates.length === 0) {
     return locallyCleaned;
   }
@@ -6190,6 +6211,64 @@ function extractChatCompletionText(payload: unknown): string {
   return "";
 }
 
+function extractGeminiText(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+  const record = payload as Record<string, unknown>;
+  const candidates = Array.isArray(record.candidates) ? record.candidates : [];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") {
+      continue;
+    }
+    const content = (candidate as Record<string, unknown>).content;
+    if (!content || typeof content !== "object") {
+      continue;
+    }
+    const parts = Array.isArray((content as Record<string, unknown>).parts)
+      ? ((content as Record<string, unknown>).parts as unknown[])
+      : [];
+    for (const part of parts) {
+      if (!part || typeof part !== "object") {
+        continue;
+      }
+      const text = (part as Record<string, unknown>).text;
+      if (typeof text === "string" && text.trim()) {
+        return text.trim();
+      }
+    }
+  }
+  return "";
+}
+
+function normalizeScreenContextSummary(
+  screenContext: AiScreenContextPayload | null | undefined
+): string {
+  if (!screenContext || typeof screenContext !== "object") {
+    return "";
+  }
+  return typeof screenContext.summary === "string"
+    ? screenContext.summary.trim().slice(0, 2_000)
+    : "";
+}
+
+function parseImageDataUrl(
+  imageDataUrl: string | undefined
+): { mimeType: string; data: string } | null {
+  if (typeof imageDataUrl !== "string") {
+    return null;
+  }
+  const trimmed = imageDataUrl.trim();
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/iu.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+  return {
+    mimeType: match[1].toLowerCase(),
+    data: match[2],
+  };
+}
+
 function formatAssistantUserLabel(
   name: string,
   username: string
@@ -6637,9 +6716,10 @@ async function generateAssistantReply(
   messages: NormalizedAiChatMessage[],
   searchEnabled: boolean,
   latestUserPrompt: string,
-  agentEnabled: boolean
+  agentEnabled: boolean,
+  screenContext?: AiScreenContextPayload | null
 ): Promise<string> {
-  const { apiKey, baseUrl, model: modelFromEnv } = getAiProviderConfig();
+  const primaryConfig = getAiProviderConfig();
   const systemPrompt =
     language === "ru"
       ? "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Start with the direct answer, then add only the detail that materially helps. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Prefer Russian unless the user writes in another language. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, chats, or completed actions."
@@ -6669,6 +6749,8 @@ async function generateAssistantReply(
     latestUserPrompt,
     messages
   );
+  const screenSummary = normalizeScreenContextSummary(screenContext);
+  const parsedScreenImage = parseImageDataUrl(screenContext?.imageDataUrl);
   const systemMessages: Array<{ role: "system"; content: string }> = [
     {
       role: "system",
@@ -6693,6 +6775,15 @@ async function generateAssistantReply(
       content: runtimeWorkspaceContext,
     });
   }
+  if (screenSummary) {
+    systemMessages.push({
+      role: "system",
+      content:
+        language === "ru"
+          ? `Live screen context from the user session: ${screenSummary}`
+          : `Live screen context from the user session: ${screenSummary}`,
+    });
+  }
   if (!agentEnabled) {
     systemMessages.push({
       role: "system",
@@ -6708,59 +6799,151 @@ async function generateAssistantReply(
       content: knowledgeContext,
     });
   }
-  const modelCandidates = buildModelCandidates(modelFromEnv, searchEnabled);
+  const runProviderAttempt = async (
+    providerConfig: ReturnType<typeof getAiProviderConfig>
+  ): Promise<{ text: string; hitRateLimit: boolean; lastErrorMessage: string }> => {
+    const { provider, apiKey, baseUrl, model: modelFromEnv } = providerConfig;
+    const modelCandidates = buildModelCandidates(modelFromEnv, searchEnabled, provider);
 
-  let lastErrorMessage = "";
-  for (const model of modelCandidates) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), RESPONSE_TIMEOUT_MS);
+    let lastErrorMessage = "";
+    let hitRateLimit = false;
+    for (const model of modelCandidates) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), RESPONSE_TIMEOUT_MS);
 
-    try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            ...systemMessages,
-            ...messages,
-          ],
-          max_tokens: responseMaxTokens,
-        }),
-        signal: controller.signal,
-      });
+      try {
+        const response =
+          provider === "google-gemini"
+            ? await fetch(
+                `${baseUrl}/${encodeURIComponent(model)}:generateContent?key=${apiKey}`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    systemInstruction: {
+                      parts: systemMessages.map((message) => ({
+                        text: message.content,
+                      })),
+                    },
+                    contents: messages.map((message, index) => {
+                      const isLastUserMessage =
+                        message.role === "user" && index === messages.length - 1;
+                      const parts: Array<Record<string, unknown>> = [];
 
-      if (!response.ok) {
-        const errorPayload = await response.text().catch(() => "");
-        lastErrorMessage = `model "${model}" returned ${response.status}`;
-        console.error(
-          `[ai-chat] Provider error ${response.status} for model "${model}": ${errorPayload.slice(0, 400)}`
-        );
-        continue;
+                      if (message.content.trim()) {
+                        parts.push({
+                          text: message.content,
+                        });
+                      }
+                      if (isLastUserMessage && parsedScreenImage) {
+                        parts.push({
+                          inlineData: {
+                            mimeType: parsedScreenImage.mimeType,
+                            data: parsedScreenImage.data,
+                          },
+                        });
+                      }
+
+                      return {
+                        role: message.role === "assistant" ? "model" : "user",
+                        parts,
+                      };
+                    }),
+                    generationConfig: {
+                      maxOutputTokens: responseMaxTokens,
+                    },
+                  }),
+                  signal: controller.signal,
+                }
+              )
+            : await fetch(`${baseUrl}/chat/completions`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${apiKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model,
+                  messages: [...systemMessages, ...messages],
+                  max_tokens: responseMaxTokens,
+                }),
+                signal: controller.signal,
+              });
+
+        if (!response.ok) {
+          const errorPayload = await response.text().catch(() => "");
+          if (response.status === 429) {
+            hitRateLimit = true;
+            lastErrorMessage =
+              provider === "google-gemini"
+                ? "Gemini quota or rate limit reached."
+                : "AI provider rate limit reached.";
+          } else {
+            lastErrorMessage = `model "${model}" returned ${response.status}`;
+          }
+          console.error(
+            `[ai-chat] Provider error ${response.status} for model "${model}": ${errorPayload.slice(0, 400)}`
+          );
+          continue;
+        }
+
+        const payload = (await response.json().catch(() => null)) as unknown;
+        const text =
+          provider === "google-gemini"
+            ? extractGeminiText(payload)
+            : extractChatCompletionText(payload) || extractResponseText(payload);
+        if (text.trim().length > 0) {
+          return {
+            text,
+            hitRateLimit,
+            lastErrorMessage,
+          };
+        }
+        lastErrorMessage = `model "${model}" returned empty response`;
+        console.error(`[ai-chat] Empty response for model "${model}".`);
+      } catch (error) {
+        lastErrorMessage =
+          error instanceof Error && error.message.trim().length > 0
+            ? `model "${model}" failed: ${error.message}`
+            : `model "${model}" failed`;
+        console.error(`[ai-chat] ${lastErrorMessage}`);
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const payload = (await response.json().catch(() => null)) as unknown;
-      const text = extractChatCompletionText(payload) || extractResponseText(payload);
-      if (text.trim().length > 0) {
-        return text;
-      }
-      lastErrorMessage = `model "${model}" returned empty response`;
-      console.error(`[ai-chat] Empty response for model "${model}".`);
-    } catch (error) {
-      lastErrorMessage =
-        error instanceof Error && error.message.trim().length > 0
-          ? `model "${model}" failed: ${error.message}`
-          : `model "${model}" failed`;
-      console.error(`[ai-chat] ${lastErrorMessage}`);
-    } finally {
-      clearTimeout(timeoutId);
     }
+
+    return {
+      text: "",
+      hitRateLimit,
+      lastErrorMessage,
+    };
+  };
+
+  const primaryAttempt = await runProviderAttempt(primaryConfig);
+  if (primaryAttempt.text) {
+    return primaryAttempt.text;
   }
 
-  throw new Error(lastErrorMessage || "AI provider request failed.");
+  if (primaryConfig.provider === "google-gemini" && primaryAttempt.hitRateLimit) {
+    const fallbackConfig = getFallbackAiProviderConfig(primaryConfig.provider);
+    if (fallbackConfig) {
+      const fallbackAttempt = await runProviderAttempt(fallbackConfig);
+      if (fallbackAttempt.text) {
+        return fallbackAttempt.text;
+      }
+      throw new Error(fallbackAttempt.lastErrorMessage || primaryAttempt.lastErrorMessage);
+    }
+
+    throw new Error(
+      language === "ru"
+        ? "Gemini временно недоступен: превышен лимит запросов или исчерпана квота по API-ключу."
+        : "Gemini is temporarily unavailable: the API key hit a rate limit or exhausted its quota."
+    );
+  }
+
+  throw new Error(primaryAttempt.lastErrorMessage || "AI provider request failed.");
 }
 
 export async function POST(request: Request) {
@@ -6774,6 +6957,7 @@ export async function POST(request: Request) {
   const searchEnabled = body?.searchEnabled === true;
   const agentEnabled = body?.agentEnabled !== false;
   const messages = normalizeMessages(Array.isArray(body?.messages) ? body.messages : []);
+  const screenContext = body?.screenContext ?? null;
 
   if (!userId) {
     return NextResponse.json({ error: "Missing userId." }, { status: 400 });
@@ -6996,7 +7180,8 @@ export async function POST(request: Request) {
       messages,
       searchEnabled,
       latestUserPrompt,
-      agentEnabled
+      agentEnabled,
+      screenContext
     );
     return NextResponse.json({ message: reply });
   } catch (error) {
