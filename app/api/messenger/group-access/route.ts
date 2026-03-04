@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import {
   canModerateGroup,
@@ -22,7 +23,11 @@ const GROUP_USERNAME_VALIDATION_MESSAGE =
 
 export async function PATCH(request: Request) {
   const body = (await request.json().catch(() => null)) as GroupAccessPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const chatId = body?.chatId?.trim() ?? "";
   const accessType = body?.accessType === "public" ? "public" : "private";
   const username = normalizeGroupUsername(body?.username ?? "");

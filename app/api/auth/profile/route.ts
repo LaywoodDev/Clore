@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import { isAvatarDecorationId } from "@/lib/shared/avatar-decorations";
 import {
@@ -36,7 +37,11 @@ function isValidBirthday(value: string): boolean {
 
 export async function PATCH(request: Request) {
   const body = (await request.json().catch(() => null)) as ProfilePayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const name = body?.name?.trim() ?? "";
   const username = normalizeUsername(body?.username ?? "");
   const bio = body?.bio?.trim() ?? "";

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import {
   canModerateGroup,
@@ -30,7 +31,11 @@ function parseInviteUsageLimit(value: unknown): number {
 
 export async function PATCH(request: Request) {
   const body = (await request.json().catch(() => null)) as GroupInviteSettingsPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const chatId = body?.chatId?.trim() ?? "";
 
   if (!userId || !chatId) {

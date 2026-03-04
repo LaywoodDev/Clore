@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 
+import { createAuthToken } from "@/lib/server/auth";
 import {
   createEntityId,
   normalizeEmail,
@@ -45,6 +47,8 @@ export async function POST(request: Request) {
     );
   }
 
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   try {
     const user = await updateStore<StoredUser>((store) => {
       const emailTaken = store.users.some((candidate) => candidate.email === email);
@@ -64,7 +68,7 @@ export async function POST(request: Request) {
         name,
         username,
         email,
-        password,
+        password: hashedPassword,
         blockedUserIds: [],
         bio: "",
         birthday: "",
@@ -101,7 +105,8 @@ export async function POST(request: Request) {
       return created;
     });
 
-    return NextResponse.json({ user: toPublicUser(user) }, { status: 201 });
+    const token = await createAuthToken(user.id, request);
+    return NextResponse.json({ user: toPublicUser(user), token }, { status: 201 });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unable to create account.";

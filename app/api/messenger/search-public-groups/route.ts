@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAuth } from "@/lib/server/auth";
 import { assertUserCanReadMessenger } from "@/lib/server/admin";
 import {
   getStore,
@@ -24,15 +25,15 @@ const MAX_RESULTS = 20;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId")?.trim() ?? "";
+  const claimedUserId = searchParams.get("userId")?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const queryRaw = searchParams.get("q")?.trim() ?? "";
   const query = queryRaw.toLowerCase();
   const usernameQuery = normalizeGroupUsername(queryRaw);
   const now = Date.now();
-
-  if (!userId) {
-    return NextResponse.json({ error: "Missing userId." }, { status: 400 });
-  }
   if (!query) {
     return NextResponse.json({ groups: [] as PublicGroupSearchResult[] });
   }

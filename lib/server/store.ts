@@ -113,6 +113,14 @@ export type StoredChatThread = {
   groupRoles: Record<string, GroupRole>;
 };
 
+export type LinkPreview = {
+  url: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  siteName: string;
+};
+
 export type StoredChatMessage = {
   id: string;
   chatId: string;
@@ -120,6 +128,7 @@ export type StoredChatMessage = {
   text: string;
   attachments: StoredChatAttachment[];
   replyToMessageId: string;
+  pollId?: string;
   createdAt: number;
   scheduledAt: number;
   editedAt: number;
@@ -127,6 +136,7 @@ export type StoredChatMessage = {
   pinnedByUserId: string;
   savedBy: Record<string, number>;
   hiddenFor?: Record<string, number>;
+  linkPreview?: LinkPreview;
 };
 
 export type StoredChatAttachment = {
@@ -137,6 +147,23 @@ export type StoredChatAttachment = {
   url: string;
 };
 
+export type StoredPollOption = {
+  id: string;
+  text: string;
+};
+
+export type StoredPoll = {
+  id: string;
+  messageId: string;
+  chatId: string;
+  authorId: string;
+  question: string;
+  options: StoredPollOption[];
+  votes: Record<string, string>; // userId -> optionId
+  isAnonymous: boolean;
+  createdAt: number;
+};
+
 export type StoredCallSignal = {
   id: string;
   chatId: string;
@@ -145,6 +172,23 @@ export type StoredCallSignal = {
   type: "offer" | "answer" | "ice" | "hangup" | "reject";
   payload: string;
   createdAt: number;
+};
+
+export type StoredAuthToken = {
+  userId: string;
+  createdAt: number;
+  lastUsedAt: number;
+  userAgent?: string;
+  ip?: string;
+};
+
+export type StoredPendingLogin = {
+  id: string;
+  userId: string;
+  code: string;
+  expiresAt: number;
+  userAgent?: string;
+  ip?: string;
 };
 
 export type StoredModerationReportStatus = "open" | "resolved";
@@ -191,14 +235,26 @@ export type StoredUserSanction = {
   updatedAt: number;
 };
 
+export type StoredPushSubscription = {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+};
+
 export type StoreData = {
   users: StoredUser[];
   threads: StoredChatThread[];
   messages: StoredChatMessage[];
+  polls: StoredPoll[];
   callSignals: StoredCallSignal[];
   moderationReports: StoredModerationReport[];
   moderationAuditLogs: StoredModerationAuditLog[];
   userSanctions: Record<string, StoredUserSanction>;
+  authTokens: Record<string, StoredAuthToken>;
+  pendingLogins: Record<string, StoredPendingLogin>;
+  pushSubscriptions: Record<string, StoredPushSubscription[]>;
 };
 
 export const BOT_USER_ID = "bot-chatgpt";
@@ -322,10 +378,14 @@ const EMPTY_STORE: StoreData = {
   users: [],
   threads: [],
   messages: [],
+  polls: [],
   callSignals: [],
   moderationReports: [],
   moderationAuditLogs: [],
   userSanctions: {},
+  authTokens: {},
+  pendingLogins: {},
+  pushSubscriptions: {},
 };
 
 let writeQueue: Promise<void> = Promise.resolve();
@@ -1347,7 +1407,12 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
       }
     }
 
-    if (!id || !chatId || !authorId || (!text.trim() && attachments.length === 0)) {
+    const pollId =
+      typeof message.pollId === "string" && message.pollId.trim()
+        ? message.pollId.trim()
+        : undefined;
+
+    if (!id || !chatId || !authorId || (!text.trim() && attachments.length === 0 && !pollId)) {
       continue;
     }
 
@@ -1358,6 +1423,7 @@ function sanitizeMessages(rawMessages: unknown): StoredChatMessage[] {
       text,
       attachments,
       replyToMessageId,
+      pollId,
       createdAt,
       scheduledAt,
       editedAt,
@@ -1580,6 +1646,63 @@ function sanitizeUserSanctions(rawSanctions: unknown): Record<string, StoredUser
   return normalized;
 }
 
+function sanitizePolls(rawPolls: unknown): StoredPoll[] {
+  if (!Array.isArray(rawPolls)) {
+    return [];
+  }
+
+  const byId = new Map<string, StoredPoll>();
+
+  for (const rawPoll of rawPolls) {
+    const poll = asRecord(rawPoll);
+    if (!poll) {
+      continue;
+    }
+
+    const id = typeof poll.id === "string" ? poll.id.trim() : "";
+    const messageId = typeof poll.messageId === "string" ? poll.messageId.trim() : "";
+    const chatId = typeof poll.chatId === "string" ? poll.chatId.trim() : "";
+    const authorId = typeof poll.authorId === "string" ? poll.authorId.trim() : "";
+    const question = typeof poll.question === "string" ? poll.question.trim() : "";
+
+    if (!id || !messageId || !chatId || !authorId || !question) {
+      continue;
+    }
+
+    const rawOptions = Array.isArray(poll.options) ? poll.options : [];
+    const options: StoredPollOption[] = rawOptions
+      .map((rawOption) => {
+        const opt = asRecord(rawOption);
+        if (!opt) return null;
+        const optId = typeof opt.id === "string" ? opt.id.trim() : "";
+        const optText = typeof opt.text === "string" ? opt.text.trim() : "";
+        if (!optId || !optText) return null;
+        return { id: optId, text: optText };
+      })
+      .filter((opt): opt is StoredPollOption => opt !== null);
+
+    if (options.length < 2) {
+      continue;
+    }
+
+    const rawVotes = asRecord(poll.votes) ?? {};
+    const votes: Record<string, string> = {};
+    const validOptionIds = new Set(options.map((o) => o.id));
+    for (const [userId, optionId] of Object.entries(rawVotes)) {
+      if (typeof userId === "string" && userId && typeof optionId === "string" && validOptionIds.has(optionId)) {
+        votes[userId] = optionId;
+      }
+    }
+
+    const isAnonymous = poll.isAnonymous === true;
+    const createdAt = normalizeNumber(poll.createdAt, Date.now());
+
+    byId.set(id, { id, messageId, chatId, authorId, question, options, votes, isAnonymous, createdAt });
+  }
+
+  return [...byId.values()];
+}
+
 function sanitizeStore(raw: unknown): StoreData {
   const parsed = asRecord(raw);
   if (!parsed) {
@@ -1592,11 +1715,108 @@ function sanitizeStore(raw: unknown): StoreData {
     users: sanitizeUsers(parsed.users),
     threads: sanitizeThreads(parsed.threads),
     messages: sanitizeMessages(parsed.messages),
+    polls: sanitizePolls(parsed.polls),
     callSignals: sanitizeCallSignals(parsed.callSignals),
     moderationReports: sanitizeModerationReports(parsed.moderationReports),
     moderationAuditLogs: sanitizeModerationAuditLogs(parsed.moderationAuditLogs),
     userSanctions: sanitizeUserSanctions(parsed.userSanctions),
+    authTokens: sanitizeAuthTokens(parsed.authTokens),
+    pendingLogins: sanitizePendingLogins(parsed.pendingLogins),
+    pushSubscriptions: sanitizePushSubscriptions(parsed.pushSubscriptions),
   };
+}
+
+function sanitizePushSubscriptions(raw: unknown): Record<string, StoredPushSubscription[]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+  const result: Record<string, StoredPushSubscription[]> = {};
+  for (const [userId, subs] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof userId !== "string" || !userId || !Array.isArray(subs)) {
+      continue;
+    }
+    const validSubs: StoredPushSubscription[] = [];
+    for (const sub of subs) {
+      if (
+        sub &&
+        typeof sub === "object" &&
+        typeof (sub as Record<string, unknown>).endpoint === "string" &&
+        (sub as Record<string, unknown>).endpoint &&
+        (sub as Record<string, unknown>).keys &&
+        typeof ((sub as Record<string, unknown>).keys as Record<string, unknown>).p256dh === "string" &&
+        typeof ((sub as Record<string, unknown>).keys as Record<string, unknown>).auth === "string"
+      ) {
+        const s = sub as Record<string, unknown>;
+        const keys = s.keys as Record<string, unknown>;
+        validSubs.push({
+          endpoint: s.endpoint as string,
+          keys: { p256dh: keys.p256dh as string, auth: keys.auth as string },
+        });
+      }
+    }
+    if (validSubs.length > 0) {
+      result[userId] = validSubs;
+    }
+  }
+  return result;
+}
+
+function sanitizeAuthTokens(raw: unknown): Record<string, StoredAuthToken> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+  const result: Record<string, StoredAuthToken> = {};
+  const now = Date.now();
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof key !== "string" || key.length === 0) continue;
+    // старый формат: строка userId
+    if (typeof value === "string" && value.length > 0) {
+      result[key] = { userId: value, createdAt: now, lastUsedAt: now };
+      continue;
+    }
+    // новый формат: объект
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const v = value as Record<string, unknown>;
+      if (typeof v.userId === "string" && v.userId.length > 0) {
+        result[key] = {
+          userId: v.userId,
+          createdAt: typeof v.createdAt === "number" ? v.createdAt : now,
+          lastUsedAt: typeof v.lastUsedAt === "number" ? v.lastUsedAt : now,
+          userAgent: typeof v.userAgent === "string" ? v.userAgent : undefined,
+          ip: typeof v.ip === "string" ? v.ip : undefined,
+        };
+      }
+    }
+  }
+  return result;
+}
+
+function sanitizePendingLogins(raw: unknown): Record<string, StoredPendingLogin> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const result: Record<string, StoredPendingLogin> = {};
+  const now = Date.now();
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof key !== "string" || key.length === 0) continue;
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const v = value as Record<string, unknown>;
+    if (
+      typeof v.id === "string" &&
+      typeof v.userId === "string" &&
+      typeof v.code === "string" &&
+      typeof v.expiresAt === "number" &&
+      v.expiresAt > now // drop expired entries on load
+    ) {
+      result[key] = {
+        id: v.id,
+        userId: v.userId,
+        code: v.code,
+        expiresAt: v.expiresAt,
+        userAgent: typeof v.userAgent === "string" ? v.userAgent : undefined,
+        ip: typeof v.ip === "string" ? v.ip : undefined,
+      };
+    }
+  }
+  return result;
 }
 
 async function ensureDatabaseStore(): Promise<void> {

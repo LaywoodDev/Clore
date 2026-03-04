@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { resolveUserIdFromRequestOrQuery } from "@/lib/server/auth";
 import {
   getCurrentStoreRevision,
   subscribeToStoreUpdates,
+  subscribeToUserEvents,
 } from "@/lib/server/realtime";
 import { getStore, getStoreUpdateMarker } from "@/lib/server/store";
 
@@ -18,11 +20,10 @@ function toSseChunk(event: string, payload: unknown): string {
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId")?.trim() ?? "";
+  const userId = await resolveUserIdFromRequestOrQuery(request);
 
   if (!userId) {
-    return NextResponse.json({ error: "Missing userId." }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   const store = await getStore();
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
 
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
+  let unsubscribeUser: (() => void) | null = null;
   let heartbeatId: ReturnType<typeof setInterval> | null = null;
   let markerPollId: ReturnType<typeof setInterval> | null = null;
   let streamClosed = false;
@@ -56,6 +58,10 @@ export async function GET(request: Request) {
 
       unsubscribe = subscribeToStoreUpdates((event) => {
         send("store-update", event);
+      });
+
+      unsubscribeUser = subscribeToUserEvents(userId, (event) => {
+        send(event.type, event);
       });
 
       heartbeatId = setInterval(() => {
@@ -105,6 +111,7 @@ export async function GET(request: Request) {
         clearInterval(markerPollId);
       }
       unsubscribe?.();
+      unsubscribeUser?.();
     },
   });
 

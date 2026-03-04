@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import { assertUserCanReadMessenger } from "@/lib/server/admin";
 import {
@@ -21,7 +22,11 @@ const MAX_DETAILS_LENGTH = 600;
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as ReportPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const chatId = body?.chatId?.trim() ?? "";
   const messageId = body?.messageId?.trim() ?? "";
   const reason = body?.reason?.trim() ?? "";

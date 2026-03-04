@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import { canRemoveGroupMember, updateStore } from "@/lib/server/store";
 
@@ -10,7 +11,11 @@ type RemoveMemberPayload = {
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as RemoveMemberPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const chatId = body?.chatId?.trim() ?? "";
   const memberId = body?.memberId?.trim() ?? "";
 

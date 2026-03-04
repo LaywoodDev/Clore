@@ -40,3 +40,38 @@ export function publishStoreUpdate(): void {
     }
   }
 }
+
+// --- User-specific events ---
+
+export type UserEventPayload = {
+  type: string;
+  [key: string]: unknown;
+};
+
+type UserEventListener = (payload: UserEventPayload) => void;
+
+let userListenerIdCounter = 0;
+const userListeners = new Map<number, { userId: string; listener: UserEventListener }>();
+
+export function subscribeToUserEvents(
+  userId: string,
+  listener: UserEventListener
+): () => void {
+  userListenerIdCounter += 1;
+  const id = userListenerIdCounter;
+  userListeners.set(id, { userId, listener });
+  return () => {
+    userListeners.delete(id);
+  };
+}
+
+export function publishUserEvent(userId: string, payload: UserEventPayload): void {
+  for (const { userId: uid, listener } of userListeners.values()) {
+    if (uid !== userId) continue;
+    try {
+      listener(payload);
+    } catch {
+      // ignore
+    }
+  }
+}

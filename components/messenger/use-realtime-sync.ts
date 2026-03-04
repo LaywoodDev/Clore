@@ -9,14 +9,19 @@ export type RealtimeStatus = "connected" | "reconnecting" | "fallback";
 
 type UseRealtimeSyncOptions = {
   userId: string;
+  token: string;
   onSync: () => void;
+  onEvent?: (eventName: string, data: unknown) => void;
 };
 
 export function useRealtimeSync({
   userId,
+  token,
   onSync,
+  onEvent,
 }: UseRealtimeSyncOptions): RealtimeStatus {
   const onSyncRef = useRef(onSync);
+  const onEventRef = useRef(onEvent);
   const lastSyncAtRef = useRef(0);
   const scheduledSyncIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectErrorsRef = useRef(0);
@@ -33,7 +38,11 @@ export function useRealtimeSync({
   }, [onSync]);
 
   useEffect(() => {
-    if (!userId) {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    if (!userId || !token) {
       return;
     }
 
@@ -75,13 +84,16 @@ export function useRealtimeSync({
       }, waitFor);
     };
 
+    // Custom named SSE events forwarded to onEvent
+    const CUSTOM_EVENTS = ["login_verification"];
+
     const connect = () => {
       if (isDisposed) {
         return;
       }
 
       eventSource = new EventSource(
-        `/api/messenger/events?userId=${encodeURIComponent(userId)}`
+        `/api/messenger/events?userId=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`
       );
       eventSource.addEventListener("store-update", triggerSync);
       eventSource.addEventListener("ready", () => {
@@ -89,6 +101,18 @@ export function useRealtimeSync({
         updateStatus("connected");
         triggerSync();
       });
+
+      for (const eventName of CUSTOM_EVENTS) {
+        eventSource.addEventListener(eventName, (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data) as unknown;
+            onEventRef.current?.(eventName, data);
+          } catch {
+            // ignore parse errors
+          }
+        });
+      }
+
       eventSource.onerror = () => {
         eventSource?.close();
         eventSource = null;
@@ -129,7 +153,7 @@ export function useRealtimeSync({
       clearInterval(fallbackId);
       eventSource?.close();
     };
-  }, [userId]);
+  }, [userId, token]);
 
   if (!userId || statusState.userId !== userId) {
     return "reconnecting";

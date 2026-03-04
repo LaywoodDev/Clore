@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import { canUserPostInThread, updateStore } from "@/lib/server/store";
 
@@ -12,7 +13,11 @@ const TYPING_UPDATE_THROTTLE_MS = 1_200;
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as TypingPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const chatId = body?.chatId?.trim() ?? "";
   const isTyping = body?.isTyping === true;
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import {
   getThreadInviteToken,
@@ -22,7 +23,11 @@ const INVITE_LINK_LIMIT_REACHED_MESSAGE = "Invite link has reached its usage lim
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as JoinGroupPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const username = normalizeGroupUsername(body?.username ?? "");
   const inviteToken = body?.inviteToken?.trim() ?? "";
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type SessionData = {
-  userId: string;
+  token: string;
 };
 
 type AuthMode = "login" | "register";
@@ -24,6 +24,7 @@ type LegacyStoredUser = {
 
 type AuthResponse = {
   user?: AuthUser;
+  token?: string;
   error?: string;
 };
 
@@ -50,7 +51,7 @@ function resolveAuthUiTheme(value: string | null): AuthUiTheme {
   return "light";
 }
 
-function readStoredSessionUserId(): string | null {
+function readStoredSessionToken(): string | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -62,12 +63,12 @@ function readStoredSessionUserId(): string | null {
     }
 
     const session = JSON.parse(sessionRaw) as SessionData;
-    if (!session || typeof session.userId !== "string" || !session.userId.trim()) {
+    if (!session || typeof session.token !== "string" || !session.token.trim()) {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
       return null;
     }
 
-    return session.userId;
+    return session.token;
   } catch {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
     return null;
@@ -275,62 +276,17 @@ function readLegacyUsers(): Array<Required<LegacyStoredUser>> {
   }
 }
 
-function writeLegacyUsers(users: Array<Required<LegacyStoredUser>>): void {
-  try {
-    window.localStorage.setItem(
-      LEGACY_USERS_STORAGE_KEY,
-      JSON.stringify(users.slice(0, 100))
-    );
-  } catch {
-    // Ignore localStorage errors.
-  }
-}
-
-function rememberLegacyUser(
-  user: Pick<AuthUser, "id" | "name" | "username" | "email">,
-  password: string
-): void {
-  const normalizedPassword = password.trim();
-  if (!normalizedPassword) {
-    return;
-  }
-
-  const nextEntry: Required<LegacyStoredUser> = {
-    id: user.id.trim(),
-    name: user.name.trim(),
-    username: normalizeUsername(user.username),
-    email: normalizeEmail(user.email),
-    password: normalizedPassword,
-  };
-  if (!nextEntry.name || !nextEntry.username) {
-    return;
-  }
-
-  const existing = readLegacyUsers();
-  const deduplicated = existing.filter((candidate) => {
-    if (nextEntry.id && candidate.id === nextEntry.id) {
-      return false;
-    }
-    if (candidate.username === nextEntry.username) {
-      return false;
-    }
-    if (nextEntry.email && candidate.email === nextEntry.email) {
-      return false;
-    }
-    return true;
-  });
-  writeLegacyUsers([nextEntry, ...deduplicated]);
-}
 
 async function parseAuthResponse(response: Response): Promise<AuthResponse> {
   return (await response.json().catch(() => null)) as AuthResponse;
 }
 
 export function AuthGate() {
-  const [storedSessionUserId] = useState<string | null>(() => readStoredSessionUserId());
+  const [storedSessionToken] = useState<string | null>(() => readStoredSessionToken());
   const [mode, setMode] = useState<AuthMode>("login");
-  const [loading, setLoading] = useState(() => storedSessionUserId !== null);
+  const [loading, setLoading] = useState(() => storedSessionToken !== null);
   const [submitting, setSubmitting] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(storedSessionToken);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState("");
   const [suspensionMessage, setSuspensionMessage] = useState("");
@@ -338,6 +294,8 @@ export function AuthGate() {
 
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
+  const [pendingLoginId, setPendingLoginId] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
 
   const loginIdentifier = loginForm.identifier.trim().toLowerCase();
   const loginPassword = loginForm.password;
@@ -406,11 +364,15 @@ export function AuthGate() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ users: legacyUsers }),
-    }).catch(() => undefined);
+    })
+      .catch(() => undefined)
+      .finally(() => {
+        window.localStorage.removeItem(LEGACY_USERS_STORAGE_KEY);
+      });
   }, []);
 
   useEffect(() => {
-    if (!storedSessionUserId) {
+    if (!storedSessionToken) {
       return;
     }
 
@@ -418,12 +380,12 @@ export function AuthGate() {
 
     const bootstrap = async () => {
       try {
-        const response = await fetch(
-          `/api/auth/user?userId=${encodeURIComponent(storedSessionUserId)}`,
-          {
-            cache: "no-store",
-          }
-        );
+        const response = await fetch("/api/auth/user", {
+          cache: "no-store",
+          headers: {
+            Authorization: `Bearer ${storedSessionToken}`,
+          },
+        });
         const payload = await parseAuthResponse(response);
         if (!response.ok || !payload.user) {
           const message = payload.error ?? "";
@@ -452,10 +414,10 @@ export function AuthGate() {
     return () => {
       cancelled = true;
     };
-  }, [storedSessionUserId]);
+  }, [storedSessionToken]);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || !authToken) {
       return;
     }
 
@@ -468,12 +430,12 @@ export function AuthGate() {
       }
       isRequestRunning = true;
       try {
-        const response = await fetch(
-          `/api/auth/user?userId=${encodeURIComponent(currentUser.id)}`,
-          {
-            cache: "no-store",
-          }
-        );
+        const response = await fetch("/api/auth/user", {
+          cache: "no-store",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
         const payload = await parseAuthResponse(response);
         const message = payload.error ?? "";
         if (response.ok && payload.user) {
@@ -503,7 +465,7 @@ export function AuthGate() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [currentUser]);
+  }, [currentUser, authToken]);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -526,23 +488,68 @@ export function AuthGate() {
         },
         body: JSON.stringify({ identifier, password }),
       });
-      const payload = await parseAuthResponse(response);
+      const payload = (await response.json().catch(() => null)) as
+        | (AuthResponse & { requiresVerification?: boolean; pendingId?: string })
+        | null;
+
+      if (!payload) {
+        setError("Unable to sign in.");
+        return;
+      }
+
+      if (payload.requiresVerification && payload.pendingId) {
+        setPendingLoginId(payload.pendingId);
+        setVerificationCode("");
+        setError("");
+        return;
+      }
 
       if (!response.ok || !payload.user) {
         setError(payload.error ?? "Unable to sign in.");
         return;
       }
 
+      const token = payload.token ?? "";
       window.localStorage.setItem(
         SESSION_STORAGE_KEY,
-        JSON.stringify({ userId: payload.user.id } satisfies SessionData)
+        JSON.stringify({ token } satisfies SessionData)
       );
-      rememberLegacyUser(payload.user, password);
+      setAuthToken(token);
       setSuspensionMessage("");
       setCurrentUser(payload.user);
       setLoginForm(emptyLoginForm);
     } catch {
       setError("Unable to sign in.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!pendingLoginId || !verificationCode.trim()) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/verify-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pendingId: pendingLoginId, code: verificationCode.trim() }),
+      });
+      const payload = await parseAuthResponse(response);
+      if (!response.ok || !payload.user) {
+        setError(payload.error ?? "Invalid code.");
+        return;
+      }
+      const token = payload.token ?? "";
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ token } satisfies SessionData));
+      setAuthToken(token);
+      setSuspensionMessage("");
+      setCurrentUser(payload.user);
+      setPendingLoginId(null);
+      setLoginForm(emptyLoginForm);
+    } catch {
+      setError("Unable to verify.");
     } finally {
       setSubmitting(false);
     }
@@ -604,12 +611,12 @@ export function AuthGate() {
         return;
       }
 
+      const token = payload.token ?? "";
       window.localStorage.setItem(
         SESSION_STORAGE_KEY,
-        JSON.stringify({ userId: payload.user.id } satisfies SessionData)
+        JSON.stringify({ token } satisfies SessionData)
       );
-      rememberLegacyUser(payload.user, password);
-
+      setAuthToken(token);
       setSuspensionMessage("");
       setCurrentUser(payload.user);
       setRegisterForm(emptyRegisterForm);
@@ -622,6 +629,7 @@ export function AuthGate() {
 
   const handleLogout = () => {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    setAuthToken(null);
     setCurrentUser(null);
     setMode("login");
     setError("");
@@ -654,6 +662,7 @@ export function AuthGate() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
         body: JSON.stringify({
           userId,
@@ -716,6 +725,7 @@ export function AuthGate() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
         body: JSON.stringify({
           userId,
@@ -734,7 +744,7 @@ export function AuthGate() {
   };
 
   if (loading) {
-    return storedSessionUserId ? <MessengerLoadingSkeleton /> : <AppLoadingSkeleton uiTheme={uiTheme} />;
+    return storedSessionToken ? <MessengerLoadingSkeleton /> : <AppLoadingSkeleton uiTheme={uiTheme} />;
   }
 
   if (currentUser) {
@@ -742,6 +752,7 @@ export function AuthGate() {
       <div className="relative h-[100dvh] min-h-[100dvh] w-full">
         <WebMessenger
           currentUser={currentUser}
+          token={authToken ?? ""}
           onLogout={handleLogout}
           onProfileUpdate={handleProfileUpdate}
           onPrivacyUpdate={handlePrivacyUpdate}
@@ -851,7 +862,42 @@ export function AuthGate() {
               </button>
             </div>
 
-            {mode === "login" ? (
+            {pendingLoginId ? (
+              <form className="space-y-4" onSubmit={handleVerifyLogin}>
+                <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+                  <p className="text-sm font-semibold text-yellow-300">
+                    {uiTheme === "light" ? "Подтверждение входа" : "Подтверждение входа"}
+                  </p>
+                  <p className="mt-1 text-xs text-yellow-200/70">
+                    Код отправлен в активную сессию. Введите его ниже.
+                  </p>
+                </div>
+                <Input
+                  autoFocus
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="Код подтверждения"
+                  maxLength={6}
+                  inputMode="numeric"
+                  className="h-12 text-center text-xl tracking-widest font-mono"
+                />
+                {error && <p className="text-sm text-red-500">{error}</p>}
+                <Button
+                  type="submit"
+                  disabled={submitting || verificationCode.trim().length < 6}
+                  className="w-full"
+                >
+                  {submitting ? "Проверка…" : "Подтвердить"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setPendingLoginId(null); setError(""); }}
+                  className="w-full text-sm text-zinc-500 hover:text-zinc-300"
+                >
+                  Назад
+                </button>
+              </form>
+            ) : mode === "login" ? (
               <form className="space-y-3" onSubmit={handleLogin}>
                 <Input
                   value={loginForm.identifier}

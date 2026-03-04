@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { requireAuth } from "@/lib/server/auth";
+import { checkRateLimit } from "@/lib/server/rate-limit";
 import { getAiProviderConfig } from "@/lib/server/ai-provider";
 import { assertUserCanSendMessages } from "@/lib/server/admin";
 import {
@@ -8,11 +10,14 @@ import {
   canUserMessagesBeForwardedBy,
   createEntityId,
   isBotUserId,
+  getStore,
   type StoredChatAttachment,
   type StoredChatMessage,
   updateStore,
 } from "@/lib/server/store";
 import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
+import { sendPushToUser } from "@/lib/server/push";
+import { fetchLinkPreview } from "@/lib/server/link-preview";
 
 type SendAttachmentPayload = {
   name?: string;
@@ -189,7 +194,17 @@ async function generateBotReply(
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as SendPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!checkRateLimit(userId, "send", 30, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many messages. Please slow down." },
+      { status: 429 }
+    );
+  }
   const chatId = body?.chatId?.trim() ?? "";
   const text = body?.text?.trim() ?? "";
   const replyToMessageId = body?.replyToMessageId?.trim() ?? "";
@@ -454,6 +469,53 @@ export async function POST(request: Request) {
           [botUserId]: now,
         };
       });
+    }
+
+    // Fire-and-forget push notifications to thread participants (skip favorites and scheduled)
+    if (chatId !== "__favorites__" && !isScheduledMessage) {
+      void (async () => {
+        try {
+          const store = await getStore();
+          const thread = store.threads.find((t) => t.id === chatId);
+          if (!thread) return;
+          const sender = store.users.find((u) => u.id === userId);
+          const senderName = sender?.name ?? "Someone";
+          const messageText = body?.text?.trim() ?? "";
+          const pushBody = messageText.slice(0, 180) || "📎 Attachment";
+          const recipients = thread.memberIds.filter(
+            (memberId) => memberId !== userId && !isBotUserId(memberId)
+          );
+          await Promise.allSettled(
+            recipients
+              .filter((memberId) => (store.pushSubscriptions?.[memberId]?.length ?? 0) > 0)
+              .map((memberId) =>
+                sendPushToUser(memberId, {
+                  title: senderName,
+                  body: pushBody,
+                  chatId,
+                })
+              )
+          );
+        } catch {
+          // push errors are non-critical
+        }
+      })();
+    }
+
+    // Fire-and-forget link preview fetch (skip scheduled, forwarded, or messages without text)
+    if (!isScheduledMessage && !isForwarded && text) {
+      void (async () => {
+        try {
+          const preview = await fetchLinkPreview(text);
+          if (!preview) return;
+          await updateStore<void>((store) => {
+            const msg = store.messages.find((m) => m.id === result.messageId);
+            if (msg) msg.linkPreview = preview;
+          });
+        } catch {
+          // non-critical
+        }
+      })();
     }
 
     return NextResponse.json({

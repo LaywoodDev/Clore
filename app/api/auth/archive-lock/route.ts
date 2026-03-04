@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import { updateStore } from "@/lib/server/store";
 
@@ -19,7 +20,11 @@ const MIN_ARCHIVE_PASSCODE_LENGTH = 4;
 
 export async function PATCH(request: Request) {
   const body = (await request.json().catch(() => null)) as ArchiveLockPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const enabled = body?.enabled === true;
   const passcode = body?.passcode ?? "";
   const currentPasscode = body?.currentPasscode ?? "";
@@ -81,7 +86,11 @@ export async function PATCH(request: Request) {
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as ArchiveUnlockPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const passcode = body?.passcode ?? "";
 
   if (!userId || !passcode) {

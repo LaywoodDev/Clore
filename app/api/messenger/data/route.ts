@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAuth } from "@/lib/server/auth";
 import { assertUserCanReadMessenger } from "@/lib/server/admin";
 import {
   BOT_USER_ID,
@@ -53,15 +54,15 @@ function canViewByVisibility(
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId")?.trim() ?? "";
+  const claimedUserId = searchParams.get("userId")?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const sinceRaw = searchParams.get("since")?.trim() ?? "";
   const since = Number.parseInt(sinceRaw, 10);
   const hasSince = Number.isFinite(since) && since > 0;
   const now = Date.now();
-
-  if (!userId) {
-    return NextResponse.json({ error: "Missing userId." }, { status: 400 });
-  }
 
   const store = await getStore();
   const requester = store.users.find((candidate) => candidate.id === userId);
@@ -219,10 +220,25 @@ export async function GET(request: Request) {
     })
     .sort((a, b) => a.createdAt - b.createdAt);
 
+  const polls = (store.polls ?? []).filter((poll) => threadIds.has(poll.chatId));
+
+  const TYPING_EXPIRY_MS = 6_000;
+  const typingCutoff = now - TYPING_EXPIRY_MS;
+  const threadsWithFreshTyping = threads.map((thread) => {
+    const freshTypingBy: Record<string, number> = {};
+    for (const [uid, typingAt] of Object.entries(thread.typingBy)) {
+      if (typingAt > typingCutoff) {
+        freshTypingBy[uid] = typingAt;
+      }
+    }
+    return { ...thread, typingBy: freshTypingBy };
+  });
+
   return NextResponse.json({
     users,
-    threads,
+    threads: threadsWithFreshTyping,
     messages,
+    polls,
     fullSync: !hasSince,
     serverTime: now,
   });

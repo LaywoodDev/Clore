@@ -15,7 +15,10 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  BarChart2,
   Bell,
+  FileText,
+  Image as ImageIcon,
   BellOff,
   Bookmark,
   Bold,
@@ -56,6 +59,10 @@ import {
   Volume2,
   VolumeX,
   X,
+  Menu,
+  LogOut,
+  FolderPlus,
+  Folder,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -75,6 +82,10 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
+  ContextMenuCheckboxItem,
 } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
@@ -108,8 +119,9 @@ import Dither from "@/components/ui/dither";
 import GradientBlinds from "@/components/ui/gradient-blinds";
 import PixelBlast from "@/components/ui/pixel-blast";
 import Plasma from "@/components/ui/plasma";
-import { requestJson } from "@/components/messenger/api";
+import { requestJson, setAuthToken } from "@/components/messenger/api";
 import { ModerationPanel } from "@/components/messenger/moderation-panel";
+import { AiCommandBar } from "@/components/ai-command-bar";
 import {
   type ModerationActionPayload,
   type ModerationPanelAuditLog,
@@ -403,6 +415,7 @@ type StoredChatMessage = {
   text: string;
   attachments: StoredChatAttachment[];
   replyToMessageId: string;
+  pollId?: string;
   createdAt: number;
   scheduledAt: number;
   editedAt: number;
@@ -410,6 +423,31 @@ type StoredChatMessage = {
   pinnedByUserId: string;
   savedBy: Record<string, number>;
   hiddenFor?: Record<string, number>;
+  linkPreview?: {
+    url: string;
+    title: string;
+    description: string;
+    imageUrl: string;
+    siteName: string;
+  };
+  isSending?: boolean;
+};
+
+type StoredPollOption = {
+  id: string;
+  text: string;
+};
+
+type StoredPoll = {
+  id: string;
+  messageId: string;
+  chatId: string;
+  authorId: string;
+  question: string;
+  options: StoredPollOption[];
+  votes: Record<string, string>;
+  isAnonymous: boolean;
+  createdAt: number;
 };
 
 type StoredChatAttachment = {
@@ -435,6 +473,25 @@ type PendingAttachment = {
   size: number;
   url: string;
   kind: "image" | "video" | "audio" | "file";
+};
+
+type RenderPollOption = {
+  id: string;
+  text: string;
+  voteCount: number;
+  voterLabels: string[];
+  hasMyVote: boolean;
+  percentage: number;
+};
+
+type RenderPoll = {
+  id: string;
+  question: string;
+  options: RenderPollOption[];
+  totalVotes: number;
+  myVotedOptionId: string | null;
+  isAnonymous: boolean;
+  authorId: string;
 };
 
 type RenderMessage = {
@@ -465,7 +522,18 @@ type RenderMessage = {
   sourceChatId: string | null;
   sourceChatName: string;
   isScheduledPending: boolean;
+  isSending: boolean;
+  poll: RenderPoll | null;
+  linkPreview?: {
+    url: string;
+    title: string;
+    description: string;
+    imageUrl: string;
+    siteName: string;
+  };
 };
+
+type ChatFolder = { id: string; name: string; chatIds: string[] };
 
 type ForwardMessageDraft = {
   id: string;
@@ -1606,6 +1674,7 @@ function extractAiSelectedUserQueries(value: string): string[] {
 
 type WebMessengerProps = {
   currentUser: AuthUser;
+  token: string;
   onLogout: () => void;
   onProfileUpdate?: (
     profile: Pick<
@@ -1796,6 +1865,7 @@ function resolveStoredUiAccent(value: string | null, legacyThemeValue?: string |
   return "violet";
 }
 
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
 const LANGUAGE_STORAGE_KEY = "clore_app_language_v1";
 const PUSH_NOTIFICATIONS_STORAGE_KEY = "clore_push_notifications_v1";
 const MESSAGE_SOUND_STORAGE_KEY = "clore_message_sound_v1";
@@ -1813,6 +1883,7 @@ const UI_ACCENT_VALUES = [
   "titanium",
 ] as const;
 const UI_DENSITY_STORAGE_KEY = "clore_ui_density_v1";
+const UI_SIDEBAR_STYLE_STORAGE_KEY = "clore_sidebar_style_v1";
 const UI_FONT_SIZE_STORAGE_KEY = "clore_ui_font_size_v1";
 const UI_RADIUS_STORAGE_KEY = "clore_ui_radius_v1";
 const UI_FONT_FAMILY_STORAGE_KEY = "clore_ui_font_family_v1";
@@ -2023,6 +2094,15 @@ const translations = {
     formatQuote: "Quote",
     formatList: "List",
     attachFiles: "Attach files",
+    photoOrVideo: "Photo or Video",
+    document: "Document",
+    createPoll: "Create poll",
+    pollQuestion: "Question",
+    pollOption: "Option",
+    addOption: "Add option",
+    anonymousPoll: "Anonymous poll",
+    pollVotes: "votes",
+    pollVoted: "Voted",
     voiceMessage: "Voice message",
     startVoiceRecording: "Start recording",
     stopVoiceRecording: "Stop recording",
@@ -2174,6 +2254,10 @@ const translations = {
     densityHint: "Controls spacing in lists and compactness",
     densityComfortable: "Comfortable",
     densityCompact: "Compact",
+    sidebarStyle: "Sidebar style",
+    sidebarStyleHint: "Choose how the navigation panel looks",
+    sidebarModern: "Modern (hamburger)",
+    sidebarClassic: "Classic (all buttons)",
     fontSize: "Font size",
     fontSizeHint: "Controls text size across chat interface",
     fontSizeSmall: "Small",
@@ -2428,6 +2512,15 @@ const translations = {
     formatQuote: "Цитата",
     formatList: "Список",
     attachFiles: "Прикрепить файлы",
+    photoOrVideo: "Фото или видео",
+    document: "Документ",
+    createPoll: "Создать опрос",
+    pollQuestion: "Вопрос",
+    pollOption: "Вариант",
+    addOption: "Добавить вариант",
+    anonymousPoll: "Анонимный опрос",
+    pollVotes: "голосов",
+    pollVoted: "Проголосовали",
     voiceMessage: "Голосовое сообщение",
     startVoiceRecording: "Начать запись",
     stopVoiceRecording: "Остановить запись",
@@ -2562,6 +2655,10 @@ const translations = {
     densityHint: "Управляет отступами и компактностью списков",
     densityComfortable: "Обычная",
     densityCompact: "Компактная",
+    sidebarStyle: "Стиль сайдбара",
+    sidebarStyleHint: "Выберите внешний вид боковой навигации",
+    sidebarModern: "Современный (три полоски)",
+    sidebarClassic: "Классический (все кнопки)",
     fontSize: "Размер шрифта",
     fontSizeHint: "Управляет размером текста в интерфейсе чата",
     fontSizeSmall: "Маленький",
@@ -2691,6 +2788,7 @@ type MessengerDataResponse = {
   users: AuthUser[];
   threads: StoredChatThread[];
   messages: StoredChatMessage[];
+  polls?: StoredPoll[];
   fullSync?: boolean;
   serverTime?: number;
 };
@@ -3295,7 +3393,7 @@ const URL_PATTERN = /https?:\/\/[^\s)]+/gi;
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|bmp|svg)(\?[^?\s]*)?$/i;
 const MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*]\((https?:\/\/[^\s)]+)\)/gi;
 const INLINE_LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/gi;
-const INLINE_STYLE_PATTERN = /(\*\*[^*\n]+?\*\*|\*[^*\n]+?\*|~~[^~\n]+?~~|`[^`\n]+?`)/g;
+const INLINE_STYLE_PATTERN = /(\*\*[^*\n]+?\*\*|\*[^*\n]+?\*|~~[^~\n]+?~~|`[^`\n]+?`|\|\|[^|\n]+?\|\|)/g;
 const ORDERED_FORMATTING_ACTIONS: TextFormattingAction[] = [
   "bold",
   "italic",
@@ -3601,6 +3699,27 @@ function renderTextWithMentions(
   return nodes;
 }
 
+function SpoilerText({ children }: { children: ReactNode }) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={() => !revealed && setRevealed(true)}
+      onKeyDown={(e) => { if (!revealed && (e.key === "Enter" || e.key === " ")) setRevealed(true); }}
+      title={revealed ? undefined : "Click to reveal"}
+      style={revealed ? undefined : { filter: "blur(5px)" }}
+      className={`inline-block rounded px-0.5 align-baseline transition-all duration-200 ${
+        revealed
+          ? "cursor-default bg-current/10"
+          : "cursor-pointer select-none bg-current/20"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
 function renderInlineStyledText(
   segment: string,
   keyPrefix: string,
@@ -3666,6 +3785,12 @@ function renderInlineStyledText(
         >
           {full.slice(1, -1)}
         </code>
+      );
+    } else if (full.startsWith("||") && full.endsWith("||")) {
+      nodes.push(
+        <SpoilerText key={tokenKey}>
+          {renderTextWithMentions(full.slice(2, -2), `${tokenKey}-spoiler`, onMentionClick)}
+        </SpoilerText>
       );
     } else {
       nodes.push(full);
@@ -4366,12 +4491,11 @@ function AudioAttachmentPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [waveformBars, setWaveformBars] = useState<number[]>([]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
+    if (!audio) return;
 
     const handleLoadedMetadata = () => {
       const value = Number.isFinite(audio.duration) ? audio.duration : 0;
@@ -4382,25 +4506,18 @@ function AudioAttachmentPlayer({
       setCurrentTime(Math.max(0, value));
     };
     const handlePlay = () => {
-      if (
-        activeAudioAttachmentElement &&
-        activeAudioAttachmentElement !== audio
-      ) {
+      if (activeAudioAttachmentElement && activeAudioAttachmentElement !== audio) {
         activeAudioAttachmentElement.pause();
       }
       activeAudioAttachmentElement = audio;
       setIsPlaying(true);
     };
     const handlePause = () => {
-      if (activeAudioAttachmentElement === audio) {
-        activeAudioAttachmentElement = null;
-      }
+      if (activeAudioAttachmentElement === audio) activeAudioAttachmentElement = null;
       setIsPlaying(false);
     };
     const handleEnded = () => {
-      if (activeAudioAttachmentElement === audio) {
-        activeAudioAttachmentElement = null;
-      }
+      if (activeAudioAttachmentElement === audio) activeAudioAttachmentElement = null;
       setIsPlaying(false);
       setCurrentTime(0);
     };
@@ -4424,28 +4541,62 @@ function AudioAttachmentPlayer({
     };
   }, []);
 
-  const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  // Decode audio and compute waveform bars
+  useEffect(() => {
+    if (!src) return;
+    let cancelled = false;
+    const compute = async () => {
+      try {
+        const response = await fetch(src);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioCtx = new AudioContext();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        await audioCtx.close();
+        if (cancelled) return;
+        const channel = decoded.getChannelData(0);
+        const N = 60;
+        const seg = Math.floor(channel.length / N);
+        const bars: number[] = [];
+        for (let i = 0; i < N; i++) {
+          let max = 0;
+          for (let j = 0; j < seg; j++) {
+            const abs = Math.abs(channel[i * seg + j] ?? 0);
+            if (abs > max) max = abs;
+          }
+          bars.push(max);
+        }
+        const peak = Math.max(...bars, 0.01);
+        setWaveformBars(bars.map((b) => b / peak));
+      } catch {
+        // Decode failed — fallback to plain progress bar (waveformBars stays empty)
+      }
+    };
+    void compute();
+    return () => { cancelled = true; };
+  }, [src]);
+
+  const progressFraction = duration > 0 ? Math.min(1, currentTime / duration) : 0;
+  const progressPercent = progressFraction * 100;
+
   const togglePlayback = () => {
     const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
+    if (!audio) return;
     if (audio.paused) {
-      if (
-        activeAudioAttachmentElement &&
-        activeAudioAttachmentElement !== audio
-      ) {
+      if (activeAudioAttachmentElement && activeAudioAttachmentElement !== audio) {
         activeAudioAttachmentElement.pause();
       }
-      void audio
-        .play()
-        .then(() => {
-          activeAudioAttachmentElement = audio;
-        })
-        .catch(() => undefined);
+      void audio.play().then(() => { activeAudioAttachmentElement = audio; }).catch(() => undefined);
       return;
     }
     audio.pause();
+  };
+
+  const handleWaveformClick = (event: React.MouseEvent<SVGSVGElement>) => {
+    const audio = audioRef.current;
+    if (!audio || duration <= 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    audio.currentTime = fraction * duration;
   };
 
   return (
@@ -4453,10 +4604,7 @@ function AudioAttachmentPlayer({
       className="w-[248px] max-w-full rounded-xl border border-zinc-600/70 bg-zinc-800/70 px-2.5 py-2"
       onContextMenu={
         disableDownload
-          ? (event) => {
-              event.preventDefault();
-              onBlockedAction?.();
-            }
+          ? (event) => { event.preventDefault(); onBlockedAction?.(); }
           : undefined
       }
     >
@@ -4471,13 +4619,47 @@ function AudioAttachmentPlayer({
           {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
         </button>
         <div className="min-w-0 flex-1">
-          <div className="h-1.5 overflow-hidden rounded-full bg-zinc-700">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-150"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <p className="mt-1 text-[11px] text-zinc-400">
+          {waveformBars.length > 0 ? (
+            <svg
+              width="100%"
+              height="32"
+              viewBox="0 0 120 32"
+              preserveAspectRatio="none"
+              onClick={handleWaveformClick}
+              className="cursor-pointer"
+            >
+              {waveformBars.map((amp, i) => {
+                const barW = 1.5;
+                const gap = 0.5;
+                const x = i * (barW + gap);
+                const minH = 2;
+                const maxH = 30;
+                const barH = minH + amp * (maxH - minH);
+                const y = (32 - barH) / 2;
+                const filled = i / waveformBars.length < progressFraction;
+                return (
+                  <rect
+                    key={i}
+                    x={x}
+                    y={y}
+                    width={barW}
+                    height={barH}
+                    rx={0.75}
+                    fill={filled ? "var(--color-primary)" : "currentColor"}
+                    opacity={filled ? 1 : 0.25}
+                  />
+                );
+              })}
+            </svg>
+          ) : (
+            <div className="h-1.5 overflow-hidden rounded-full bg-zinc-700">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-150"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          )}
+          <p className="mt-0.5 text-[11px] text-zinc-400">
             {`${formatCallDuration(Math.floor(currentTime))} / ${
               duration > 0 ? formatCallDuration(Math.floor(duration)) : "--:--"
             }`}
@@ -4539,8 +4721,10 @@ function createIdleArchivePullGestureState(): ArchivePullGestureState {
   };
 }
 
+
 export function WebMessenger({
   currentUser,
+  token,
   onLogout,
   onProfileUpdate,
   onPrivacyUpdate,
@@ -4562,6 +4746,8 @@ export function WebMessenger({
     new Map()
   );
   const emojiCloseTimerRef = useRef<number | null>(null);
+  const attachMenuCloseTimerRef = useRef<number | null>(null);
+  const chatMediaInputRef = useRef<HTMLInputElement | null>(null);
   const messageSoundRef = useRef<HTMLAudioElement | null>(null);
   const incomingCallRingtoneRef = useRef<HTMLAudioElement | null>(null);
   const sendMessageSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -4630,6 +4816,9 @@ export function WebMessenger({
   const voiceRecorderChunksRef = useRef<Blob[]>([]);
   const voiceRecorderDiscardRef = useRef(false);
   const voiceRecordingTimerRef = useRef<number | null>(null);
+  const voiceRecordingAnalyserRef = useRef<AnalyserNode | null>(null);
+  const voiceRecordingAnalyserCtxRef = useRef<AudioContext | null>(null);
+  const voiceRecordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const pendingMessageDeletionRef = useRef<
     Map<string, { timeoutId: number; message: StoredChatMessage; chatId: string }>
   >(new Map());
@@ -4706,6 +4895,7 @@ export function WebMessenger({
   });
   const [threads, setThreads] = useState<StoredChatThread[]>([]);
   const [messages, setMessages] = useState<StoredChatMessage[]>([]);
+  const [polls, setPolls] = useState<StoredPoll[]>([]);
   const [serverTimeMs, setServerTimeMs] = useState(() => Date.now());
   const [animatingMessageIds, setAnimatingMessageIds] = useState<Set<string>>(
     () => new Set()
@@ -4771,6 +4961,7 @@ export function WebMessenger({
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState("");
   const [isAiCallOpen, setIsAiCallOpen] = useState(false);
+  const [isAiCommandBarOpen, setIsAiCommandBarOpen] = useState(false);
   const [isAiVoiceListening, setIsAiVoiceListening] = useState(false);
   const [isAiVoiceSupported, setIsAiVoiceSupported] = useState(false);
   const [aiVoiceState, setAiVoiceState] = useState<AiVoiceState>("idle");
@@ -4782,6 +4973,21 @@ export function WebMessenger({
   });
   const [aiPendingSyncVersion, setAiPendingSyncVersion] = useState(0);
   const [query, setQuery] = useState("");
+  const [isNavDrawerOpen, setIsNavDrawerOpen] = useState(false);
+  const [chatFolders, setChatFolders] = useState<ChatFolder[]>(() => {
+    try { return JSON.parse(localStorage.getItem("clore_folders_v1") ?? "[]"); } catch { return []; }
+  });
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const folderTabsContainerRef = useRef<HTMLDivElement>(null);
+  const folderTabButtonRefs = useRef<Map<string | null, HTMLButtonElement>>(new Map());
+  const [folderTabIndicator, setFolderTabIndicator] = useState<{ left: number; width: number } | null>(null);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [isRenameFolderOpen, setIsRenameFolderOpen] = useState(false);
+  const [renameFolderDraft, setRenameFolderDraft] = useState("");
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
+  const [isDeleteFolderOpen, setIsDeleteFolderOpen] = useState(false);
   const [publicGroupSearchResults, setPublicGroupSearchResults] = useState<
     PublicGroupSearchResult[]
   >([]);
@@ -4820,6 +5026,8 @@ export function WebMessenger({
   const [isCreateThreadTypeMenuOpen, setIsCreateThreadTypeMenuOpen] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [draftsByChatId, setDraftsByChatId] = useState<Record<string, string>>(() => {
     if (typeof window === "undefined") {
       return {};
@@ -4879,6 +5087,10 @@ export function WebMessenger({
   );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [replyToMessageId, setReplyToMessageId] = useState<string | null>(null);
+  const [isPollDialogOpen, setIsPollDialogOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [pollIsAnonymous, setPollIsAnonymous] = useState(false);
   const [scheduledSendAt, setScheduledSendAt] = useState<number | null>(null);
   const [isSchedulePickerOpen, setIsSchedulePickerOpen] = useState(false);
   const [schedulePickerDate, setSchedulePickerDate] = useState<Date | undefined>(
@@ -4891,6 +5103,7 @@ export function WebMessenger({
     y: number;
   } | null>(null);
   const [isEmojiMenuOpen, setIsEmojiMenuOpen] = useState(false);
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isEmojiSidebarOpen, setIsEmojiSidebarOpen] = useState(false);
   const [activeEmojiCategory, setActiveEmojiCategory] = useState<EmojiCategoryId>(
     CHAT_EMOJI_CATEGORIES[0].id
@@ -4997,6 +5210,11 @@ export function WebMessenger({
     }
     const stored = window.localStorage.getItem(UI_DENSITY_STORAGE_KEY);
     return stored === "compact" ? "compact" : "comfortable";
+  });
+  const [sidebarStyle, setSidebarStyle] = useState<"modern" | "classic">(() => {
+    if (typeof window === "undefined") return "modern";
+    const stored = window.localStorage.getItem(UI_SIDEBAR_STYLE_STORAGE_KEY);
+    return stored === "classic" ? "classic" : "modern";
   });
   const [uiFontSize, setUiFontSize] = useState<UiFontSize>(() => {
     if (typeof window === "undefined") {
@@ -5208,6 +5426,54 @@ export function WebMessenger({
       ) !== "0"
     );
   });
+  type SessionInfo = {
+    token: string;
+    createdAt: number;
+    lastUsedAt: number;
+    userAgent: string | null;
+    ip: string | null;
+    isCurrent: boolean;
+  };
+  const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
+  const [isRevokingSession, setIsRevokingSession] = useState<string | null>(null);
+
+  const loadSessions = useCallback(async () => {
+    setIsSessionsLoading(true);
+    try {
+      const data = await requestJson<{ sessions: SessionInfo[] }>("/api/auth/sessions");
+      setSessions(data.sessions);
+    } finally {
+      setIsSessionsLoading(false);
+    }
+  }, []);
+
+  const revokeSession = useCallback(async (token: string) => {
+    setIsRevokingSession(token);
+    try {
+      await requestJson("/api/auth/sessions", {
+        method: "DELETE",
+        body: JSON.stringify({ token }),
+      });
+      setSessions((prev) => prev?.filter((s) => s.token !== token) ?? null);
+    } finally {
+      setIsRevokingSession(null);
+    }
+  }, []);
+
+  const revokeAllSessions = useCallback(async () => {
+    setIsRevokingSession("all");
+    try {
+      await requestJson("/api/auth/sessions", {
+        method: "DELETE",
+        body: JSON.stringify({ all: true }),
+      });
+      setSessions((prev) => prev?.filter((s) => s.isCurrent) ?? null);
+    } finally {
+      setIsRevokingSession(null);
+    }
+  }, []);
+
   const [archiveLockEnabled, setArchiveLockEnabled] = useState(
     currentUser.archiveLockEnabled === true
   );
@@ -5217,6 +5483,12 @@ export function WebMessenger({
   const [archiveLockPasscodeDraft, setArchiveLockPasscodeDraft] = useState("");
   const [archiveLockConfirmDraft, setArchiveLockConfirmDraft] = useState("");
   const [isSavingArchiveLock, setIsSavingArchiveLock] = useState(false);
+  const [loginVerificationAlert, setLoginVerificationAlert] = useState<{
+    code: string;
+    userAgent: string | null;
+    ip: string | null;
+    expiresAt: number;
+  } | null>(null);
   const [isArchiveUnlocked, setIsArchiveUnlocked] = useState(
     currentUser.archiveLockEnabled !== true
   );
@@ -5252,6 +5524,10 @@ export function WebMessenger({
       orderedSidebarItems.filter((item) => sidebarItemVisibility[item.id] !== false),
     [orderedSidebarItems, sidebarItemVisibility]
   );
+
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -5742,6 +6018,12 @@ export function WebMessenger({
   const openAiAssistantCall = useCallback(() => {
     setIsAiCallOpen(true);
   }, []);
+  const openAiCommandBar = useCallback(() => {
+    setIsAiCommandBarOpen(true);
+  }, []);
+  const closeAiCommandBar = useCallback(() => {
+    setIsAiCommandBarOpen(false);
+  }, []);
   const closeAiAssistantCall = useCallback(() => {
     stopAiVoiceCapture();
     stopAiScreenShare();
@@ -6163,15 +6445,7 @@ export function WebMessenger({
         );
 
         if (includesAiCommandAlias(normalizedPrompt, AI_PUSH_NOTIFICATIONS_ALIASES)) {
-          setPushNotificationsEnabled(booleanValue);
-          if (
-            booleanValue &&
-            typeof window !== "undefined" &&
-            "Notification" in window &&
-            window.Notification.permission === "default"
-          ) {
-            void window.Notification.requestPermission().catch(() => undefined);
-          }
+          handlePushNotificationsChange(booleanValue);
           updatedToggleLabels.push(
             language === "ru"
               ? "\u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f"
@@ -6510,15 +6784,7 @@ export function WebMessenger({
         );
 
         if (includesAiCommandAlias(normalizedPrompt, AI_PUSH_NOTIFICATIONS_ALIASES)) {
-          setPushNotificationsEnabled(booleanValue);
-          if (
-            booleanValue &&
-            typeof window !== "undefined" &&
-            "Notification" in window &&
-            window.Notification.permission === "default"
-          ) {
-            void window.Notification.requestPermission().catch(() => undefined);
-          }
+          handlePushNotificationsChange(booleanValue);
           updatedToggleLabels.push(
             language === "ru" ? "уведомления" : "push notifications"
           );
@@ -7673,6 +7939,24 @@ export function WebMessenger({
     }, 140);
   };
 
+  const openAttachMenu = () => {
+    if (attachMenuCloseTimerRef.current !== null) {
+      window.clearTimeout(attachMenuCloseTimerRef.current);
+      attachMenuCloseTimerRef.current = null;
+    }
+    setIsAttachMenuOpen(true);
+  };
+
+  const scheduleCloseAttachMenu = () => {
+    if (attachMenuCloseTimerRef.current !== null) {
+      window.clearTimeout(attachMenuCloseTimerRef.current);
+    }
+    attachMenuCloseTimerRef.current = window.setTimeout(() => {
+      setIsAttachMenuOpen(false);
+      attachMenuCloseTimerRef.current = null;
+    }, 150);
+  };
+
   const toggleEmojiSidebar = useCallback(() => {
     if (
       typeof window !== "undefined" &&
@@ -7808,6 +8092,32 @@ export function WebMessenger({
   }, [pushNotificationsEnabled]);
 
   useEffect(() => {
+    localStorage.setItem("clore_folders_v1", JSON.stringify(chatFolders));
+  }, [chatFolders]);
+
+  useEffect(() => {
+    const container = folderTabsContainerRef.current;
+    const button = folderTabButtonRefs.current.get(activeFolderId);
+    if (!container || !button) { setFolderTabIndicator(null); return; }
+    const containerRect = container.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    setFolderTabIndicator({
+      left: buttonRect.left - containerRect.left + container.scrollLeft,
+      width: buttonRect.width,
+    });
+  }, [activeFolderId, chatFolders]);
+
+  // Register the service worker once on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
+    navigator.serviceWorker
+      .register("/sw.js")
+      .catch((err) => console.error("[sw] Registration failed:", err));
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem(
       MESSAGE_SOUND_STORAGE_KEY,
       messageSoundEnabled ? "1" : "0"
@@ -7832,6 +8142,9 @@ export function WebMessenger({
   useEffect(() => {
     window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, uiDensity);
   }, [uiDensity]);
+  useEffect(() => {
+    window.localStorage.setItem(UI_SIDEBAR_STYLE_STORAGE_KEY, sidebarStyle);
+  }, [sidebarStyle]);
   useEffect(() => {
     window.localStorage.setItem(UI_FONT_SIZE_STORAGE_KEY, uiFontSize);
   }, [uiFontSize]);
@@ -7999,6 +8312,7 @@ export function WebMessenger({
       if (data.fullSync) {
         setThreads(data.threads);
         setMessages(data.messages);
+        setPolls(data.polls ?? []);
       } else {
         if (data.threads.length > 0) {
           setThreads((prev) => {
@@ -8018,9 +8332,29 @@ export function WebMessenger({
                 byId.delete(message.id);
                 continue;
               }
+              // Replace any temp sending message for the same chat+author with the real one
+              for (const [id, existing] of byId) {
+                if (
+                  existing.isSending &&
+                  existing.chatId === message.chatId &&
+                  existing.authorId === message.authorId
+                ) {
+                  byId.delete(id);
+                }
+              }
               byId.set(message.id, message);
             }
             return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
+          });
+        }
+
+        if (data.polls && data.polls.length > 0) {
+          setPolls((prev) => {
+            const byId = new Map(prev.map((poll) => [poll.id, poll]));
+            for (const poll of data.polls!) {
+              byId.set(poll.id, poll);
+            }
+            return [...byId.values()];
           });
         }
       }
@@ -8371,7 +8705,7 @@ export function WebMessenger({
   );
   const filteredChats = useMemo(() => {
     const normalized = normalizeSearchQuery(query);
-    const source =
+    const searched =
       normalized.raw.length === 0
         ? visibleChatItems
         : visibleChatItems.filter(
@@ -8380,13 +8714,20 @@ export function WebMessenger({
               chat.username.toLowerCase().includes(normalized.username)
           );
 
+    const source = activeFolderId
+      ? searched.filter((chat) => {
+          const folder = chatFolders.find((f) => f.id === activeFolderId);
+          return folder?.chatIds.includes(chat.id) ?? true;
+        })
+      : searched;
+
     return [...source].sort((a, b) => {
       if (a.isPinned !== b.isPinned) {
         return a.isPinned ? -1 : 1;
       }
       return b.updatedAt - a.updatedAt;
     });
-  }, [query, visibleChatItems]);
+  }, [query, visibleChatItems, activeFolderId, chatFolders]);
 
   useEffect(() => {
     if (!isArchiveVisible && isArchiveViewOpen) {
@@ -8511,6 +8852,18 @@ export function WebMessenger({
     chatItems.find((chat) => chat.id === activeChatId) ??
     filteredChats[0] ??
     null;
+
+  const mentionCandidates = useMemo(() => {
+    if (mentionQuery === null || !activeChat?.isGroup) return [];
+    const q = mentionQuery.toLowerCase();
+    return knownUsers
+      .filter((u) =>
+        u.id !== currentUser.id &&
+        activeChat.memberIds.includes(u.id) &&
+        (u.username.toLowerCase().startsWith(q) || u.name.toLowerCase().startsWith(q))
+      )
+      .slice(0, 6);
+  }, [mentionQuery, activeChat, knownUsers, currentUser.id]);
   const isActivePublicGroupPreview = Boolean(
     activeChat &&
       activeChat.isPreview &&
@@ -9825,9 +10178,16 @@ export function WebMessenger({
 
   useRealtimeSync({
     userId: currentUser.id,
+    token,
     onSync: () => {
       void loadChatData();
       void pollCallSignals();
+    },
+    onEvent: (eventName, data) => {
+      if (eventName === "login_verification") {
+        const d = data as { code: string; userAgent: string | null; ip: string | null; expiresAt: number };
+        setLoginVerificationAlert({ code: d.code, userAgent: d.userAgent, ip: d.ip, expiresAt: d.expiresAt });
+      }
     },
   });
 
@@ -9837,7 +10197,7 @@ export function WebMessenger({
     }
     const now = serverTimeMs > 0 ? serverTimeMs : Date.now();
     const isScheduledPendingForCurrentUser = (message: StoredChatMessage) =>
-      message.authorId === currentUser.id && message.createdAt > now;
+      !message.isSending && message.authorId === currentUser.id && message.createdAt > now;
     const usersById = new Map(knownUsers.map((user) => [user.id, user]));
     const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
     const resolveSourceChatName = (chatId: string) => {
@@ -9935,6 +10295,9 @@ export function WebMessenger({
             message.chatId === FAVORITES_CHAT_ID ? null : message.chatId,
           sourceChatName: resolveSourceChatName(message.chatId),
           isScheduledPending,
+          isSending: message.isSending ?? false,
+          poll: null,
+          linkPreview: message.linkPreview,
         };
       });
     }
@@ -9952,6 +10315,8 @@ export function WebMessenger({
       )
       .sort((a, b) => a.createdAt - b.createdAt);
     const messagesById = new Map(chatMessages.map((message) => [message.id, message]));
+
+    const pollsByMessageId = new Map(polls.map((poll) => [poll.messageId, poll]));
 
     return chatMessages.map<RenderMessage>((message) => {
       const isScheduledPending = isScheduledPendingForCurrentUser(message);
@@ -10033,12 +10398,49 @@ export function WebMessenger({
         sourceChatId: null,
         sourceChatName: "",
         isScheduledPending,
+        isSending: message.isSending ?? false,
+        linkPreview: message.linkPreview,
+        poll: (() => {
+          const storedPoll = pollsByMessageId.get(message.id);
+          if (!storedPoll) return null;
+          const totalVotes = Object.keys(storedPoll.votes).length;
+          return {
+            id: storedPoll.id,
+            question: storedPoll.question,
+            totalVotes,
+            myVotedOptionId: storedPoll.votes[currentUser.id] ?? null,
+            isAnonymous: storedPoll.isAnonymous,
+            authorId: storedPoll.authorId,
+            options: storedPoll.options.map((opt) => {
+              const voteCount = Object.values(storedPoll.votes).filter(
+                (v) => v === opt.id
+              ).length;
+              return {
+                id: opt.id,
+                text: opt.text,
+                voteCount,
+                voterLabels: storedPoll.isAnonymous
+                  ? []
+                  : Object.entries(storedPoll.votes)
+                      .filter(([, v]) => v === opt.id)
+                      .map(
+                        ([uid]) =>
+                          usersById.get(uid)?.name ?? t("unknownUser")
+                      ),
+                hasMyVote: storedPoll.votes[currentUser.id] === opt.id,
+                percentage:
+                  totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0,
+              };
+            }),
+          };
+        })(),
       };
     });
   }, [
     activeChat,
     clearedChatAtById,
     messages,
+    polls,
     currentUser.id,
     currentUser.username,
     currentUser.avatarUrl,
@@ -10834,15 +11236,66 @@ export function WebMessenger({
     };
   }, [sendTypingState]);
 
-  const handlePushNotificationsChange = useCallback((enabled: boolean) => {
-    setPushNotificationsEnabled(enabled);
-    if (!enabled || !("Notification" in window)) {
-      return;
-    }
-    if (window.Notification.permission === "default") {
-      void window.Notification.requestPermission().catch(() => undefined);
-    }
-  }, []);
+  const handlePushNotificationsChange = useCallback(
+    (enabled: boolean) => {
+      setPushNotificationsEnabled(enabled);
+
+      if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+        return;
+      }
+
+      if (!enabled) {
+        // Unsubscribe from push
+        void (async () => {
+          try {
+            const registration = await navigator.serviceWorker.ready;
+            const sub = await registration.pushManager.getSubscription();
+            if (sub) {
+              await sub.unsubscribe();
+              await requestJson<{ ok: boolean }>("/api/push/subscribe", {
+                method: "DELETE",
+                body: JSON.stringify({ userId: currentUser.id, endpoint: sub.endpoint }),
+              }).catch(() => undefined);
+            }
+          } catch {
+            // non-critical
+          }
+        })();
+        return;
+      }
+
+      // Enable: request permission → subscribe → save to server
+      void (async () => {
+        try {
+          const permission = await window.Notification.requestPermission().catch(
+            () => "denied" as NotificationPermission
+          );
+          if (permission !== "granted") {
+            return;
+          }
+
+          if (!VAPID_PUBLIC_KEY) {
+            return;
+          }
+
+          const registration = await navigator.serviceWorker.ready;
+          const sub = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: VAPID_PUBLIC_KEY,
+          });
+
+          const subJson = sub.toJSON();
+          await requestJson<{ ok: boolean }>("/api/push/subscribe", {
+            method: "POST",
+            body: JSON.stringify({ userId: currentUser.id, subscription: subJson }),
+          }).catch(() => undefined);
+        } catch {
+          // non-critical
+        }
+      })();
+    },
+    [currentUser.id]
+  );
 
   const copyToClipboard = useCallback(async (value: string) => {
     if (!value.trim()) {
@@ -11803,6 +12256,32 @@ export function WebMessenger({
     setIsArchiveViewOpen(false);
   }, []);
 
+  const createFolder = useCallback(() => {
+    if (!newFolderName.trim()) return;
+    setChatFolders((prev) => {
+      if (prev.length >= 10) return prev;
+      return [...prev, { id: Math.random().toString(36).slice(2), name: newFolderName.trim(), chatIds: [] }];
+    });
+    setIsCreateFolderOpen(false);
+  }, [newFolderName]);
+
+  const renameFolder = useCallback(() => {
+    if (!renameFolderDraft.trim() || !renamingFolderId) return;
+    setChatFolders((prev) =>
+      prev.map((f) => (f.id === renamingFolderId ? { ...f, name: renameFolderDraft.trim() } : f))
+    );
+    setIsRenameFolderOpen(false);
+    setRenamingFolderId(null);
+  }, [renameFolderDraft, renamingFolderId]);
+
+  const deleteFolder = useCallback(() => {
+    if (!deletingFolderId) return;
+    setChatFolders((prev) => prev.filter((f) => f.id !== deletingFolderId));
+    if (activeFolderId === deletingFolderId) setActiveFolderId(null);
+    setIsDeleteFolderOpen(false);
+    setDeletingFolderId(null);
+  }, [deletingFolderId, activeFolderId]);
+
   const setChatArchived = useCallback(
     async (chatId: string, archived: boolean) => {
       if (chatId === FAVORITES_CHAT_ID) {
@@ -12226,6 +12705,13 @@ export function WebMessenger({
       cleanup();
       voiceRecorderCleanupRef.current = null;
     }
+
+    const analyserCtx = voiceRecordingAnalyserCtxRef.current;
+    if (analyserCtx) {
+      void analyserCtx.close().catch(() => undefined);
+      voiceRecordingAnalyserCtxRef.current = null;
+    }
+    voiceRecordingAnalyserRef.current = null;
   }, []);
 
   const stopVoiceRecording = useCallback(
@@ -12298,6 +12784,20 @@ export function WebMessenger({
       voiceRecorderCleanupRef.current = preparedStream.cleanup;
       voiceRecorderChunksRef.current = [];
       voiceRecorderDiscardRef.current = false;
+
+      // Visualization analyser — connected to raw mic input (not processed stream)
+      try {
+        const vizCtx = new AudioContext();
+        const vizSource = vizCtx.createMediaStreamSource(inputStream);
+        const vizAnalyser = vizCtx.createAnalyser();
+        vizAnalyser.fftSize = 256;
+        vizAnalyser.smoothingTimeConstant = 0.5;
+        vizSource.connect(vizAnalyser);
+        voiceRecordingAnalyserRef.current = vizAnalyser;
+        voiceRecordingAnalyserCtxRef.current = vizCtx;
+      } catch {
+        // Non-critical — recording still works without visualization
+      }
 
       recorder.ondataavailable = (event: BlobEvent) => {
         if (event.data.size > 0) {
@@ -12406,6 +12906,58 @@ export function WebMessenger({
     }
     stopVoiceRecording({ discard: true });
   }, [activeSidebar, isVoiceRecording, stopVoiceRecording]);
+
+  // Live waveform canvas animation during recording
+  useEffect(() => {
+    if (!isVoiceRecording) return;
+    const canvas = voiceRecordingCanvasRef.current;
+    const analyser = voiceRecordingAnalyserRef.current;
+    if (!canvas || !analyser) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
+
+    const timeDomain = new Uint8Array(analyser.fftSize);
+    const history: number[] = [];
+    let rafId: number;
+
+    const draw = () => {
+      analyser.getByteTimeDomainData(timeDomain);
+      let sum = 0;
+      for (const v of timeDomain) {
+        const c = (v - 128) / 128;
+        sum += c * c;
+      }
+      const rms = Math.min(1, Math.sqrt(sum / timeDomain.length) * 5);
+      history.push(rms);
+      if (history.length > 40) history.shift();
+
+      ctx2d.clearRect(0, 0, W, H);
+      const barW = 2;
+      const gap = 1.5;
+      const step = barW + gap;
+      history.forEach((amp, i) => {
+        const x = i * step;
+        const barH = Math.max(2, amp * H);
+        const y = (H - barH) / 2;
+        const alpha = 0.45 + amp * 0.55;
+        ctx2d.fillStyle = `rgba(252,165,165,${alpha})`;
+        ctx2d.beginPath();
+        if (ctx2d.roundRect) {
+          ctx2d.roundRect(x, y, barW, barH, 1);
+        } else {
+          ctx2d.rect(x, y, barW, barH);
+        }
+        ctx2d.fill();
+      });
+
+      rafId = requestAnimationFrame(draw);
+    };
+    rafId = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafId);
+  }, [isVoiceRecording]);
 
   const insertEmojiToDraft = (emoji: string) => {
     setEmojiUsageCounts((prev) => {
@@ -12709,11 +13261,40 @@ export function WebMessenger({
     }
 
     setDraft("");
+    setMentionQuery(null);
     setPendingAttachments([]);
     setReplyToMessageId(null);
     setIsEmojiMenuOpen(false);
     if (!editingTarget) {
       setIsSchedulePickerOpen(false);
+    }
+
+    const tempMessageId = `__sending_${Date.now()}_${Math.random()}`;
+    if (!isScheduling) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: tempMessageId,
+          chatId: chatIdForSend,
+          authorId: currentUser.id,
+          text,
+          attachments: attachments.map((a) => ({
+            id: a.id,
+            name: a.name,
+            type: a.type,
+            size: a.size,
+            url: a.url,
+          })),
+          replyToMessageId: replyToId ?? "",
+          createdAt: Date.now(),
+          scheduledAt: 0,
+          editedAt: 0,
+          pinnedAt: 0,
+          pinnedByUserId: "",
+          savedBy: {},
+          isSending: true,
+        },
+      ]);
     }
 
     try {
@@ -12753,6 +13334,7 @@ export function WebMessenger({
         setScheduledSendAt(null);
       }
     } catch (error) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempMessageId));
       setDraft(text);
       setPendingAttachments(attachments);
       setReplyToMessageId(replyToId);
@@ -13933,10 +14515,10 @@ export function WebMessenger({
         !event.metaKey
       ) {
         event.preventDefault();
-        if (isAiCallOpen) {
-          closeAiAssistantCall();
+        if (isAiCommandBarOpen) {
+          closeAiCommandBar();
         } else {
-          openAiAssistantCall();
+          openAiCommandBar();
         }
         return;
       }
@@ -13972,7 +14554,7 @@ export function WebMessenger({
 
     window.addEventListener("keydown", handleHotkey);
     return () => window.removeEventListener("keydown", handleHotkey);
-  }, [closeAiAssistantCall, isAiCallOpen, openAiAssistantCall, openOwnProfile]);
+  }, [closeAiCommandBar, isAiCommandBarOpen, openAiCommandBar, openOwnProfile]);
 
   useEffect(() => {
     if (activeSidebar !== "home") {
@@ -14996,6 +15578,11 @@ export function WebMessenger({
     }
     return value;
   };
+  const getSidebarStyleLabel = (value: string) => {
+    if (value === "modern") return t("sidebarModern");
+    if (value === "classic") return t("sidebarClassic");
+    return value;
+  };
   const getFontSizeLabel = (value: string) => {
     if (value === "small") {
       return t("fontSizeSmall");
@@ -15106,6 +15693,17 @@ export function WebMessenger({
         }}
         className="hidden"
       />
+      <input
+        ref={chatMediaInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*"
+        onChange={(event) => {
+          void addChatAttachments(event.target.files);
+          event.target.value = "";
+        }}
+        className="hidden"
+      />
       <main
         className={`flex h-[100dvh] min-h-[100dvh] w-full overflow-hidden ${
           uiTheme === "light"
@@ -15127,26 +15725,67 @@ export function WebMessenger({
         >
           {isMainSidebarCollapsed ? null : (
             <aside className="hidden w-[82px] flex-col border-r border-zinc-800/90 bg-zinc-950/75 p-3 text-zinc-100 backdrop-blur-xl md:flex">
-              <nav className="flex flex-1 flex-col gap-2">
-                {renderableSidebarItems.map((item) => {
-                  const Icon = item.icon;
-                  const active = item.id === activeSidebar;
-
-                  return (
+              {sidebarStyle === "modern" ? (
+                /* Modern: hamburger + home */
+                <nav className="flex flex-1 flex-col gap-2">
+                  <SidebarJellyButton
+                    active={false}
+                    onActivate={() => setIsNavDrawerOpen(true)}
+                    ariaLabel={language === "ru" ? "Меню" : "Menu"}
+                    title={language === "ru" ? "Меню" : "Menu"}
+                  >
+                    <Menu className="size-4 shrink-0" />
+                  </SidebarJellyButton>
+                  <SidebarJellyButton
+                    active={activeSidebar === "home" && activeFolderId === null}
+                    onActivate={() => { setActiveSidebar("home"); setActiveFolderId(null); }}
+                    ariaLabel={language === "ru" ? "Все чаты" : "All chats"}
+                    title={language === "ru" ? "Все чаты" : "All chats"}
+                  >
+                    <Home className="size-4 shrink-0" />
+                  </SidebarJellyButton>
+                </nav>
+              ) : (
+                /* Classic: profile, home, assistant, settings */
+                <nav className="flex flex-1 flex-col gap-2">
+                  <SidebarJellyButton
+                    active={activeSidebar === "profile"}
+                    onActivate={() => setActiveSidebar("profile")}
+                    ariaLabel={language === "ru" ? "Мой профиль" : "My Profile"}
+                    title={language === "ru" ? "Мой профиль" : "My Profile"}
+                  >
+                    <ProfileSidebarIcon className="size-4 shrink-0" />
+                  </SidebarJellyButton>
+                  <SidebarJellyButton
+                    active={activeSidebar === "home" && activeFolderId === null}
+                    onActivate={() => { setActiveSidebar("home"); setActiveFolderId(null); }}
+                    ariaLabel={language === "ru" ? "Все чаты" : "All chats"}
+                    title={language === "ru" ? "Все чаты" : "All chats"}
+                  >
+                    <Home className="size-4 shrink-0" />
+                  </SidebarJellyButton>
+                  {AI_FEATURE_ENABLED && (
                     <SidebarJellyButton
-                      key={item.id}
-                      active={active}
-                      onActivate={() => activateSidebarItem(item.id)}
-                      ariaLabel={t(item.id)}
-                      title={t(item.id)}
+                      active={activeSidebar === "assistant"}
+                      onActivate={() => setActiveSidebar("assistant")}
+                      ariaLabel={language === "ru" ? "Ассистент" : "Assistant"}
+                      title={language === "ru" ? "Ассистент" : "Assistant"}
                     >
-                      <Icon className="size-4 shrink-0" />
+                      <AiSidebarIcon className="size-4 shrink-0" />
                     </SidebarJellyButton>
-                  );
-                })}
-              </nav>
-              {isAdminAccount ? (
-                <div className="pt-2">
+                  )}
+                  <SidebarJellyButton
+                    active={activeSidebar === "settings"}
+                    onActivate={() => setActiveSidebar("settings")}
+                    ariaLabel={language === "ru" ? "Настройки" : "Settings"}
+                    title={language === "ru" ? "Настройки" : "Settings"}
+                  >
+                    <SettingsSidebarIcon className="size-4 shrink-0" />
+                  </SidebarJellyButton>
+                </nav>
+              )}
+              <div className="flex flex-col gap-2 pt-2">
+                {isAdminAccount ? (
                   <SidebarJellyButton
                     active={false}
                     onActivate={openAdminDashboard}
@@ -15155,12 +15794,92 @@ export function WebMessenger({
                   >
                     <Shield className="size-4 shrink-0" />
                   </SidebarJellyButton>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </aside>
           )}
 
           <div className="flex min-h-0 min-w-0 flex-1">
+            {/* Nav Drawer overlay */}
+            {isNavDrawerOpen && (
+              <div
+                className="fixed inset-0 z-50 bg-black/60"
+                onClick={() => setIsNavDrawerOpen(false)}
+              />
+            )}
+            {/* Nav Drawer panel */}
+            <div
+              className={`fixed left-0 top-0 z-50 flex h-full w-72 flex-col bg-zinc-950 border-r border-zinc-800 shadow-2xl transition-transform duration-300 ease-out ${isNavDrawerOpen ? "translate-x-0" : "-translate-x-full"}`}
+            >
+              {/* User header */}
+              <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 p-6 pt-10">
+                <div className="mb-3">
+                  {currentUser.avatarUrl ? (
+                    <img
+                      src={currentUser.avatarUrl}
+                      className="size-16 rounded-full object-cover ring-2 ring-zinc-700"
+                      alt=""
+                    />
+                  ) : (
+                    <div className="size-16 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white font-bold text-2xl">
+                      {currentUser.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <p className="font-semibold text-zinc-100 text-base">{currentUser.name}</p>
+                <p className="text-sm text-zinc-400">@{currentUser.username}</p>
+              </div>
+              {/* Nav items */}
+              <nav className="flex-1 overflow-y-auto p-2">
+                {([
+                  {
+                    icon: <ProfileSidebarIcon className="size-5" />,
+                    label: language === "ru" ? "Мой профиль" : "My Profile",
+                    action: () => { setActiveSidebar("profile"); setIsNavDrawerOpen(false); },
+                  },
+                  ...(AI_FEATURE_ENABLED ? [{
+                    icon: <AiSidebarIcon className="size-5" />,
+                    label: language === "ru" ? "Ассистент" : "Assistant",
+                    action: () => { setActiveSidebar("assistant"); setIsNavDrawerOpen(false); },
+                  }] : []),
+                  {
+                    icon: <Bookmark className="size-5" />,
+                    label: language === "ru" ? "Избранное" : "Saved Messages",
+                    action: () => { openChat(FAVORITES_CHAT_ID); setIsNavDrawerOpen(false); },
+                  },
+                  {
+                    icon: <Archive className="size-5" />,
+                    label: language === "ru" ? "Архив" : "Archived",
+                    action: () => { openArchiveView(); setIsNavDrawerOpen(false); },
+                  },
+                  {
+                    icon: <SettingsSidebarIcon className="size-5" />,
+                    label: language === "ru" ? "Настройки" : "Settings",
+                    action: () => { setActiveSidebar("settings"); setIsNavDrawerOpen(false); },
+                  },
+                ] as { icon: ReactNode; label: string; action: () => void }[]).map(({ icon, label, action }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={action}
+                    className="flex w-full items-center gap-4 rounded-xl px-4 py-3 text-left text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                  >
+                    <span className="text-zinc-400">{icon}</span>
+                    <span className="text-sm font-medium">{label}</span>
+                  </button>
+                ))}
+                <div className="mx-3 my-1 border-t border-zinc-800" />
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="flex w-full items-center gap-4 rounded-xl px-4 py-3 text-left text-red-400 transition-colors hover:bg-zinc-800"
+                >
+                  <LogOut className="size-5" />
+                  <span className="text-sm font-medium">{language === "ru" ? "Выйти" : "Log out"}</span>
+                </button>
+              </nav>
+            </div>
+
             {activeSidebar === "home" ? (
               <>
                 <aside
@@ -15192,6 +15911,75 @@ export function WebMessenger({
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </div>
+              </div>
+              {/* Telegram-style folder tabs */}
+              <div ref={folderTabsContainerRef} className="relative flex items-stretch overflow-x-auto border-b border-zinc-800 pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <button
+                  type="button"
+                  ref={(el) => { if (el) folderTabButtonRefs.current.set(null, el); else folderTabButtonRefs.current.delete(null); }}
+                  onClick={() => setActiveFolderId(null)}
+                  className={`shrink-0 px-4 py-2.5 text-sm font-medium transition-colors ${
+                    activeFolderId === null ? "text-primary" : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {language === "ru" ? "Все" : "All"}
+                </button>
+                {chatFolders.map((folder) => (
+                  <ContextMenu key={folder.id}>
+                    <ContextMenuTrigger asChild>
+                      <button
+                        type="button"
+                        ref={(el) => { if (el) folderTabButtonRefs.current.set(folder.id, el); else folderTabButtonRefs.current.delete(folder.id); }}
+                        onClick={() => setActiveFolderId(folder.id)}
+                        className={`shrink-0 max-w-[130px] truncate px-4 py-2.5 text-sm font-medium transition-colors ${
+                          activeFolderId === folder.id ? "text-primary" : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        {folder.name}
+                      </button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className={chatActionMenuContentClassName}>
+                      <ContextMenuItem
+                        className={chatActionMenuItemClassName}
+                        onSelect={() => {
+                          setRenamingFolderId(folder.id);
+                          setRenameFolderDraft(folder.name);
+                          setIsRenameFolderOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                        {language === "ru" ? "Переименовать" : "Rename"}
+                      </ContextMenuItem>
+                      <ContextMenuSeparator className={chatActionMenuSeparatorClassName} />
+                      <ContextMenuItem
+                        className={`${chatActionMenuItemClassName} text-red-400 focus:text-red-400`}
+                        onSelect={() => {
+                          setDeletingFolderId(folder.id);
+                          setIsDeleteFolderOpen(true);
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                        {language === "ru" ? "Удалить папку" : "Delete folder"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                ))}
+                {chatFolders.length < 10 && (
+                  <button
+                    type="button"
+                    onClick={() => { setNewFolderName(""); setIsCreateFolderOpen(true); }}
+                    title={language === "ru" ? "Новая папка" : "New folder"}
+                    className="shrink-0 flex items-center px-3 py-2.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                )}
+                {folderTabIndicator && (
+                  <div
+                    className="pointer-events-none absolute bottom-0 h-0.5 rounded-t bg-primary transition-all duration-300 ease-in-out"
+                    style={{ left: folderTabIndicator.left, width: folderTabIndicator.width }}
+                  />
+                )}
               </div>
               <AlertDialog
                 open={isCreateThreadTypeMenuOpen}
@@ -15497,28 +16285,9 @@ export function WebMessenger({
                   uiDensity === "compact" ? "space-y-1 p-2" : "space-y-2 p-3"
                 }`}
               >
-                {!isArchiveViewOpen && isArchiveVisible ? (
+                {!isArchiveViewOpen && archivedChatItems.length > 0 && archivePullPreviewPx > 0 ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={openArchiveView}
-                      className="w-full rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-1.5 text-left text-zinc-300 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Archive className="size-3.5 shrink-0 text-zinc-500" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">
-                            {t("archivedChats")}
-                          </span>
-                          {archivedChatItems.length > 0 ? (
-                            <span className="mt-0.5 block truncate text-[11px] text-zinc-500 md:hidden">
-                              {t("archivedChatsHint")}
-                            </span>
-                          ) : null}
-                        </span>
-                      </div>
-                    </button>
-                    {archivedChatItems.length > 0 && archivePullPreviewPx > 0 ? (
+                    {true ? (
                       <div
                         className="flex items-end justify-center overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/10 px-3 text-center text-xs text-primary transition-[height] duration-150"
                         style={{ height: `${archivePullPreviewPx}px` }}
@@ -15715,6 +16484,39 @@ export function WebMessenger({
                               <Archive className="size-4" />
                               {chat.isArchived ? t("unarchiveChat") : t("archiveChat")}
                             </ContextMenuItem>
+                            {chatFolders.length > 0 && (
+                              <ContextMenuSub>
+                                <ContextMenuSubTrigger className={chatActionMenuItemClassName}>
+                                  <Folder className="size-4" />
+                                  {language === "ru" ? "Папки" : "Folders"}
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent className={chatActionMenuContentClassName}>
+                                  {chatFolders.map((folder) => (
+                                    <ContextMenuCheckboxItem
+                                      key={folder.id}
+                                      className={chatActionMenuItemClassName}
+                                      checked={folder.chatIds.includes(chat.id)}
+                                      onCheckedChange={(checked) =>
+                                        setChatFolders((prev) =>
+                                          prev.map((f) =>
+                                            f.id === folder.id
+                                              ? {
+                                                  ...f,
+                                                  chatIds: checked
+                                                    ? [...f.chatIds, chat.id]
+                                                    : f.chatIds.filter((id) => id !== chat.id),
+                                                }
+                                              : f
+                                          )
+                                        )
+                                      }
+                                    >
+                                      {folder.name}
+                                    </ContextMenuCheckboxItem>
+                                  ))}
+                                </ContextMenuSubContent>
+                              </ContextMenuSub>
+                            )}
                             <ContextMenuSeparator
                               className={chatActionMenuSeparatorClassName}
                             />
@@ -15932,8 +16734,14 @@ export function WebMessenger({
                             : "text-zinc-500"
                         }`}
                       >
-                        {activeChatTypingText ||
-                          (activeChat.isFavorites
+                        {activeChatTypingText ? (
+                          <span className="inline-flex items-center gap-[3px] leading-none" aria-label={activeChatTypingText}>
+                            <span className="clore-typing-dot" />
+                            <span className="clore-typing-dot" />
+                            <span className="clore-typing-dot" />
+                          </span>
+                        ) : (
+                          activeChat.isFavorites
                             ? t("savedMessages")
                             : activeChat.isGroup
                               ? activeChat.groupKind === "channel"
@@ -15942,7 +16750,8 @@ export function WebMessenger({
                                     activeChat.memberCount || activeChat.memberIds.length
                                   )} ${activeChatAudienceLabel}`
                                 : activeGroupStatusText
-                              : activeChatLastSeenText)}
+                              : activeChatLastSeenText
+                        )}
                       </p>
                       </span>
                     </div>
@@ -16229,60 +17038,66 @@ export function WebMessenger({
                       </div>
                     ) : null}
                     {activePinnedMessage ? (
-                      <div className="pointer-events-none absolute inset-x-4 top-3 z-20 sm:inset-x-6 sm:top-5">
-                        <div
-                          className={`flex ${
-                            uiPinnedMessageAlignment === "right"
-                              ? "justify-end"
-                              : uiPinnedMessageAlignment === "center"
-                                ? "justify-center"
-                                : "justify-start"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              focusReplyTargetMessage(activePinnedMessage.id);
-                              if (pinnedActiveMessages.length > 1) {
-                                setPinnedMessageCursor(
-                                  (prev) => (prev + 1) % pinnedActiveMessages.length
-                                );
-                              }
-                            }}
-                            className="pointer-events-auto flex w-full max-w-sm items-center gap-2 rounded-full border border-zinc-700/80 bg-zinc-950/85 px-3 py-2 text-left shadow-xl backdrop-blur-xl hover:border-zinc-600 hover:bg-zinc-900/90 sm:w-72"
-                          >
-                            <PinFilledIcon className="size-3.5 shrink-0 text-zinc-400" />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-medium text-zinc-200">
-                                {activePinnedMessage.text.trim() ||
-                                  (activePinnedMessage.attachments.length > 0
-                                    ? t("attachment")
-                                    : t("noMessagesYet"))}
-                              </p>
-                              {pinnedActiveMessages.length > 1 ? (
-                                <p className="mt-0.5 text-[11px] text-zinc-500">
-                                  {`${pinnedMessageCursor + 1}/${pinnedActiveMessages.length}`}
-                                </p>
-                              ) : null}
-                            </div>
-                            {pinnedActiveMessages.length > 1 ? (
-                              <ArrowRight className="size-3.5 shrink-0 text-zinc-500" />
-                            ) : null}
-                          </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          focusReplyTargetMessage(activePinnedMessage.id);
+                          if (pinnedActiveMessages.length > 1) {
+                            setPinnedMessageCursor(
+                              (prev) => (prev + 1) % pinnedActiveMessages.length
+                            );
+                          }
+                        }}
+                        className="flex w-full items-center gap-3 border-b border-zinc-800/80 bg-zinc-950/80 px-4 py-2 text-left backdrop-blur-sm transition-colors hover:bg-zinc-900/80"
+                      >
+                        <div className="h-7 w-[3px] shrink-0 rounded-full bg-primary" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold text-primary">
+                            {language === "ru" ? "Закреплено" : "Pinned message"}
+                            {pinnedActiveMessages.length > 1
+                              ? ` · ${pinnedMessageCursor + 1}/${pinnedActiveMessages.length}`
+                              : ""}
+                          </p>
+                          <p className="truncate text-xs text-zinc-300">
+                            {activePinnedMessage.text.trim() ||
+                              (activePinnedMessage.attachments.length > 0
+                                ? t("attachment")
+                                : "...")}
+                          </p>
                         </div>
-                      </div>
+                        {pinnedActiveMessages.length > 1 ? (
+                          <ArrowRight className="size-3.5 shrink-0 text-zinc-500" />
+                        ) : null}
+                      </button>
                     ) : null}
                     <div
                       ref={activeMessagesScrollRef}
                       className={`relative z-10 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#52525b_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-500 sm:px-6 ${
                         uiDensity === "compact" ? "space-y-1.5 px-4 pb-3" : "space-y-2 px-4 pb-5"
-                      } ${activePinnedMessage ? "pt-16 sm:pt-20" : uiDensity === "compact" ? "pt-3" : "pt-5"}`}
+                      } ${uiDensity === "compact" ? "pt-3" : "pt-5"}`}
                     >
                     {filteredActiveMessages.length === 0 ? (
-                      <div className={`text-center text-sm text-zinc-500 ${uiDensity === "compact" ? "py-7" : "py-10"}`}>
-                        {activeChatSearchQuery.trim().length > 0
-                          ? t("noMessagesFound")
-                          : t("noMessagesYet")}
+                      <div className={`flex flex-col items-center justify-center gap-3 text-center ${uiDensity === "compact" ? "py-12" : "py-16"}`}>
+                        {activeChatSearchQuery.trim().length > 0 ? (
+                          <>
+                            <Search className="size-8 text-zinc-600" />
+                            <p className="text-sm text-zinc-500">{t("noMessagesFound")}</p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex size-14 items-center justify-center rounded-full bg-zinc-800/80">
+                              <MessageCircle className="size-6 text-zinc-500" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-zinc-400">
+                                {language === "ru" ? "Нет сообщений" : "No messages yet"}
+                              </p>
+                              <p className="mt-0.5 text-xs text-zinc-600">
+                                {language === "ru" ? "Напишите первым!" : "Be the first to say something!"}
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ) : null}
                     {filteredActiveMessages.map((message, messageIndex) => {
@@ -16298,6 +17113,13 @@ export function WebMessenger({
                       const isFirstMessageInAuthorSequence =
                         previousVisibleMessage === null ||
                         previousVisibleMessage.authorId !== message.authorId;
+                      const nextVisibleMessage =
+                        messageIndex < filteredActiveMessages.length - 1
+                          ? filteredActiveMessages[messageIndex + 1]
+                          : null;
+                      const isLastMessageInAuthorSequence =
+                        nextVisibleMessage === null ||
+                        nextVisibleMessage.authorId !== message.authorId;
                       const isGroupIncomingMessage =
                         activeChat.isGroup &&
                         !activeChat.isFavorites &&
@@ -16361,7 +17183,6 @@ export function WebMessenger({
                         hasForwardOrCopyMessageContextActions;
                       const hasActionsBeforeDeleteMessageContext =
                         hasActionsBeforeReportMessageContext ||
-                        canReportMessage ||
                         canPinMessage;
                       const viewsMenuLabel =
                         language === "ru"
@@ -16520,7 +17341,13 @@ export function WebMessenger({
                                     message.author === "me"
                                       ? "bg-primary text-zinc-50"
                                       : "border border-zinc-600 bg-zinc-700 text-zinc-100"
-                                  } ${isMessageContentProtected ? "select-none" : ""}`}
+                                  } ${isMessageContentProtected ? "select-none" : ""} ${
+                                    isLastMessageInAuthorSequence
+                                      ? message.author === "me"
+                                        ? "clore-bubble-tail-me !rounded-br-none"
+                                        : "clore-bubble-tail-other !rounded-bl-none"
+                                      : ""
+                                  }`}
                                 >
                                 {shouldShowIncomingAuthorIdentity &&
                                 isFirstMessageInAuthorSequence ? (
@@ -16576,6 +17403,78 @@ export function WebMessenger({
                                       </p>
                                     ) : null}
                                   </button>
+                                ) : null}
+                                {message.poll ? (
+                                  <div className="mt-1 min-w-[200px] space-y-1.5">
+                                    {message.poll.options.map((option) => {
+                                      const isSelected = option.hasMyVote;
+                                      const isVoted = message.poll!.myVotedOptionId !== null;
+                                      return (
+                                        <button
+                                          key={option.id}
+                                          type="button"
+                                          title={
+                                            !message.poll!.isAnonymous && option.voterLabels.length > 0
+                                              ? option.voterLabels.join(", ")
+                                              : undefined
+                                          }
+                                          onClick={async () => {
+                                            const newOptionId = isSelected ? null : option.id;
+                                            try {
+                                              await requestJson("/api/messenger/vote-poll", {
+                                                method: "POST",
+                                                body: JSON.stringify({
+                                                  userId: currentUser.id,
+                                                  pollId: message.poll!.id,
+                                                  optionId: newOptionId,
+                                                }),
+                                              });
+                                              await loadChatData({ forceFullSync: true });
+                                            } catch (error) {
+                                              showToast(getRequestErrorMessage(error));
+                                            }
+                                          }}
+                                          className={`relative w-full overflow-hidden rounded-lg border text-left text-sm transition-colors ${
+                                            isSelected
+                                              ? message.author === "me"
+                                                ? "border-white/40 bg-white/20"
+                                                : "border-primary/60 bg-primary/20"
+                                              : message.author === "me"
+                                                ? "border-white/20 bg-white/8 hover:bg-white/15"
+                                                : "border-zinc-600/50 bg-zinc-800/50 hover:bg-zinc-700/60"
+                                          }`}
+                                        >
+                                          {isVoted ? (
+                                            <div
+                                              className={`absolute inset-y-0 left-0 transition-all ${
+                                                isSelected
+                                                  ? message.author === "me"
+                                                    ? "bg-white/15"
+                                                    : "bg-primary/15"
+                                                  : message.author === "me"
+                                                    ? "bg-white/8"
+                                                    : "bg-zinc-700/40"
+                                              }`}
+                                              style={{ width: `${option.percentage}%` }}
+                                            />
+                                          ) : null}
+                                          <div className="relative flex items-center justify-between px-3 py-2">
+                                            <span className={`font-medium ${isSelected ? "" : "opacity-90"}`}>
+                                              {option.text}
+                                            </span>
+                                            {isVoted ? (
+                                              <span className="ml-2 shrink-0 text-xs opacity-70">
+                                                {option.percentage}%
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                    <p className={`pt-0.5 text-xs ${message.author === "me" ? "text-white/60" : "text-zinc-400"}`}>
+                                      {message.poll.totalVotes} {t("pollVotes")}
+                                    </p>
+                                  </div>
                                 ) : null}
                                 {mediaAttachments.length > 0 ? (
                                   <div
@@ -16680,6 +17579,33 @@ export function WebMessenger({
                                     )}
                                   </div>
                                 ) : null}
+                                {message.linkPreview && !isMessageContentProtected ? (
+                                  <a
+                                    href={message.linkPreview.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`mt-2 block overflow-hidden rounded-xl border text-left ${
+                                      message.author === "me"
+                                        ? "border-white/20 bg-white/10 hover:bg-white/15"
+                                        : "border-zinc-600/40 bg-zinc-800/60 hover:bg-zinc-800/80"
+                                    }`}
+                                  >
+                                    {message.linkPreview.imageUrl && (
+                                      <img
+                                        src={message.linkPreview.imageUrl}
+                                        className="h-36 w-full object-cover"
+                                        alt=""
+                                      />
+                                    )}
+                                    <div className="p-2.5 space-y-0.5">
+                                      <p className="text-[11px] opacity-50 truncate">{message.linkPreview.siteName}</p>
+                                      <p className="text-sm font-medium line-clamp-2">{message.linkPreview.title}</p>
+                                      {message.linkPreview.description && (
+                                        <p className="text-xs opacity-70 line-clamp-2">{message.linkPreview.description}</p>
+                                      )}
+                                    </div>
+                                  </a>
+                                ) : null}
                                 {audioAttachments.length > 0 ? (
                                   <div
                                     className={`space-y-2 ${
@@ -16783,7 +17709,9 @@ export function WebMessenger({
                                   {!activeChat.isFavorites &&
                                   message.author === "me" &&
                                   !message.isScheduledPending ? (
-                                    activeChat.isGroup ? (
+                                    message.isSending ? (
+                                      <Clock3 className="size-3 opacity-50" />
+                                    ) : activeChat.isGroup ? (
                                       message.groupReadByCount > 0 ? (
                                         <CheckCheck className="size-3 text-white/90" />
                                       ) : (
@@ -16885,25 +17813,9 @@ export function WebMessenger({
                                 {t("copyAttachmentLink")}
                               </ContextMenuItem>
                             ) : null}
-                            {canReportMessage ? (
-                              <>
-                                {hasActionsBeforeReportMessageContext ? (
-                                  <ContextMenuSeparator
-                                    className={chatActionMenuSeparatorClassName}
-                                  />
-                                ) : null}
-                                <ContextMenuItem
-                                  className={chatActionMenuItemClassName}
-                                  onSelect={() => void reportMessage(message)}
-                                >
-                                  <List className="size-4" />
-                                  {language === "ru" ? "Пожаловаться" : "Report message"}
-                                </ContextMenuItem>
-                              </>
-                            ) : null}
                             {canPinMessage ? (
                               <>
-                                {hasActionsBeforeReportMessageContext || canReportMessage ? (
+                                {hasActionsBeforeReportMessageContext ? (
                                   <ContextMenuSeparator
                                     className={chatActionMenuSeparatorClassName}
                                   />
@@ -17262,9 +18174,15 @@ export function WebMessenger({
                       ) : isVoiceRecording ? (
                         <div className="flex items-center justify-between gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">
                           <div className="flex min-w-0 items-center gap-2">
-                            <Mic className="size-4 shrink-0 text-red-300" />
-                            <p className="truncate text-xs font-medium text-red-100">
-                              {`${t("recordingVoice")} ${formatCallDuration(voiceRecordingSeconds)}`}
+                            <Mic className="size-4 shrink-0 text-red-400" />
+                            <canvas
+                              ref={voiceRecordingCanvasRef}
+                              width={120}
+                              height={28}
+                              className="shrink-0"
+                            />
+                            <p className="shrink-0 text-xs font-medium tabular-nums text-red-200">
+                              {formatCallDuration(voiceRecordingSeconds)}
                             </p>
                           </div>
                           <div className="flex items-center gap-1">
@@ -17283,20 +18201,71 @@ export function WebMessenger({
                         </div>
                       ) : (
                         <div ref={composerRef} className="relative flex items-stretch gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("attachFiles")}
-                            title={t("attachFiles")}
-                            disabled={Boolean(editingTargetMessage)}
-                            className={`shrink-0 self-end border border-zinc-600 bg-zinc-700 text-zinc-200 hover:border-primary hover:bg-zinc-600 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 ${
-                              uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
-                            }`}
-                            onClick={openAttachmentPicker}
+                          <DropdownMenu
+                            open={isAttachMenuOpen && !editingTargetMessage}
+                            onOpenChange={setIsAttachMenuOpen}
+                            modal={false}
                           >
-                            <Plus className="size-4" />
-                          </Button>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={t("attachFiles")}
+                                title={t("attachFiles")}
+                                disabled={Boolean(editingTargetMessage)}
+                                className={`shrink-0 self-end border border-zinc-600 bg-zinc-700 text-zinc-200 transition-colors hover:border-primary hover:bg-zinc-600 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:border-primary aria-expanded:bg-zinc-600 aria-expanded:text-primary ${
+                                  uiDensity === "compact" ? "h-9 w-9" : "h-11 w-11"
+                                }`}
+                                onMouseEnter={() => {
+                                  if (!editingTargetMessage) openAttachMenu();
+                                }}
+                                onMouseLeave={scheduleCloseAttachMenu}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  chatAttachmentInputRef.current?.click();
+                                }}
+                              >
+                                <Plus className={`size-4 transition-transform duration-200 ${isAttachMenuOpen && !editingTargetMessage ? "rotate-45" : ""}`} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              side="top"
+                              align="start"
+                              className={`${chatActionMenuContentClassName} !w-48`}
+                              onMouseEnter={openAttachMenu}
+                              onMouseLeave={scheduleCloseAttachMenu}
+                            >
+                              {activeChat && !activeChat.isFavorites ? (
+                                <DropdownMenuItem
+                                  className={chatActionMenuItemClassName}
+                                  onSelect={() => {
+                                    setPollQuestion("");
+                                    setPollOptions(["", ""]);
+                                    setPollIsAnonymous(false);
+                                    setIsPollDialogOpen(true);
+                                  }}
+                                >
+                                  <BarChart2 className="size-4" />
+                                  {t("createPoll")}
+                                </DropdownMenuItem>
+                              ) : null}
+                              <DropdownMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() => chatMediaInputRef.current?.click()}
+                              >
+                                <ImageIcon className="size-4" />
+                                {t("photoOrVideo")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className={chatActionMenuItemClassName}
+                                onSelect={() => chatAttachmentInputRef.current?.click()}
+                              >
+                                <FileText className="size-4" />
+                                {t("document")}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           <div className="relative min-w-0 flex-1">
                             <div
                               className={`absolute bottom-12 right-0 z-50 w-[min(360px,calc(100vw-3rem))] rounded-xl border border-zinc-800/90 bg-zinc-950/90 p-2 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl transition-all duration-150 ${
@@ -17322,14 +18291,87 @@ export function WebMessenger({
                                 </div>
                               </div>
                             </div>
+                            {mentionCandidates.length > 0 && mentionQuery !== null && (
+                              <div className="absolute bottom-full left-0 right-0 mb-1 z-50 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl">
+                                {mentionCandidates.map((candidate, idx) => (
+                                  <button
+                                    key={candidate.id}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      const cursor = messageInputRef.current?.selectionStart ?? draft.length;
+                                      const before = draft.slice(0, cursor).replace(/@(\w*)$/, `@${candidate.username} `);
+                                      const after = draft.slice(cursor);
+                                      setDraft(before + after);
+                                      setMentionQuery(null);
+                                      messageInputRef.current?.focus();
+                                    }}
+                                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                                      idx === mentionIndex ? "bg-zinc-700" : "hover:bg-zinc-800"
+                                    }`}
+                                  >
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-zinc-200">
+                                      {candidate.avatarUrl
+                                        ? <img src={candidate.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
+                                        : candidate.name.slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-medium text-zinc-100">{candidate.name}</p>
+                                      <p className="truncate text-xs text-zinc-500">@{candidate.username}</p>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                             <Textarea
                               ref={messageInputRef}
                               placeholder={t("typeMessage")}
                               value={draft}
-                              onChange={(event) => setDraft(event.target.value)}
+                              onChange={(event) => {
+                                const val = event.target.value;
+                                setDraft(val);
+                                // detect @mention at cursor
+                                const cursor = event.target.selectionStart ?? val.length;
+                                const textToCursor = val.slice(0, cursor);
+                                const match = textToCursor.match(/@(\w*)$/);
+                                if (match && activeChat?.isGroup) {
+                                  setMentionQuery(match[1]);
+                                  setMentionIndex(0);
+                                } else {
+                                  setMentionQuery(null);
+                                }
+                              }}
                               onContextMenu={openFormattingMenuFromContext}
                               onKeyDown={(event) => {
                                 setFormattingMenuPosition(null);
+                                if (mentionCandidates.length > 0 && mentionQuery !== null) {
+                                  if (event.key === "ArrowDown") {
+                                    event.preventDefault();
+                                    setMentionIndex((i) => (i + 1) % mentionCandidates.length);
+                                    return;
+                                  }
+                                  if (event.key === "ArrowUp") {
+                                    event.preventDefault();
+                                    setMentionIndex((i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length);
+                                    return;
+                                  }
+                                  if (event.key === "Enter" || event.key === "Tab") {
+                                    event.preventDefault();
+                                    const candidate = mentionCandidates[mentionIndex];
+                                    if (candidate) {
+                                      const cursor = messageInputRef.current?.selectionStart ?? draft.length;
+                                      const before = draft.slice(0, cursor).replace(/@(\w*)$/, `@${candidate.username} `);
+                                      const after = draft.slice(cursor);
+                                      setDraft(before + after);
+                                      setMentionQuery(null);
+                                    }
+                                    return;
+                                  }
+                                  if (event.key === "Escape") {
+                                    setMentionQuery(null);
+                                    return;
+                                  }
+                                }
                                 if (event.key === "Enter" && !event.shiftKey) {
                                   event.preventDefault();
                                   sendMessage();
@@ -19091,6 +20133,88 @@ export function WebMessenger({
                           )
                         ) : null}
                       </div>
+                      {/* Sessions management */}
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-zinc-100">
+                              {language === "ru" ? "Активные сессии" : "Active sessions"}
+                            </p>
+                            <p className="mt-0.5 text-xs text-zinc-500">
+                              {language === "ru" ? "Устройства, где вы вошли в аккаунт" : "Devices where you are signed in"}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={() => void loadSessions()}
+                            disabled={isSessionsLoading}
+                            className="h-8 shrink-0 rounded-md border border-zinc-600 bg-zinc-800 px-3 text-xs text-zinc-100 hover:bg-zinc-700 disabled:opacity-50"
+                          >
+                            {isSessionsLoading
+                              ? (language === "ru" ? "Загрузка..." : "Loading...")
+                              : (language === "ru" ? "Показать" : "Show")}
+                          </Button>
+                        </div>
+                        {sessions !== null && (
+                          <div className="mt-3 space-y-2">
+                            {sessions.map((session) => (
+                              <div
+                                key={session.token}
+                                className="flex items-start justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="truncate text-xs font-medium text-zinc-100">
+                                      {session.userAgent
+                                        ? session.userAgent.length > 60
+                                          ? session.userAgent.slice(0, 60) + "…"
+                                          : session.userAgent
+                                        : (language === "ru" ? "Неизвестное устройство" : "Unknown device")}
+                                    </p>
+                                    {session.isCurrent && (
+                                      <span className="shrink-0 rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                        {language === "ru" ? "текущая" : "current"}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] text-zinc-500">
+                                    {session.ip ? `${session.ip} · ` : ""}
+                                    {language === "ru" ? "активна" : "active"}{" "}
+                                    {new Date(session.lastUsedAt).toLocaleDateString(
+                                      language === "ru" ? "ru-RU" : "en-US",
+                                      { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }
+                                    )}
+                                  </p>
+                                </div>
+                                {!session.isCurrent && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void revokeSession(session.token)}
+                                    disabled={isRevokingSession === session.token}
+                                    className="shrink-0 rounded-md border border-zinc-600 bg-zinc-800 px-2 py-1 text-[11px] text-red-400 hover:bg-zinc-700 disabled:opacity-50"
+                                  >
+                                    {isRevokingSession === session.token
+                                      ? "…"
+                                      : (language === "ru" ? "Завершить" : "Revoke")}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            {sessions.filter((s) => !s.isCurrent).length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => void revokeAllSessions()}
+                                disabled={isRevokingSession === "all"}
+                                className="w-full rounded-md border border-red-800/50 bg-red-950/30 py-2 text-xs font-medium text-red-400 hover:bg-red-950/50 disabled:opacity-50"
+                              >
+                                {isRevokingSession === "all"
+                                  ? "…"
+                                  : (language === "ru" ? "Завершить все другие сессии" : "Revoke all other sessions")}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
                         <div className="space-y-3">
                           <div>
@@ -19331,6 +20455,36 @@ export function WebMessenger({
                                   </SelectItem>
                                   <SelectItem value="compact" className={unifiedSelectItemClassName}>
                                     {t("densityCompact")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-100">{t("sidebarStyle")}</p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{t("sidebarStyleHint")}</p>
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                              <Select
+                                value={sidebarStyle}
+                                onValueChange={(value) => {
+                                  if (value === "modern" || value === "classic") {
+                                    setSidebarStyle(value);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
+                                  <SelectValue className="text-zinc-100">
+                                    {(value) => getSidebarStyleLabel(value)}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className={unifiedSelectContentClassName}>
+                                  <SelectItem value="modern" className={unifiedSelectItemClassName}>
+                                    {t("sidebarModern")}
+                                  </SelectItem>
+                                  <SelectItem value="classic" className={unifiedSelectItemClassName}>
+                                    {t("sidebarClassic")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -19623,10 +20777,10 @@ export function WebMessenger({
       {shouldShowMobileNavigation ? (
         <nav
           aria-label={t("menu")}
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800/90 bg-zinc-950/90 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur-xl md:hidden"
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800/60 bg-zinc-950/95 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 backdrop-blur-xl md:hidden"
         >
           <div
-            className="grid gap-2"
+            className="grid"
             style={{
               gridTemplateColumns: `repeat(${Math.max(1, renderableSidebarItems.length)}, minmax(0, 1fr))`,
             }}
@@ -19647,14 +20801,14 @@ export function WebMessenger({
                     setIsActiveChatProfileSidebarOpen(false);
                     setActiveSidebar(item.id);
                   }}
-                  className={`flex h-12 flex-col items-center justify-center gap-1 rounded-lg border text-[11px] font-medium ${
-                    active
-                      ? "border-primary bg-primary text-zinc-50"
-                      : "border-zinc-700 bg-zinc-800 text-zinc-300"
+                  className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+                    active ? "text-primary" : "text-zinc-500"
                   }`}
                   aria-label={t(item.id)}
                 >
-                  <Icon className="size-4" />
+                  <div className={`flex items-center justify-center rounded-full px-4 py-1 transition-colors ${active ? "bg-primary/15" : ""}`}>
+                    <Icon className="size-5" />
+                  </div>
                   <span className="leading-none">{t(item.id)}</span>
                 </button>
               );
@@ -20989,6 +22143,115 @@ export function WebMessenger({
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog
+        open={isPollDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsPollDialogOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/90 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">{t("createPoll")}</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder={t("pollQuestion")}
+              value={pollQuestion}
+              onChange={(event) => setPollQuestion(event.target.value)}
+              maxLength={300}
+              className="h-10 rounded-lg border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400"
+            />
+            <div className="space-y-2">
+              {pollOptions.map((option, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    placeholder={`${t("pollOption")} ${index + 1}`}
+                    value={option}
+                    onChange={(event) => {
+                      const next = [...pollOptions];
+                      next[index] = event.target.value;
+                      setPollOptions(next);
+                    }}
+                    maxLength={100}
+                    className="h-9 rounded-lg border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-400"
+                  />
+                  {pollOptions.length > 2 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 text-zinc-400 hover:text-red-400"
+                      onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+              {pollOptions.length < 10 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-9 w-full rounded-lg border border-dashed border-zinc-600 text-sm text-zinc-400 hover:border-primary hover:text-primary"
+                  onClick={() => setPollOptions([...pollOptions, ""])}
+                >
+                  <Plus className="mr-2 size-4" />
+                  {t("addOption")}
+                </Button>
+              ) : null}
+            </div>
+            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={pollIsAnonymous}
+                onChange={(event) => setPollIsAnonymous(event.target.checked)}
+                className="h-4 w-4 rounded border-zinc-600 accent-primary"
+              />
+              <span className="text-sm text-zinc-300">{t("anonymousPoll")}</span>
+            </label>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="rounded-lg border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+              onClick={() => setIsPollDialogOpen(false)}
+            >
+              {t("cancel")}
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={
+                !pollQuestion.trim() ||
+                pollOptions.filter((o) => o.trim()).length < 2
+              }
+              className="rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={async () => {
+                if (!activeChatId) return;
+                const validOptions = pollOptions.filter((o) => o.trim());
+                try {
+                  await requestJson("/api/messenger/create-poll", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      userId: currentUser.id,
+                      chatId: activeChatId,
+                      question: pollQuestion.trim(),
+                      options: validOptions,
+                      isAnonymous: pollIsAnonymous,
+                    }),
+                  });
+                  setIsPollDialogOpen(false);
+                  await loadChatData({ forceFullSync: true });
+                } catch (error) {
+                  showToast(getRequestErrorMessage(error));
+                }
+              }}
+            >
+              {t("createPoll")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
         open={isArchiveUnlockDialogOpen}
         onOpenChange={(open) => {
           setIsArchiveUnlockDialogOpen(open);
@@ -21993,6 +23256,93 @@ export function WebMessenger({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Rename Folder Dialog */}
+      <AlertDialog open={isRenameFolderOpen} onOpenChange={setIsRenameFolderOpen}>
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {language === "ru" ? "Переименовать папку" : "Rename folder"}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <Input
+            autoFocus
+            placeholder={language === "ru" ? "Название папки" : "Folder name"}
+            value={renameFolderDraft}
+            onChange={(e) => setRenameFolderDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") renameFolder(); }}
+            className="border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              {language === "ru" ? "Отмена" : "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={renameFolder}
+              disabled={!renameFolderDraft.trim()}
+              className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:opacity-50"
+            >
+              {language === "ru" ? "Сохранить" : "Save"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Delete Folder Confirm Dialog */}
+      <AlertDialog open={isDeleteFolderOpen} onOpenChange={setIsDeleteFolderOpen}>
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {language === "ru" ? "Удалить папку?" : "Delete folder?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {language === "ru"
+                ? "Папка будет удалена. Чаты останутся в обычном списке."
+                : "The folder will be deleted. Chats will remain in the main list."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              {language === "ru" ? "Отмена" : "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteFolder}
+              className="h-10 rounded-lg bg-red-600 text-zinc-50 hover:bg-red-700"
+            >
+              {language === "ru" ? "Удалить" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Create Folder Dialog */}
+      <AlertDialog open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen}>
+        <AlertDialogContent className="border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">
+              {language === "ru" ? "Новая папка" : "New Folder"}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <Input
+            autoFocus
+            placeholder={language === "ru" ? "Название папки" : "Folder name"}
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") createFolder(); }}
+            className="border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-lg border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              {language === "ru" ? "Отмена" : "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={createFolder}
+              disabled={!newFolderName.trim()}
+              className="h-10 rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:opacity-50"
+            >
+              {language === "ru" ? "Создать" : "Create"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <style jsx global>{`
         html[data-clore-font-family="default"] body {
           font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -22081,6 +23431,64 @@ export function WebMessenger({
         html[data-clore-radius="rounded"] .rounded-2xl { border-radius: 1.4rem !important; }
         html[data-clore-radius="rounded"] .rounded-3xl { border-radius: 2rem !important; }
       `}</style>
+
+      {/* Login verification bottom sheet */}
+      {loginVerificationAlert && (
+        <div className="fixed inset-x-0 bottom-0 z-[200] flex justify-center px-4 pb-4 sm:justify-end sm:pb-6 sm:pr-6">
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl ring-1 ring-white/5">
+            <div className="bg-yellow-500/10 px-4 py-3 flex items-center gap-2 border-b border-zinc-700">
+              <div className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
+              <p className="text-sm font-semibold text-yellow-300">
+                {language === "ru" ? "Новый вход в аккаунт" : "New sign-in attempt"}
+              </p>
+              <button
+                type="button"
+                onClick={() => setLoginVerificationAlert(null)}
+                className="ml-auto text-zinc-500 hover:text-zinc-300"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              {loginVerificationAlert.userAgent && (
+                <p className="text-xs text-zinc-400 truncate">
+                  {loginVerificationAlert.userAgent}
+                </p>
+              )}
+              {loginVerificationAlert.ip && (
+                <p className="text-xs text-zinc-500">IP: {loginVerificationAlert.ip}</p>
+              )}
+              <p className="text-xs text-zinc-400">
+                {language === "ru"
+                  ? "Код действует 5 минут. Введите его на новом устройстве:"
+                  : "Code is valid for 5 minutes. Enter it on the new device:"}
+              </p>
+              <div className="flex items-center justify-center rounded-xl border border-zinc-700 bg-zinc-950 py-3">
+                <span className="font-mono text-3xl font-bold tracking-[0.3em] text-zinc-100">
+                  {loginVerificationAlert.code}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLoginVerificationAlert(null)}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 text-xs text-zinc-400 hover:bg-zinc-700"
+              >
+                {language === "ru" ? "Это не я — закрыть" : "Not me — dismiss"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Command Bar */}
+      {AI_FEATURE_ENABLED && (
+        <AiCommandBar
+          isOpen={isAiCommandBarOpen}
+          onClose={closeAiCommandBar}
+          userId={currentUser.id}
+          language={language}
+        />
+      )}
     </>
   );
 }

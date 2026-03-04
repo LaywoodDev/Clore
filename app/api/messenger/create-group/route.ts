@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import {
   canUserBeAddedToGroupBy,
@@ -59,7 +60,11 @@ function getValidationError(
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as CreateGroupPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const title = normalizeGroupTitle(body?.title ?? "");
   const kind: "group" | "channel" = body?.kind === "channel" ? "channel" : "group";
   const accessType: "private" | "public" =

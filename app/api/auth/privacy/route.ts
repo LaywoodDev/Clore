@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import { toPublicUser, type StoredUser, updateStore } from "@/lib/server/store";
 
@@ -24,7 +25,11 @@ type PrivacyPayload = {
 
 export async function PATCH(request: Request) {
   const body = (await request.json().catch(() => null)) as PrivacyPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const lastSeenVisibility = body?.lastSeenVisibility;
   const avatarVisibility = body?.avatarVisibility;
   const bioVisibility = body?.bioVisibility;

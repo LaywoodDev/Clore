@@ -2,15 +2,26 @@ type ApiErrorResponse = {
   error?: string;
 };
 
+let _authToken: string | null = null;
+
+export function setAuthToken(token: string): void {
+  _authToken = token;
+}
+
 export async function requestJson<T>(
   input: string,
   init?: RequestInit
 ): Promise<T> {
+  const authHeaders: Record<string, string> = _authToken
+    ? { Authorization: `Bearer ${_authToken}` }
+    : {};
+
   const response = await fetch(input, {
     cache: "no-store",
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...(init?.headers ?? {}),
     },
   });

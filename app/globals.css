@@ -812,3 +812,83 @@ html[data-clore-theme="light"] .clore-skeleton {
   }
 }
 
+/* Typing indicator dots */
+@keyframes clore-typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+.clore-typing-dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+  animation: clore-typing-dot 1.2s ease-in-out infinite;
+}
+.clore-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.clore-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .clore-typing-dot { animation: none; opacity: 0.6; }
+}
+
+/* Message bubble tails (Telegram-style) */
+:root {
+  --clore-bubble-incoming-bg: oklch(0.35 0.01 240); /* zinc-700 equivalent */
+}
+
+/*
+  Принцип работы:
+  - border-radius угла у хвостика = 0 (!important перебивает Tailwind)
+  - ::after треугольник через clip-path заходит на 2px внутрь пузыря
+    чтобы не было зазора при любом anti-aliasing
+*/
+.clore-bubble-tail-me {
+  position: relative;
+  border-bottom-right-radius: 0 !important;
+}
+
+.clore-bubble-tail-me::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: -7px; /* width 9px → левый край на 2px внутри пузыря */
+  width: 9px;
+  height: 11px;
+  background: var(--color-primary);
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+}
+
+.clore-bubble-tail-other {
+  position: relative;
+  border-bottom-left-radius: 0 !important;
+}
+
+/* border-слой хвостика входящих */
+.clore-bubble-tail-other::before {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: -9px;
+  width: 10px;
+  height: 12px;
+  background: oklch(0.46 0.01 240); /* zinc-600 */
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  z-index: 0;
+}
+
+/* основной цвет хвостика входящих */
+.clore-bubble-tail-other::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -7px; /* width 9px → правый край на 2px внутри пузыря */
+  width: 9px;
+  height: 11px;
+  background: var(--clore-bubble-incoming-bg);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  z-index: 1;
+}
+

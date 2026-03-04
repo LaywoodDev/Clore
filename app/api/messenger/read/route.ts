@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/auth";
 
 import { updateStore } from "@/lib/server/store";
 
@@ -9,7 +10,11 @@ type ReadPayload = {
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as ReadPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const chatId = body?.chatId?.trim() ?? "";
 
   if (!userId || !chatId) {

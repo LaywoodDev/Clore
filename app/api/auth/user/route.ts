@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { resolveUserIdFromRequest } from "@/lib/server/auth";
 import { assertUserCanReadMessenger } from "@/lib/server/admin";
 import { getStore, toPublicUser } from "@/lib/server/store";
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId")?.trim() ?? "";
+  const userId = await resolveUserIdFromRequest(request);
 
   if (!userId) {
-    return NextResponse.json({ error: "Missing userId." }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   const store = await getStore();

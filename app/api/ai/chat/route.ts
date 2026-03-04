@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAuth } from "@/lib/server/auth";
 import { assertUserCanSendMessages } from "@/lib/server/admin";
 import {
   buildModelCandidates,
@@ -23,6 +24,8 @@ import {
   updateStore,
 } from "@/lib/server/store";
 import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
+import { calculateUserStatistics, buildStatisticsReply } from "@/lib/ai-agent/commands/statistics";
+import { searchMessages, buildSearchReply, extractSearchIntent } from "@/lib/ai-agent/commands/search";
 
 type AiChatMessagePayload = {
   role?: string;
@@ -272,6 +275,66 @@ type PlannedSendIntentPayload = {
   when?: unknown;
 };
 
+type MuteIntent = { chatQuery: string; muted: boolean };
+
+type MuteActionOutcome = {
+  chatQuery: string;
+  status: "updated" | "not_found" | "ambiguous";
+  resolvedTitle?: string;
+  muted?: boolean;
+  alternatives?: string[];
+};
+
+type MuteActionSummary = {
+  outcomes: MuteActionOutcome[];
+  updatedChats: number;
+};
+
+type ArchiveIntent = { chatQuery: string; archived: boolean };
+
+type ArchiveActionOutcome = {
+  chatQuery: string;
+  status: "updated" | "not_found" | "ambiguous";
+  resolvedTitle?: string;
+  archived?: boolean;
+  alternatives?: string[];
+};
+
+type ArchiveActionSummary = {
+  outcomes: ArchiveActionOutcome[];
+  updatedChats: number;
+};
+
+type PinIntent = { chatQuery: string; pinned: boolean };
+
+type PinActionOutcome = {
+  chatQuery: string;
+  status: "updated" | "not_found" | "ambiguous" | "limit_reached";
+  resolvedTitle?: string;
+  pinned?: boolean;
+  alternatives?: string[];
+};
+
+type PinActionSummary = {
+  outcomes: PinActionOutcome[];
+  updatedChats: number;
+};
+
+type MultiActionItem =
+  | { type: "send"; recipientQuery: string; messageText: string; scheduledFor?: number }
+  | { type: "delete"; chatQuery: string }
+  | { type: "mute"; chatQuery: string; muted: boolean }
+  | { type: "archive"; chatQuery: string; archived: boolean }
+  | { type: "pin"; chatQuery: string; pinned: boolean }
+  | { type: "create_group"; title: string; memberQueries: string[] }
+  | { type: "invite"; groupQuery: string; memberQueries: string[] }
+  | { type: "remove"; groupQuery: string; memberQueries: string[] }
+  | { type: "rename_group"; groupQuery: string; title?: string; description?: string }
+  | { type: "set_role"; groupQuery: string; memberQueries: string[]; role: "admin" | "member" }
+  | { type: "mark_all_read" }
+  | { type: "stats" }
+  | { type: "search"; query: string };
+
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_LENGTH = 4000;
 const RESPONSE_TIMEOUT_MS = 12_000;
@@ -411,6 +474,41 @@ const LATEST_GROUP_QUERY_ALIASES = new Set(
 );
 const FAVORITES_RECIPIENT_PREFIX_REGEX =
   /^(?:(?:в|во|to|for|into)\s+)?((?:мо[её]\s+)?избран(?:ное|ном|ку)|(?:сохран[её]н(?:ное|ные))|saved(?:\s+messages)?|favorites?|my\s+favorites)(?:\s+(.+))?$/iu;
+const MUTE_COMMAND_START_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:заглуш(?:и|ите)|разглуш(?:и|ите)|включи\s+звук|выключи\s+звук|mute|unmute)(?=\s|$|[,.!?;:])/iu;
+const MUTE_COMMAND_PREFIX_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:заглуш(?:и|ите)|разглуш(?:и|ите)|включи\s+звук|выключи\s+звук|mute|unmute)\s+/iu;
+const ARCHIVE_COMMAND_START_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:заархивируй(?:те)?|разархивируй(?:те)?|archive|unarchive|перемести\s+в\s+архив|убери\s+из\s+архива)(?=\s|$|[,.!?;:])/iu;
+const ARCHIVE_COMMAND_PREFIX_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:заархивируй(?:те)?|разархивируй(?:те)?|archive|unarchive|перемести\s+в\s+архив|убери\s+из\s+архива)\s+/iu;
+const PIN_COMMAND_START_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:закреп(?:и|ите|ить)|открепи(?:те|ть)?|pin|unpin)(?=\s|$|[,.!?;:])/iu;
+const PIN_COMMAND_PREFIX_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:закреп(?:и|ите|ить)|открепи(?:те|ть)?|pin|unpin)\s+/iu;
+const MARK_ALL_READ_COMMAND_REGEX =
+  /(?:прочита(?:ть|й|йте)\s+вс[её]|отметить\s+вс[её]\s+прочитанными|отметь\s+вс[её]\s+прочитанными|mark\s+all\s+(?:as\s+)?read|mark\s+everything\s+(?:as\s+)?read)/iu;
+const STATS_COMMAND_REGEX =
+  /(?:моя\s+статистик|my\s+stats|покажи\s+(?:мою\s+)?статистик|show\s+(?:my\s+)?stats|show\s+(?:my\s+)?statistics|сколько\s+(?:у\s+меня\s+)?(?:сообщений|messages))/iu;
+const SEARCH_COMMAND_START_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)?(?:найд(?:и|ите|ти)|поищ(?:и|ите)|поиск|search|find)(?=\s|$|[,.!?;:])/iu;
+const SEARCH_COMMAND_PREFIX_REGEX =
+  /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:найд(?:и|ите|ти)|поищ(?:и|ите)|поиск|search|find)\s+(?:сообщени[яе]\s+)?/iu;
+const MAX_PINNED_CHATS_AGENT = 5;
+const MULTI_ACTION_COMMAND_SIGNALS: RegExp[] = [
+  /(?:отправ|напиш|передай|скажи|уведоми|send|write|tell|notify|ping|поздравь|congratulate)/iu,
+  /(?:удали|убери|сотри|очисти|delete|remove|erase|clear)\s+(?:чат|переписк|диалог|chat|conversation)/iu,
+  /(?:заглуш|разглуш|mute|unmute)/iu,
+  /(?:заархивируй|разархивируй|archive|unarchive)/iu,
+  /(?:закреп|открепи|pin|unpin)/iu,
+  /(?:(?:создай|сделай|собери)\s+(?:нов\w*\s+)?(?:групп|group))/iu,
+  /(?:пригласи|добавь|закинь|позови|invite)\s/iu,
+  /(?:кикни|исключи|выгони|kick|exclude)\s/iu,
+  /(?:переименуй|rename)\s/iu,
+  /(?:прочитать\s+вс|отметить\s+вс|mark\s+all\s+read)/iu,
+  /(?:моя\s+статистик|my\s+stats)/iu,
+  /(?:найди|поищи|search|find)\s/iu,
+];
 const WORKSPACE_QUERY_SPLIT_REGEX = /[,.!?;\n]+/u;
 const WORKSPACE_SHOW_SIGNAL_REGEX =
   /(?:^|\s)(?:show|list|display|\u043f\u043e\u043a\u0430\u0436(?:\u0438|\u0438\u0442\u0435)?|\u043f\u043e\u043a\u0430\u0437\u0430\u0442\u044c|\u0432\u044b\u0432\u0435\u0434(?:\u0438|\u0438\u0442\u0435)?|\u043f\u0435\u0440\u0435\u0447\u0438\u0441\u043b(?:\u0438|\u0438\u0442\u0435)?|\u0441\u043f\u0438\u0441\u043e\u043a|\u043a\u0430\u043a\u0438\u0435)(?=\s|$)/iu;
@@ -3147,6 +3245,364 @@ function formatWorkspaceThreadLabel(
   return formatAssistantGroupLabel(thread, language);
 }
 
+// ─── Multi-action detection ───────────────────────────────────────────────────
+
+function isLikelyMultiActionCommand(prompt: string): boolean {
+  let matched = 0;
+  for (const signal of MULTI_ACTION_COMMAND_SIGNALS) {
+    if (signal.test(prompt)) {
+      matched++;
+      if (matched >= 2) return true;
+    }
+  }
+  return false;
+}
+
+// ─── Mute / Unmute ───────────────────────────────────────────────────────────
+
+function isLikelyMuteCommandStart(value: string): boolean {
+  return MUTE_COMMAND_START_REGEX.test(value.trim());
+}
+
+function extractMuteIntents(input: string): MuteIntent[] {
+  const trimmed = input.trim();
+  if (!trimmed || !isLikelyMuteCommandStart(trimmed)) return [];
+  const muteVerbPattern =
+    /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:заглуш(?:и|ите)|выключи\s+звук|mute)/iu;
+  const muted = muteVerbPattern.test(trimmed);
+  const rest = trimmed.replace(MUTE_COMMAND_PREFIX_REGEX, "").trim();
+  if (!rest) return [];
+  return [{ chatQuery: rest, muted }];
+}
+
+async function executeMuteIntents(
+  userId: string,
+  intents: MuteIntent[]
+): Promise<MuteActionSummary> {
+  return updateStore<MuteActionSummary>((store) => {
+    const candidates = buildRecipientCandidates(store, userId);
+    const outcomes: MuteActionOutcome[] = [];
+    let updatedChats = 0;
+    for (const intent of intents) {
+      const resolution = resolveThreadForDelete(store, candidates, userId, intent.chatQuery);
+      if (resolution.status === "not_found") {
+        outcomes.push({ chatQuery: intent.chatQuery, status: "not_found" });
+      } else if (resolution.status === "ambiguous") {
+        outcomes.push({
+          chatQuery: intent.chatQuery,
+          status: "ambiguous",
+          alternatives: resolution.alternatives,
+        });
+      } else {
+        const thread = resolution.thread;
+        if (!thread.mutedBy) thread.mutedBy = {};
+        if (intent.muted) {
+          thread.mutedBy[userId] = true;
+        } else {
+          delete thread.mutedBy[userId];
+        }
+        outcomes.push({
+          chatQuery: intent.chatQuery,
+          status: "updated",
+          resolvedTitle: resolution.label,
+          muted: intent.muted,
+        });
+        updatedChats++;
+      }
+    }
+    return { outcomes, updatedChats };
+  });
+}
+
+function buildMuteActionReply(
+  language: "en" | "ru",
+  summary: MuteActionSummary
+): string {
+  const lines: string[] = [];
+  for (const item of summary.outcomes) {
+    if (item.status === "updated") {
+      const title = item.resolvedTitle || item.chatQuery;
+      if (language === "ru") {
+        lines.push(item.muted ? `🔕 Чат «${title}» заглушён.` : `🔔 Уведомления чата «${title}» включены.`);
+      } else {
+        lines.push(item.muted ? `🔕 Chat "${title}" muted.` : `🔔 Chat "${title}" unmuted.`);
+      }
+    } else if (item.status === "ambiguous") {
+      const variants = (item.alternatives ?? []).join(", ");
+      lines.push(
+        language === "ru"
+          ? variants
+            ? `Нужно уточнение для "${item.chatQuery}". Подходят: ${variants}.`
+            : `Нужно уточнение для "${item.chatQuery}".`
+          : variants
+            ? `Need clarification for "${item.chatQuery}". Matches: ${variants}.`
+            : `Need clarification for "${item.chatQuery}".`
+      );
+    } else {
+      lines.push(
+        language === "ru"
+          ? `Не нашел чат для: "${item.chatQuery}".`
+          : `Couldn't find a chat for: "${item.chatQuery}".`
+      );
+    }
+  }
+  if (lines.length === 0) {
+    return language === "ru"
+      ? "Не удалось изменить настройки уведомлений."
+      : "Couldn't update notification settings.";
+  }
+  return lines.join("\n");
+}
+
+// ─── Archive / Unarchive ─────────────────────────────────────────────────────
+
+function isLikelyArchiveCommandStart(value: string): boolean {
+  return ARCHIVE_COMMAND_START_REGEX.test(value.trim());
+}
+
+function extractArchiveIntents(input: string): ArchiveIntent[] {
+  const trimmed = input.trim();
+  if (!trimmed || !isLikelyArchiveCommandStart(trimmed)) return [];
+  const archiveVerbPattern =
+    /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:заархивируй(?:те)?|archive|перемести\s+в\s+архив)/iu;
+  const archived = archiveVerbPattern.test(trimmed);
+  const rest = trimmed.replace(ARCHIVE_COMMAND_PREFIX_REGEX, "").trim();
+  if (!rest) return [];
+  return [{ chatQuery: rest, archived }];
+}
+
+async function executeArchiveIntents(
+  userId: string,
+  intents: ArchiveIntent[]
+): Promise<ArchiveActionSummary> {
+  return updateStore<ArchiveActionSummary>((store) => {
+    const candidates = buildRecipientCandidates(store, userId);
+    const outcomes: ArchiveActionOutcome[] = [];
+    let updatedChats = 0;
+    for (const intent of intents) {
+      const resolution = resolveThreadForDelete(store, candidates, userId, intent.chatQuery);
+      if (resolution.status === "not_found") {
+        outcomes.push({ chatQuery: intent.chatQuery, status: "not_found" });
+      } else if (resolution.status === "ambiguous") {
+        outcomes.push({
+          chatQuery: intent.chatQuery,
+          status: "ambiguous",
+          alternatives: resolution.alternatives,
+        });
+      } else {
+        const thread = resolution.thread;
+        if (!thread.archivedBy) thread.archivedBy = {};
+        if (intent.archived) {
+          thread.archivedBy[userId] = true;
+        } else {
+          delete thread.archivedBy[userId];
+        }
+        outcomes.push({
+          chatQuery: intent.chatQuery,
+          status: "updated",
+          resolvedTitle: resolution.label,
+          archived: intent.archived,
+        });
+        updatedChats++;
+      }
+    }
+    return { outcomes, updatedChats };
+  });
+}
+
+function buildArchiveActionReply(
+  language: "en" | "ru",
+  summary: ArchiveActionSummary
+): string {
+  const lines: string[] = [];
+  for (const item of summary.outcomes) {
+    if (item.status === "updated") {
+      const title = item.resolvedTitle || item.chatQuery;
+      if (language === "ru") {
+        lines.push(item.archived ? `📦 Чат «${title}» архивирован.` : `📤 Чат «${title}» разархивирован.`);
+      } else {
+        lines.push(item.archived ? `📦 Chat "${title}" archived.` : `📤 Chat "${title}" unarchived.`);
+      }
+    } else if (item.status === "ambiguous") {
+      const variants = (item.alternatives ?? []).join(", ");
+      lines.push(
+        language === "ru"
+          ? variants
+            ? `Нужно уточнение для "${item.chatQuery}". Подходят: ${variants}.`
+            : `Нужно уточнение для "${item.chatQuery}".`
+          : variants
+            ? `Need clarification for "${item.chatQuery}". Matches: ${variants}.`
+            : `Need clarification for "${item.chatQuery}".`
+      );
+    } else {
+      lines.push(
+        language === "ru"
+          ? `Не нашел чат для: "${item.chatQuery}".`
+          : `Couldn't find a chat for: "${item.chatQuery}".`
+      );
+    }
+  }
+  if (lines.length === 0) {
+    return language === "ru" ? "Не удалось изменить архив." : "Couldn't update archive.";
+  }
+  return lines.join("\n");
+}
+
+// ─── Pin / Unpin ─────────────────────────────────────────────────────────────
+
+function isLikelyPinCommandStart(value: string): boolean {
+  return PIN_COMMAND_START_REGEX.test(value.trim());
+}
+
+function extractPinIntents(input: string): PinIntent[] {
+  const trimmed = input.trim();
+  if (!trimmed || !isLikelyPinCommandStart(trimmed)) return [];
+  const pinVerbPattern =
+    /^(?:please\s+|пожалуйста\s+|ну\s+)*(?:закреп(?:и|ите|ить)|pin)/iu;
+  const pinned = pinVerbPattern.test(trimmed);
+  const rest = trimmed.replace(PIN_COMMAND_PREFIX_REGEX, "").trim();
+  if (!rest) return [];
+  return [{ chatQuery: rest, pinned }];
+}
+
+async function executePinIntents(
+  userId: string,
+  intents: PinIntent[]
+): Promise<PinActionSummary> {
+  return updateStore<PinActionSummary>((store) => {
+    const candidates = buildRecipientCandidates(store, userId);
+    const outcomes: PinActionOutcome[] = [];
+    let updatedChats = 0;
+    for (const intent of intents) {
+      if (intent.pinned) {
+        const currentPinnedCount = store.threads.filter(
+          (t) => t.memberIds.includes(userId) && t.pinnedBy?.[userId] === true
+        ).length;
+        if (currentPinnedCount >= MAX_PINNED_CHATS_AGENT) {
+          outcomes.push({ chatQuery: intent.chatQuery, status: "limit_reached" });
+          continue;
+        }
+      }
+      const resolution = resolveThreadForDelete(store, candidates, userId, intent.chatQuery);
+      if (resolution.status === "not_found") {
+        outcomes.push({ chatQuery: intent.chatQuery, status: "not_found" });
+      } else if (resolution.status === "ambiguous") {
+        outcomes.push({
+          chatQuery: intent.chatQuery,
+          status: "ambiguous",
+          alternatives: resolution.alternatives,
+        });
+      } else {
+        const thread = resolution.thread;
+        if (!thread.pinnedBy) thread.pinnedBy = {};
+        if (intent.pinned) {
+          thread.pinnedBy[userId] = true;
+        } else {
+          delete thread.pinnedBy[userId];
+        }
+        outcomes.push({
+          chatQuery: intent.chatQuery,
+          status: "updated",
+          resolvedTitle: resolution.label,
+          pinned: intent.pinned,
+        });
+        updatedChats++;
+      }
+    }
+    return { outcomes, updatedChats };
+  });
+}
+
+function buildPinActionReply(
+  language: "en" | "ru",
+  summary: PinActionSummary
+): string {
+  const lines: string[] = [];
+  for (const item of summary.outcomes) {
+    if (item.status === "updated") {
+      const title = item.resolvedTitle || item.chatQuery;
+      if (language === "ru") {
+        lines.push(item.pinned ? `📌 Чат «${title}» закреплён.` : `Чат «${title}» откреплён.`);
+      } else {
+        lines.push(item.pinned ? `📌 Chat "${title}" pinned.` : `Chat "${title}" unpinned.`);
+      }
+    } else if (item.status === "limit_reached") {
+      lines.push(
+        language === "ru"
+          ? `Достигнут лимит закреплённых чатов (максимум ${MAX_PINNED_CHATS_AGENT}).`
+          : `Pinned chats limit reached (maximum ${MAX_PINNED_CHATS_AGENT}).`
+      );
+    } else if (item.status === "ambiguous") {
+      const variants = (item.alternatives ?? []).join(", ");
+      lines.push(
+        language === "ru"
+          ? variants
+            ? `Нужно уточнение для "${item.chatQuery}". Подходят: ${variants}.`
+            : `Нужно уточнение для "${item.chatQuery}".`
+          : variants
+            ? `Need clarification for "${item.chatQuery}". Matches: ${variants}.`
+            : `Need clarification for "${item.chatQuery}".`
+      );
+    } else {
+      lines.push(
+        language === "ru"
+          ? `Не нашел чат для: "${item.chatQuery}".`
+          : `Couldn't find a chat for: "${item.chatQuery}".`
+      );
+    }
+  }
+  if (lines.length === 0) {
+    return language === "ru" ? "Не удалось изменить закреплённые чаты." : "Couldn't update pinned chats.";
+  }
+  return lines.join("\n");
+}
+
+// ─── Mark All As Read ─────────────────────────────────────────────────────────
+
+function isMarkAllReadCommand(value: string): boolean {
+  return MARK_ALL_READ_COMMAND_REGEX.test(value);
+}
+
+async function executeMarkAllAsRead(userId: string): Promise<{ updatedChats: number }> {
+  return updateStore<{ updatedChats: number }>((store) => {
+    let updatedChats = 0;
+    for (const thread of store.threads) {
+      if (!thread.memberIds.includes(userId)) continue;
+      const lastRead = thread.readBy?.[userId] ?? 0;
+      if (thread.updatedAt > lastRead) {
+        if (!thread.readBy) thread.readBy = {};
+        thread.readBy[userId] = thread.updatedAt;
+        updatedChats++;
+      }
+    }
+    return { updatedChats };
+  });
+}
+
+function buildMarkAllReadReply(language: "en" | "ru", updatedChats: number): string {
+  if (language === "ru") {
+    return updatedChats > 0
+      ? `✅ Все чаты отмечены как прочитанные (${updatedChats}).`
+      : "Все чаты уже прочитаны.";
+  }
+  return updatedChats > 0
+    ? `✅ All chats marked as read (${updatedChats}).`
+    : "All chats are already read.";
+}
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+
+function isLikelySearchCommandStart(value: string): boolean {
+  return SEARCH_COMMAND_START_REGEX.test(value.trim());
+}
+
+function extractSearchQueryFromPrompt(input: string): string | null {
+  const cleaned = input.trim().replace(SEARCH_COMMAND_PREFIX_REGEX, "").trim();
+  return cleaned.length >= 2 ? cleaned : null;
+}
+
+// ─── Workspace query ─────────────────────────────────────────────────────────
+
 function buildWorkspaceQueryReply(
   store: StoreData,
   userId: string,
@@ -4635,6 +5091,313 @@ async function planSendIntentsWithAi(
   }
 
   return [];
+}
+
+// ─── Multi-action planner ─────────────────────────────────────────────────────
+
+function normalizeMultiActionPlan(raw: unknown, now: number): MultiActionItem[] {
+  if (!raw || typeof raw !== "object") return [];
+  const obj = raw as Record<string, unknown>;
+  if (!Array.isArray(obj.actions)) return [];
+
+  const items: MultiActionItem[] = [];
+  for (const item of obj.actions) {
+    if (!item || typeof item !== "object") continue;
+    const a = item as Record<string, unknown>;
+    const type = typeof a.type === "string" ? a.type.trim() : "";
+
+    if (type === "send") {
+      const recipientQuery = typeof a.recipientQuery === "string" ? a.recipientQuery.trim()
+        : typeof a.recipient === "string" ? a.recipient.trim()
+        : typeof a.to === "string" ? a.to.trim() : "";
+      const messageText = typeof a.messageText === "string" ? a.messageText.trim()
+        : typeof a.message === "string" ? a.message.trim()
+        : typeof a.text === "string" ? a.text.trim() : "";
+      if (!recipientQuery || !messageText) continue;
+      const rawScheduled = a.scheduledFor ?? a.scheduleFor ?? a.sendAt;
+      const scheduledFor = typeof rawScheduled === "number" && rawScheduled > now ? rawScheduled : undefined;
+      items.push({ type: "send", recipientQuery, messageText, scheduledFor });
+    } else if (type === "delete") {
+      const chatQuery = typeof a.chatQuery === "string" ? a.chatQuery.trim()
+        : typeof a.recipientQuery === "string" ? a.recipientQuery.trim() : "";
+      if (!chatQuery) continue;
+      items.push({ type: "delete", chatQuery });
+    } else if (type === "mute") {
+      const chatQuery = typeof a.chatQuery === "string" ? a.chatQuery.trim() : "";
+      if (!chatQuery) continue;
+      const muted = a.muted !== false;
+      items.push({ type: "mute", chatQuery, muted });
+    } else if (type === "archive") {
+      const chatQuery = typeof a.chatQuery === "string" ? a.chatQuery.trim() : "";
+      if (!chatQuery) continue;
+      const archived = a.archived !== false;
+      items.push({ type: "archive", chatQuery, archived });
+    } else if (type === "pin") {
+      const chatQuery = typeof a.chatQuery === "string" ? a.chatQuery.trim() : "";
+      if (!chatQuery) continue;
+      const pinned = a.pinned !== false;
+      items.push({ type: "pin", chatQuery, pinned });
+    } else if (type === "create_group") {
+      const title = typeof a.title === "string" ? a.title.trim() : "";
+      if (!title) continue;
+      const memberQueries = Array.isArray(a.memberQueries)
+        ? (a.memberQueries as unknown[]).filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+        : [];
+      items.push({ type: "create_group", title, memberQueries });
+    } else if (type === "invite") {
+      const groupQuery = typeof a.groupQuery === "string" ? a.groupQuery.trim() : "";
+      if (!groupQuery) continue;
+      const memberQueries = Array.isArray(a.memberQueries)
+        ? (a.memberQueries as unknown[]).filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+        : [];
+      if (memberQueries.length === 0) continue;
+      items.push({ type: "invite", groupQuery, memberQueries });
+    } else if (type === "remove") {
+      const groupQuery = typeof a.groupQuery === "string" ? a.groupQuery.trim() : "";
+      if (!groupQuery) continue;
+      const memberQueries = Array.isArray(a.memberQueries)
+        ? (a.memberQueries as unknown[]).filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+        : [];
+      if (memberQueries.length === 0) continue;
+      items.push({ type: "remove", groupQuery, memberQueries });
+    } else if (type === "rename_group") {
+      const groupQuery = typeof a.groupQuery === "string" ? a.groupQuery.trim() : "";
+      if (!groupQuery) continue;
+      const title = typeof a.title === "string" ? a.title.trim() : undefined;
+      const description = typeof a.description === "string" ? a.description.trim() : undefined;
+      if (!title && !description) continue;
+      items.push({ type: "rename_group", groupQuery, title, description });
+    } else if (type === "set_role") {
+      const groupQuery = typeof a.groupQuery === "string" ? a.groupQuery.trim() : "";
+      if (!groupQuery) continue;
+      const memberQueries = Array.isArray(a.memberQueries)
+        ? (a.memberQueries as unknown[]).filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+        : [];
+      if (memberQueries.length === 0) continue;
+      const role = a.role === "admin" ? "admin" : "member";
+      items.push({ type: "set_role", groupQuery, memberQueries, role });
+    } else if (type === "mark_all_read") {
+      items.push({ type: "mark_all_read" });
+    } else if (type === "stats") {
+      items.push({ type: "stats" });
+    } else if (type === "search") {
+      const query = typeof a.query === "string" ? a.query.trim() : "";
+      if (!query) continue;
+      items.push({ type: "search", query });
+    }
+
+    if (items.length >= MAX_AUTOMATION_TARGETS) break;
+  }
+  return items;
+}
+
+async function planMultiActionWithAi(
+  store: StoreData,
+  userId: string,
+  language: "en" | "ru",
+  userCommand: string,
+  recentUserMessages: string[]
+): Promise<MultiActionItem[]> {
+  const cleanedCommand = userCommand.trim().slice(0, MAX_MESSAGE_LENGTH);
+  if (!cleanedCommand) return [];
+
+  let providerConfig: ReturnType<typeof getAiProviderConfig> | null = null;
+  try {
+    providerConfig = getAiProviderConfig();
+  } catch {
+    return [];
+  }
+  if (providerConfig.provider !== "openai-compatible") return [];
+
+  const candidates = buildRecipientCandidates(store, userId);
+  const contactsCatalog = [...candidates]
+    .sort((a, b) => {
+      const dd = Number(b.hasDirectThread) - Number(a.hasDirectThread);
+      if (dd !== 0) return dd;
+      return b.sharedThreadIds.length - a.sharedThreadIds.length;
+    })
+    .slice(0, MAX_SEND_AI_CONTACTS)
+    .map((c) => {
+      const name = c.name.trim() || c.userId;
+      const username = c.username.trim().replace(/^@+/, "");
+      return username ? `- ${name} (@${username})` : `- ${name}`;
+    })
+    .join("\n");
+  const groupsCatalog = store.threads
+    .filter((t) => t.threadType === "group" && t.memberIds.includes(userId))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, MAX_SEND_AI_CONTACTS)
+    .map((t) => `- ${formatThreadLabel(t)}`)
+    .join("\n");
+  const plannerNow = Date.now();
+
+  const { apiKey, baseUrl, model: modelFromEnv } = providerConfig;
+  const modelCandidates = buildModelCandidates(modelFromEnv, false, providerConfig.provider).slice(0, 2);
+
+  const schemaBlock = [
+    '- send: { "type":"send", "recipientQuery":"...", "messageText":"...", "scheduledFor":ms? }',
+    '- delete: { "type":"delete", "chatQuery":"..." }',
+    '- mute: { "type":"mute", "chatQuery":"...", "muted":true|false }',
+    '- archive: { "type":"archive", "chatQuery":"...", "archived":true|false }',
+    '- pin: { "type":"pin", "chatQuery":"...", "pinned":true|false }',
+    '- create_group: { "type":"create_group", "title":"...", "memberQueries":["..."] }',
+    '- invite: { "type":"invite", "groupQuery":"...", "memberQueries":["..."] }',
+    '- remove: { "type":"remove", "groupQuery":"...", "memberQueries":["..."] }',
+    '- rename_group: { "type":"rename_group", "groupQuery":"...", "title":"...", "description":"..." }',
+    '- set_role: { "type":"set_role", "groupQuery":"...", "memberQueries":["..."], "role":"admin"|"member" }',
+    '- mark_all_read: { "type":"mark_all_read" }',
+    '- stats: { "type":"stats" }',
+    '- search: { "type":"search", "query":"..." }',
+  ].join("\n");
+
+  const systemPrompt = language === "ru"
+    ? [
+        "Ты AI-оркестратор составных команд в мессенджере.",
+        "Разбери команду пользователя на список типизированных действий.",
+        'Верни ТОЛЬКО JSON без markdown и пояснений: {"actions":[...]}',
+        "Доступные типы действий (все поля обязательны если не помечено ?):",
+        schemaBlock,
+        "Для send: если передана инструкция вместо готового текста — сгенерируй финальное сообщение.",
+        "scheduledFor — Unix time в мс, добавляй только при явной отложенной отправке.",
+        `Максимум действий: ${MAX_AUTOMATION_TARGETS}.`,
+      ].join(" ")
+    : [
+        "You are a multi-action orchestrator for a messenger app.",
+        "Parse the user's compound command into a list of typed actions.",
+        'Return ONLY JSON with no markdown and no explanations: {"actions":[...]}',
+        "Available action types (all fields required unless marked ?):",
+        schemaBlock,
+        "For send: if user gave an instruction instead of final text, generate the outgoing message.",
+        "scheduledFor is Unix time in ms; add it only for explicitly delayed sends.",
+        `Maximum actions: ${MAX_AUTOMATION_TARGETS}.`,
+      ].join(" ");
+
+  for (const model of modelCandidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SEND_AI_PLANNER_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system" as const, content: systemPrompt },
+            {
+              role: "user" as const,
+              content: [
+                `Command: ${cleanedCommand}`,
+                `Current timestamp (ms): ${plannerNow}`,
+                "Recent user messages (last 5):",
+                recentUserMessages.length > 0
+                  ? recentUserMessages.map((m, i) => `${i + 1}. ${m}`).join("\n")
+                  : "(none)",
+                "Known contacts:",
+                contactsCatalog || "(none)",
+                "Known groups:",
+                groupsCatalog || "(none)",
+              ].join("\n"),
+            },
+          ],
+          max_tokens: 1200,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) continue;
+      const payload = (await response.json().catch(() => null)) as unknown;
+      const raw = extractChatCompletionText(payload) || extractResponseText(payload);
+      if (!raw.trim()) continue;
+      const jsonText = extractFirstJsonObject(raw) ?? raw.trim();
+      const parsed = JSON.parse(jsonText) as unknown;
+      const plan = normalizeMultiActionPlan(parsed, plannerNow);
+      if (plan.length > 0) return plan;
+    } catch {
+      // ignore, try next model
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+  return [];
+}
+
+async function executeMultiActionPlan(
+  store: StoreData,
+  userId: string,
+  language: "en" | "ru",
+  plan: MultiActionItem[]
+): Promise<string> {
+  const parts: string[] = [];
+
+  for (const action of plan) {
+    try {
+      if (action.type === "send") {
+        const intent: SendIntent = {
+          recipientQuery: action.recipientQuery,
+          messageText: action.messageText,
+          scheduledFor: action.scheduledFor ?? null,
+        };
+        const summary = await executeSendIntents(userId, language, [intent], []);
+        parts.push(buildSendActionReply(language, summary));
+      } else if (action.type === "delete") {
+        const intent: DeleteIntent = { recipientQuery: action.chatQuery };
+        const summary = await executeDeleteIntents(userId, language, [intent]);
+        parts.push(buildDeleteActionReply(language, summary));
+      } else if (action.type === "mute") {
+        const summary = await executeMuteIntents(userId, [{ chatQuery: action.chatQuery, muted: action.muted }]);
+        parts.push(buildMuteActionReply(language, summary));
+      } else if (action.type === "archive") {
+        const summary = await executeArchiveIntents(userId, [{ chatQuery: action.chatQuery, archived: action.archived }]);
+        parts.push(buildArchiveActionReply(language, summary));
+      } else if (action.type === "pin") {
+        const summary = await executePinIntents(userId, [{ chatQuery: action.chatQuery, pinned: action.pinned }]);
+        parts.push(buildPinActionReply(language, summary));
+      } else if (action.type === "create_group") {
+        const intent: CreateGroupIntent = { title: action.title, memberQueries: action.memberQueries };
+        const summary = await executeCreateGroupIntents(userId, language, [intent]);
+        parts.push(buildCreateGroupActionReply(language, summary));
+      } else if (action.type === "invite") {
+        const intent: InviteToGroupIntent = { groupQuery: action.groupQuery, memberQueries: action.memberQueries };
+        const summary = await executeInviteToGroupIntents(userId, language, [intent]);
+        parts.push(buildInviteToGroupActionReply(language, summary));
+      } else if (action.type === "remove") {
+        const intent: RemoveFromGroupIntent = { groupQuery: action.groupQuery, memberQueries: action.memberQueries };
+        const summary = await executeRemoveFromGroupIntents(userId, language, [intent]);
+        parts.push(buildRemoveFromGroupActionReply(language, summary));
+      } else if (action.type === "rename_group") {
+        const intent: UpdateGroupDataIntent = {
+          groupQuery: action.groupQuery,
+          title: action.title,
+          description: action.description,
+        };
+        const summary = await executeUpdateGroupDataIntents(userId, language, [intent]);
+        parts.push(buildUpdateGroupDataActionReply(language, summary));
+      } else if (action.type === "set_role") {
+        const intent: SetGroupMemberAccessIntent = {
+          groupQuery: action.groupQuery,
+          memberQueries: action.memberQueries,
+          role: action.role,
+        };
+        const summary = await executeSetGroupMemberAccessIntents(userId, language, [intent]);
+        parts.push(buildSetGroupMemberAccessActionReply(language, summary));
+      } else if (action.type === "mark_all_read") {
+        const { updatedChats } = await executeMarkAllAsRead(userId);
+        parts.push(buildMarkAllReadReply(language, updatedChats));
+      } else if (action.type === "stats") {
+        const freshStore = await getStore();
+        const stats = calculateUserStatistics(freshStore, userId);
+        parts.push(buildStatisticsReply(language, stats));
+      } else if (action.type === "search") {
+        const freshStore = await getStore();
+        const results = searchMessages(freshStore, userId, { query: action.query });
+        const summary = { results, totalFound: results.length, query: action.query };
+        parts.push(buildSearchReply(language, summary));
+      }
+    } catch {
+      // Skip failed actions silently; continue with the rest
+    }
+  }
+
+  return parts.filter((p) => p.trim().length > 0).join("\n\n");
 }
 
 async function rewriteSendMessageText(
@@ -6952,7 +7715,11 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as AiChatPayload | null;
-  const userId = body?.userId?.trim() ?? "";
+  const claimedUserId = body?.userId?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const language: "en" | "ru" = body?.language === "ru" ? "ru" : "en";
   const searchEnabled = body?.searchEnabled === true;
   const agentEnabled = body?.agentEnabled !== false;
@@ -6980,6 +7747,38 @@ export async function POST(request: Request) {
     }
 
     const latestUserPrompt = messages[messages.length - 1]?.content ?? "";
+
+    if (agentEnabled) {
+      if (STATS_COMMAND_REGEX.test(latestUserPrompt)) {
+        const stats = calculateUserStatistics(store, userId);
+        return NextResponse.json({ message: buildStatisticsReply(language, stats) });
+      }
+
+      if (isLikelySearchCommandStart(latestUserPrompt)) {
+        const intent = extractSearchIntent(latestUserPrompt);
+        if (intent) {
+          let chatIdFilter: string | undefined;
+          if (intent.inChat) {
+            const userThreads = store.threads.filter((t) => t.memberIds.includes(userId));
+            const chatRes = resolveThreadByTitleForDelete(userThreads, intent.inChat);
+            if (chatRes.status === "resolved") {
+              chatIdFilter = chatRes.thread.id;
+            }
+          }
+          const resolvedIntent = { ...intent, inChat: chatIdFilter };
+          const results = searchMessages(store, userId, resolvedIntent);
+          const summary = { results, totalFound: results.length, query: intent.query };
+          return NextResponse.json({ message: buildSearchReply(language, summary) });
+        }
+        const fallbackQuery = extractSearchQueryFromPrompt(latestUserPrompt);
+        if (fallbackQuery) {
+          const results = searchMessages(store, userId, { query: fallbackQuery });
+          const summary = { results, totalFound: results.length, query: fallbackQuery };
+          return NextResponse.json({ message: buildSearchReply(language, summary) });
+        }
+      }
+    }
+
     const workspaceQueryRequest = parseWorkspaceQueryRequest(latestUserPrompt);
     if (workspaceQueryRequest) {
       return NextResponse.json({
@@ -6994,6 +7793,53 @@ export async function POST(request: Request) {
 
     if (agentEnabled) {
       const recentUserMessages = collectRecentUserMessages(messages);
+
+      if (isLikelyMultiActionCommand(latestUserPrompt)) {
+        const plan = await planMultiActionWithAi(
+          store,
+          userId,
+          language,
+          latestUserPrompt,
+          recentUserMessages
+        );
+        if (plan.length >= 2) {
+          const reply = await executeMultiActionPlan(store, userId, language, plan);
+          if (reply.trim()) {
+            return NextResponse.json({ message: reply });
+          }
+        }
+        // plan.length <= 1 or empty reply → fall through to single-command handlers
+      }
+
+      if (isMarkAllReadCommand(latestUserPrompt)) {
+        const { updatedChats } = await executeMarkAllAsRead(userId);
+        return NextResponse.json({ message: buildMarkAllReadReply(language, updatedChats) });
+      }
+
+      if (isLikelyMuteCommandStart(latestUserPrompt)) {
+        const muteIntents = extractMuteIntents(latestUserPrompt);
+        if (muteIntents.length > 0) {
+          const muteSummary = await executeMuteIntents(userId, muteIntents);
+          return NextResponse.json({ message: buildMuteActionReply(language, muteSummary) });
+        }
+      }
+
+      if (isLikelyArchiveCommandStart(latestUserPrompt)) {
+        const archiveIntents = extractArchiveIntents(latestUserPrompt);
+        if (archiveIntents.length > 0) {
+          const archiveSummary = await executeArchiveIntents(userId, archiveIntents);
+          return NextResponse.json({ message: buildArchiveActionReply(language, archiveSummary) });
+        }
+      }
+
+      if (isLikelyPinCommandStart(latestUserPrompt)) {
+        const pinIntents = extractPinIntents(latestUserPrompt);
+        if (pinIntents.length > 0) {
+          const pinSummary = await executePinIntents(userId, pinIntents);
+          return NextResponse.json({ message: buildPinActionReply(language, pinSummary) });
+        }
+      }
+
       const isDeleteCommand = isLikelyDeleteCommandStart(latestUserPrompt);
       const deleteIntents = extractDeleteIntents(latestUserPrompt);
       if (isDeleteCommand && deleteIntents.length === 0) {

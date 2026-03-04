@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAuth } from "@/lib/server/auth";
 import { getStore } from "@/lib/server/store";
 import {
   getAvatarDecorationPriceRub,
@@ -8,10 +9,10 @@ import {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId")?.trim() ?? "";
-
+  const claimedUserId = searchParams.get("userId")?.trim() ?? "";
+  const userId = await requireAuth(request, claimedUserId || undefined);
   if (!userId) {
-    return NextResponse.json({ error: "Missing userId." }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   const store = await getStore();
