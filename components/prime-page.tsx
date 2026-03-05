@@ -20,7 +20,7 @@ type PrimeStatusErrorResponse = {
 };
 
 type SessionData = {
-  userId: string;
+  token: string;
 };
 
 const SESSION_STORAGE_KEY = "clore_auth_session_v1";
@@ -87,7 +87,7 @@ function isPrimeStatusResponse(
 }
 
 export function PrimePage() {
-  const [sessionUserId, setSessionUserId] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [status, setStatus] = useState<PrimeStatusResponse | null>(null);
   const [statusError, setStatusError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -114,14 +114,14 @@ export function PrimePage() {
       }
 
       const parsed = JSON.parse(raw) as SessionData | null;
-      const userId = parsed?.userId?.trim() ?? "";
-      if (!userId) {
+      const token = parsed?.token?.trim() ?? "";
+      if (!token) {
         setStatusError("Войдите в аккаунт, чтобы подключить Clore Prime.");
         setIsStatusLoading(false);
         return;
       }
 
-      setSessionUserId(userId);
+      setSessionToken(token);
     } catch {
       setStatusError("Не удалось прочитать текущую сессию.");
       setIsStatusLoading(false);
@@ -129,7 +129,7 @@ export function PrimePage() {
   }, []);
 
   useEffect(() => {
-    if (!sessionUserId) {
+    if (!sessionToken) {
       return;
     }
 
@@ -141,8 +141,8 @@ export function PrimePage() {
 
       try {
         const response = await fetch(
-          `/api/payments/yookassa/status?userId=${encodeURIComponent(sessionUserId)}`,
-          { cache: "no-store" }
+          `/api/payments/yookassa/status`,
+          { cache: "no-store", headers: { Authorization: `Bearer ${sessionToken}` } }
         );
         const payload = (await response.json().catch(() => null)) as
           | PrimeStatusResponse
@@ -178,7 +178,7 @@ export function PrimePage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionUserId]);
+  }, [sessionToken]);
 
   const actionLabel = useMemo(
     () => getActionLabel(status?.status ?? "inactive", isSubmitting),
@@ -194,7 +194,7 @@ export function PrimePage() {
   );
 
   const handlePurchase = async () => {
-    if (!sessionUserId || isSubmitting) {
+    if (!sessionToken || isSubmitting) {
       return;
     }
 
@@ -207,10 +207,9 @@ export function PrimePage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionToken}`,
         },
-        body: JSON.stringify({
-          userId: sessionUserId,
-        }),
+        body: JSON.stringify({}),
       });
 
       const payload = (await response.json().catch(() => null)) as
@@ -330,7 +329,7 @@ export function PrimePage() {
               <Button
                 type="button"
                 onClick={() => void handlePurchase()}
-                disabled={!sessionUserId || isSubmitting}
+                disabled={!sessionToken || isSubmitting}
                 className="mt-6 h-12 w-full rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 shadow-[0_18px_45px_-22px_rgba(251,191,36,0.55)] hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {actionLabel}

@@ -640,6 +640,7 @@ export function AuthGate() {
   };
 
   const handleLogout = () => {
+    const token = authToken;
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
     setAuthToken(null);
     setCurrentUser(null);
@@ -647,6 +648,13 @@ export function AuthGate() {
     setError("");
     setSuspensionMessage("");
     setLoginForm(emptyLoginForm);
+    if (token) {
+      void fetch("/api/auth/sessions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ all: true, includeCurrent: true }),
+      }).catch(() => undefined);
+    }
   };
 
   const handleProfileUpdate = async (

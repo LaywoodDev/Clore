@@ -28,21 +28,23 @@ export async function GET(request: Request) {
 }
 
 // DELETE /api/auth/sessions — отозвать сессию(и)
-// body: { token: string } — отозвать конкретную
-// body: { all: true }    — отозвать все кроме текущей
+// body: { token: string }                    — отозвать конкретную
+// body: { all: true }                        — отозвать все кроме текущей
+// body: { all: true, includeCurrent: true }  — отозвать все включая текущую
 export async function DELETE(request: Request) {
   const userId = await requireAuth(request);
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const currentToken = getTokenFromRequest(request);
   const body = (await request.json().catch(() => null)) as
-    | { token?: string; all?: boolean }
+    | { token?: string; all?: boolean; includeCurrent?: boolean }
     | null;
 
   if (body?.all) {
+    const includeCurrent = body.includeCurrent === true;
     await updateStore((store) => {
       for (const [token, record] of Object.entries(store.authTokens)) {
-        if (record.userId === userId && token !== currentToken) {
+        if (record.userId === userId && (includeCurrent || token !== currentToken)) {
           delete store.authTokens[token];
         }
       }
