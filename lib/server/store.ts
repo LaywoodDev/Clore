@@ -1047,6 +1047,7 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
     const archiveLockEnabled = user.archiveLockEnabled === true;
     const archivePasscode =
       typeof user.archivePasscode === "string" ? user.archivePasscode : "";
+    const loginVerificationEnabled = user.loginVerificationEnabled === true;
     const primeStatus =
       user.primeStatus === "pending" ||
       user.primeStatus === "active" ||
@@ -1097,6 +1098,7 @@ function sanitizeUsers(rawUsers: unknown): StoredUser[] {
       purchasedAvatarDecorations,
       archiveLockEnabled,
       archivePasscode,
+      loginVerificationEnabled,
       primeStatus,
       primeExpiresAt,
       primeAutoRenew,

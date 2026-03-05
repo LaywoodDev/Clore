@@ -33,6 +33,7 @@ export type AuthUser = {
   avatarDecoration: AvatarDecorationId;
   purchasedAvatarDecorations: AvatarDecorationId[];
   archiveLockEnabled: boolean;
+  loginVerificationEnabled: boolean;
   primeStatus: PrimeSubscriptionStatus;
   primeExpiresAt: number;
   primeAutoRenew: boolean;

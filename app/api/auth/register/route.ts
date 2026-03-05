@@ -94,6 +94,7 @@ export async function POST(request: Request) {
         purchasedAvatarDecorations: [],
         archiveLockEnabled: false,
         archivePasscode: "",
+        loginVerificationEnabled: false,
         primeStatus: "inactive",
         primeExpiresAt: 0,
         primeAutoRenew: false,
