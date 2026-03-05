@@ -297,6 +297,13 @@ export function AuthGate() {
   const [pendingLoginId, setPendingLoginId] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
 
+  const isRu = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const stored = localStorage.getItem("clore_app_language_v1");
+    if (stored === "ru" || stored === "en") return stored === "ru";
+    return navigator.language.startsWith("ru");
+  }, []);
+
   const loginIdentifier = loginForm.identifier.trim().toLowerCase();
   const loginPassword = loginForm.password;
   const isLoginValid = loginIdentifier.length > 0 && loginPassword.length > 0;
@@ -309,22 +316,27 @@ export function AuthGate() {
 
   const registerValidationHint = useMemo(() => {
     if (registerUsername.length > 0 && !isValidUsername(registerUsername)) {
-      return "Username: 3-20 chars, latin letters, digits or underscore.";
+      return isRu
+        ? "Имя пользователя: 3-20 символов, латиница, цифры или _."
+        : "Username: 3-20 chars, latin letters, digits or underscore.";
     }
     if (registerEmail.length > 0 && !isValidEmail(registerEmail)) {
-      return "Enter a valid email.";
+      return isRu ? "Введите корректный email." : "Enter a valid email.";
     }
     if (registerPassword.length > 0 && registerPassword.length < 6) {
-      return "Password must be at least 6 characters.";
+      return isRu
+        ? "Пароль должен содержать минимум 6 символов."
+        : "Password must be at least 6 characters.";
     }
     if (
       registerConfirmPassword.length > 0 &&
       registerPassword !== registerConfirmPassword
     ) {
-      return "Passwords do not match.";
+      return isRu ? "Пароли не совпадают." : "Passwords do not match.";
     }
     return "";
   }, [
+    isRu,
     registerConfirmPassword,
     registerEmail,
     registerPassword,
@@ -475,7 +487,7 @@ export function AuthGate() {
     const password = loginPassword;
 
     if (!identifier || !password) {
-      setError("Enter username/email and password.");
+      setError(isRu ? "Введите логин/email и пароль." : "Enter username/email and password.");
       return;
     }
 
@@ -493,7 +505,7 @@ export function AuthGate() {
         | null;
 
       if (!payload) {
-        setError("Unable to sign in.");
+        setError(isRu ? "Не удалось войти." : "Unable to sign in.");
         return;
       }
 
@@ -505,7 +517,7 @@ export function AuthGate() {
       }
 
       if (!response.ok || !payload.user) {
-        setError(payload.error ?? "Unable to sign in.");
+        setError(payload.error ?? (isRu ? "Не удалось войти." : "Unable to sign in."));
         return;
       }
 
@@ -519,7 +531,7 @@ export function AuthGate() {
       setCurrentUser(payload.user);
       setLoginForm(emptyLoginForm);
     } catch {
-      setError("Unable to sign in.");
+      setError(isRu ? "Не удалось войти." : "Unable to sign in.");
     } finally {
       setSubmitting(false);
     }
@@ -538,7 +550,7 @@ export function AuthGate() {
       });
       const payload = await parseAuthResponse(response);
       if (!response.ok || !payload.user) {
-        setError(payload.error ?? "Invalid code.");
+        setError(payload.error ?? (isRu ? "Неверный код." : "Invalid code."));
         return;
       }
       const token = payload.token ?? "";
@@ -549,7 +561,7 @@ export function AuthGate() {
       setPendingLoginId(null);
       setLoginForm(emptyLoginForm);
     } catch {
-      setError("Unable to verify.");
+      setError(isRu ? "Не удалось подтвердить." : "Unable to verify.");
     } finally {
       setSubmitting(false);
     }
@@ -566,27 +578,27 @@ export function AuthGate() {
     const confirmPassword = registerConfirmPassword;
 
     if (!name || !username || !email || !password || !confirmPassword) {
-      setError("Fill all fields.");
+      setError(isRu ? "Заполните все поля." : "Fill all fields.");
       return;
     }
 
     if (!isValidUsername(username)) {
-      setError("Username: 3-20 chars, latin letters, digits or underscore.");
+      setError(isRu ? "Имя пользователя: 3-20 символов, латиница, цифры или _." : "Username: 3-20 chars, latin letters, digits or underscore.");
       return;
     }
 
     if (!isValidEmail(email)) {
-      setError("Enter a valid email.");
+      setError(isRu ? "Введите корректный email." : "Enter a valid email.");
       return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError(isRu ? "Пароль должен содержать минимум 6 символов." : "Password must be at least 6 characters.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(isRu ? "Пароли не совпадают." : "Passwords do not match.");
       return;
     }
 
@@ -607,7 +619,7 @@ export function AuthGate() {
       const payload = await parseAuthResponse(response);
 
       if (!response.ok || !payload.user) {
-        setError(payload.error ?? "Unable to create account.");
+        setError(payload.error ?? (isRu ? "Не удалось создать аккаунт." : "Unable to create account."));
         return;
       }
 
@@ -621,7 +633,7 @@ export function AuthGate() {
       setCurrentUser(payload.user);
       setRegisterForm(emptyRegisterForm);
     } catch {
-      setError("Unable to create account.");
+      setError(isRu ? "Не удалось создать аккаунт." : "Unable to create account.");
     } finally {
       setSubmitting(false);
     }
@@ -677,12 +689,12 @@ export function AuthGate() {
       });
       const payload = await parseAuthResponse(response);
       if (!response.ok || !payload.user) {
-        setError(payload.error ?? "Unable to update profile.");
+        setError(payload.error ?? (isRu ? "Не удалось обновить профиль." : "Unable to update profile."));
         return;
       }
       setCurrentUser(payload.user);
     } catch {
-      setError("Unable to update profile.");
+      setError(isRu ? "Не удалось обновить профиль." : "Unable to update profile.");
     }
   };
 
@@ -734,12 +746,12 @@ export function AuthGate() {
       });
       const payload = await parseAuthResponse(response);
       if (!response.ok || !payload.user) {
-        setError(payload.error ?? "Unable to update privacy.");
+        setError(payload.error ?? (isRu ? "Не удалось обновить настройки приватности." : "Unable to update privacy."));
         return;
       }
       setCurrentUser(payload.user);
     } catch {
-      setError("Unable to update privacy.");
+      setError(isRu ? "Не удалось обновить настройки приватности." : "Unable to update privacy.");
     }
   };
 
@@ -809,14 +821,18 @@ export function AuthGate() {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Clore</p>
             <h1 className="mt-4 max-w-xl text-4xl font-semibold leading-tight text-zinc-100">
-              Team messenger with clean workflow and focused communication.
+              {isRu
+                ? "Мессенджер для команд с чистым рабочим процессом."
+                : "Team messenger with clean workflow and focused communication."}
             </h1>
             <p className="mt-4 max-w-lg text-sm text-zinc-400">
-              Register a new account or sign in to continue to chats.
+              {isRu
+                ? "Зарегистрируйтесь или войдите, чтобы продолжить."
+                : "Register a new account or sign in to continue to chats."}
             </p>
           </div>
           <p className="text-xs text-zinc-500">
-            Data is stored on the server.
+            {isRu ? "Данные хранятся на сервере." : "Data is stored on the server."}
           </p>
         </div>
 
@@ -827,7 +843,7 @@ export function AuthGate() {
                 Clore
               </p>
               <h1 className="mt-3 text-2xl font-semibold text-zinc-100">
-                Sign in to continue
+                {isRu ? "Войдите, чтобы продолжить" : "Sign in to continue"}
               </h1>
             </div>
 
@@ -844,7 +860,7 @@ export function AuthGate() {
                     : "border-zinc-700 bg-zinc-700 text-zinc-200"
                 }`}
               >
-                Login
+                {isRu ? "Войти" : "Login"}
               </button>
               <button
                 type="button"
@@ -858,46 +874,52 @@ export function AuthGate() {
                     : "border-zinc-700 bg-zinc-700 text-zinc-200"
                 }`}
               >
-                Register
+                {isRu ? "Регистрация" : "Register"}
               </button>
             </div>
 
-            {pendingLoginId ? (
-              <form className="space-y-4" onSubmit={handleVerifyLogin}>
-                <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
-                  <p className="text-sm font-semibold text-yellow-300">
-                    {uiTheme === "light" ? "Подтверждение входа" : "Подтверждение входа"}
-                  </p>
-                  <p className="mt-1 text-xs text-yellow-200/70">
-                    Код отправлен в активную сессию. Введите его ниже.
-                  </p>
-                </div>
-                <Input
-                  autoFocus
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value)}
-                  placeholder="Код подтверждения"
-                  maxLength={6}
-                  inputMode="numeric"
-                  className="h-12 text-center text-xl tracking-widest font-mono"
-                />
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                <Button
-                  type="submit"
-                  disabled={submitting || verificationCode.trim().length < 6}
-                  className="w-full"
-                >
-                  {submitting ? "Проверка…" : "Подтвердить"}
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => { setPendingLoginId(null); setError(""); }}
-                  className="w-full text-sm text-zinc-500 hover:text-zinc-300"
-                >
-                  Назад
-                </button>
-              </form>
-            ) : mode === "login" ? (
+            {pendingLoginId ? (() => {
+              return (
+                <form className="space-y-3" onSubmit={handleVerifyLogin}>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-zinc-100">
+                      {isRu ? "Подтверждение входа" : "Verify sign-in"}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {isRu
+                        ? "Код отправлен в вашу активную сессию. Введите его ниже."
+                        : "A code was sent to your active session. Enter it below."}
+                    </p>
+                  </div>
+                  <Input
+                    autoFocus
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder={isRu ? "Код подтверждения" : "Confirmation code"}
+                    maxLength={6}
+                    inputMode="numeric"
+                    className="h-11 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400 text-center text-xl tracking-widest font-mono"
+                  />
+                  {error && <p className="text-sm text-red-400">{error}</p>}
+                  <Button
+                    type="submit"
+                    disabled={submitting || verificationCode.trim().length < 6}
+                    className="h-11 w-full rounded-lg bg-primary text-zinc-50 hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {submitting
+                      ? (isRu ? "Проверка…" : "Verifying…")
+                      : (isRu ? "Подтвердить" : "Confirm")}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => { setPendingLoginId(null); setError(""); }}
+                    className="h-11 w-full rounded-lg border border-zinc-600 bg-zinc-700 text-sm text-zinc-300 hover:bg-zinc-600 transition-colors"
+                  >
+                    {isRu ? "Назад" : "Back"}
+                  </button>
+                </form>
+              );
+            })() : mode === "login" ? (
               <form className="space-y-3" onSubmit={handleLogin}>
                 <Input
                   value={loginForm.identifier}
@@ -914,7 +936,7 @@ export function AuthGate() {
                   autoCapitalize="none"
                   spellCheck={false}
                   autoFocus
-                  placeholder="Email or username"
+                  placeholder={isRu ? "Email или имя пользователя" : "Email or username"}
                   className="h-11 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400"
                 />
                 <Input
@@ -930,7 +952,7 @@ export function AuthGate() {
                     })
                   }
                   autoComplete="current-password"
-                  placeholder="Password"
+                  placeholder={isRu ? "Пароль" : "Password"}
                   className="h-11 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400"
                 />
                 <Button
@@ -938,7 +960,7 @@ export function AuthGate() {
                   className="h-11 w-full rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
                   disabled={submitting || !isLoginValid}
                 >
-                  {submitting ? "Signing in..." : "Sign in"}
+                  {submitting ? (isRu ? "Вход..." : "Signing in...") : (isRu ? "Войти" : "Sign in")}
                 </Button>
               </form>
             ) : (
@@ -956,7 +978,7 @@ export function AuthGate() {
                   }
                   autoComplete="name"
                   autoFocus
-                  placeholder="Name"
+                  placeholder={isRu ? "Имя" : "Name"}
                   className="h-11 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400"
                 />
                 <Input
@@ -973,7 +995,7 @@ export function AuthGate() {
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
-                  placeholder="Username"
+                  placeholder={isRu ? "Имя пользователя" : "Username"}
                   className="h-11 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400"
                 />
                 <Input
@@ -1007,7 +1029,7 @@ export function AuthGate() {
                     })
                   }
                   autoComplete="new-password"
-                  placeholder="Password"
+                  placeholder={isRu ? "Пароль" : "Password"}
                   className="h-11 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400"
                 />
                 <Input
@@ -1023,18 +1045,18 @@ export function AuthGate() {
                     })
                   }
                   autoComplete="new-password"
-                  placeholder="Confirm password"
+                  placeholder={isRu ? "Подтвердите пароль" : "Confirm password"}
                   className="h-11 rounded-lg border-zinc-600 bg-zinc-700 text-zinc-100 placeholder:text-zinc-400"
                 />
                 <p className="text-xs text-zinc-400">
-                  {registerValidationHint || "Use at least 6 characters for password."}
+                  {registerValidationHint || (isRu ? "Пароль должен содержать минимум 6 символов." : "Use at least 6 characters for password.")}
                 </p>
                 <Button
                   type="submit"
                   className="h-11 w-full rounded-lg bg-primary text-zinc-50 hover:bg-primary/90"
                   disabled={submitting || !isRegisterValid}
                 >
-                  {submitting ? "Creating account..." : "Create account"}
+                  {submitting ? (isRu ? "Создание аккаунта..." : "Creating account...") : (isRu ? "Создать аккаунт" : "Create account")}
                 </Button>
               </form>
             )}
@@ -1045,7 +1067,7 @@ export function AuthGate() {
               </p>
             ) : null}
             <p className="mt-3 text-xs text-zinc-500 md:hidden">
-              Data is stored on the server.
+              {isRu ? "Данные хранятся на сервере." : "Data is stored on the server."}
             </p>
           </div>
         </div>

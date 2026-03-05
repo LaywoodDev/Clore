@@ -63,6 +63,8 @@ import {
   LogOut,
   FolderPlus,
   Folder,
+  Coins,
+  Gift,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -652,7 +654,6 @@ type UiAccent =
 type UiDensity = "comfortable" | "compact";
 type UiFontSize = "small" | "default" | "large";
 type UiRadius = "sharp" | "normal" | "rounded";
-type UiPinnedMessageAlignment = "left" | "center" | "right";
 type UiFontFamily = "default" | "modern" | "readable" | "comfortaa";
 type ChatWallpaper =
   | "none"
@@ -1890,7 +1891,6 @@ const UI_FONT_FAMILY_STORAGE_KEY = "clore_ui_font_family_v1";
 const HIDE_PRIME_BUTTON_IN_PROFILE_STORAGE_KEY_PREFIX =
   "clore_hide_prime_button_in_profile_v1_";
 const GLOBAL_CHAT_WALLPAPER_STORAGE_KEY = "clore_global_chat_wallpaper_v1";
-const PINNED_MESSAGE_ALIGNMENT_STORAGE_KEY = "clore_pinned_message_alignment_v1";
 const ARCHIVE_VISIBILITY_STORAGE_KEY_PREFIX = "clore_archive_visibility_v1_";
 const SIDEBAR_LAYOUT_STORAGE_KEY_PREFIX = "clore_sidebar_layout_v1_";
 const CHAT_PERSONALIZATION_STORAGE_KEY_PREFIX = "clore_chat_personalization_v1_";
@@ -1922,7 +1922,7 @@ const TYPING_PING_INTERVAL_MS = 2_500;
 const MESSAGE_APPEAR_ANIMATION_MS = 220;
 const MESSAGE_TARGET_HIGHLIGHT_MS = 1_200;
 const UNDO_WINDOW_MS = 5_000;
-const APP_VERSION = "Release Candidate 1.0.1";
+const APP_VERSION = "Release 1.0.0";
 const SCHEDULE_MIN_LEAD_MS = 60_000;
 const SCHEDULE_DEFAULT_LEAD_MS = 60 * 60 * 1000;
 const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) =>
@@ -2159,6 +2159,11 @@ const translations = {
     clorePrimePrice: "150 ₽/month",
     clorePrimeComingSoon: "Coming soon",
     hidePrimeButtonInProfile: "Hide Prime button in profile",
+    giftPrime: "Gift Prime",
+    giftPrimeConfirmTitle: "Gift Clore Prime",
+    giftPrimeConfirmDesc: "Give 30 days of Prime subscription to",
+    giftPrimeWithRubles: "Gift for 150 ₽",
+    giftPrimeSuccess: "Prime subscription gifted!",
     hidePrimeButtonInProfileHint:
       "Hide the Prime shortcut from your own profile action bar while your subscription is active",
     hidePrimeButtonInProfilePrimeHint:
@@ -2274,11 +2279,6 @@ const translations = {
     radiusSharp: "Sharp",
     radiusNormal: "Normal",
     radiusRounded: "Rounded",
-    pinnedMessagePosition: "Pinned message position",
-    pinnedMessagePositionHint: "Choose where the pinned message pill is aligned",
-    alignLeft: "Left",
-    alignCenter: "Center",
-    alignRight: "Right",
     chatWallpaper: "Chat wallpaper",
     chatWallpaperHint: "Choose default wallpaper for chats",
     wallpaperNone: "None",
@@ -2579,6 +2579,11 @@ const translations = {
     clorePrimePrice: "150 ₽/мес",
     clorePrimeComingSoon: "Скоро",
     hidePrimeButtonInProfile: "Скрыть кнопку Prime в профиле",
+    giftPrime: "Подарить Prime",
+    giftPrimeConfirmTitle: "Подарить Clore Prime",
+    giftPrimeConfirmDesc: "Подарить 30 дней Prime подписки пользователю",
+    giftPrimeWithRubles: "Подарить за 150 ₽",
+    giftPrimeSuccess: "Prime подписка подарена!",
     hidePrimeButtonInProfileHint:
       "Скрыть ярлык Prime из панели действий в вашем профиле, пока подписка активна",
     hidePrimeButtonInProfilePrimeHint:
@@ -2675,11 +2680,6 @@ const translations = {
     radiusSharp: "Острый",
     radiusNormal: "Нормальный",
     radiusRounded: "Скругленный",
-    pinnedMessagePosition: "Положение закрепа",
-    pinnedMessagePositionHint: "Где выравнивать плашку закрепленного сообщения",
-    alignLeft: "Слева",
-    alignCenter: "По центру",
-    alignRight: "Справа",
     chatWallpaper: "Обои чата",
     chatWallpaperHint: "Выберите обои по умолчанию для чатов",
     wallpaperNone: "Без обоев",
@@ -3717,6 +3717,29 @@ function SpoilerText({ children }: { children: ReactNode }) {
     >
       {children}
     </span>
+  );
+}
+
+function PreviewText({ text }: { text: string }) {
+  const parts = text.split(/(\|\|[^|]*\|\|)/g);
+  if (parts.length === 1) return <>{text}</>;
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("||") && part.endsWith("||")) {
+          return (
+            <span
+              key={i}
+              className="inline-block rounded px-0.5 align-baseline bg-current/20 select-none"
+              style={{ filter: "blur(4px)" }}
+            >
+              {part.slice(2, -2)}
+            </span>
+          );
+        }
+        return part;
+      })}
+    </>
   );
 }
 
@@ -5148,6 +5171,9 @@ export function WebMessenger({
   const [isAvatarDecorationGalleryOpen, setIsAvatarDecorationGalleryOpen] = useState(false);
   const [avatarDecorationPurchasePendingId, setAvatarDecorationPurchasePendingId] =
     useState<AvatarDecorationId | null>(null);
+  const [isGiftPrimeDialogOpen, setIsGiftPrimeDialogOpen] = useState(false);
+  const [giftPrimeTargetUserId, setGiftPrimeTargetUserId] = useState<string | null>(null);
+  const [giftPrimePending, setGiftPrimePending] = useState(false);
   const [birthdayDraft, setBirthdayDraft] = useState<BirthdayParts>(() =>
     parseBirthdayParts(currentUser.birthday)
   );
@@ -5230,16 +5256,6 @@ export function WebMessenger({
     const stored = window.localStorage.getItem(UI_RADIUS_STORAGE_KEY);
     return stored === "sharp" || stored === "rounded" ? stored : "normal";
   });
-  const [uiPinnedMessageAlignment, setUiPinnedMessageAlignment] =
-    useState<UiPinnedMessageAlignment>(() => {
-      if (typeof window === "undefined") {
-        return "left";
-      }
-      const stored = window.localStorage.getItem(PINNED_MESSAGE_ALIGNMENT_STORAGE_KEY);
-      return stored === "center" || stored === "right" || stored === "left"
-        ? stored
-        : "left";
-    });
   const [hidePrimeButtonInProfile, setHidePrimeButtonInProfile] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -8151,12 +8167,6 @@ export function WebMessenger({
   useEffect(() => {
     window.localStorage.setItem(UI_RADIUS_STORAGE_KEY, uiRadius);
   }, [uiRadius]);
-  useEffect(() => {
-    window.localStorage.setItem(
-      PINNED_MESSAGE_ALIGNMENT_STORAGE_KEY,
-      uiPinnedMessageAlignment
-    );
-  }, [uiPinnedMessageAlignment]);
   useEffect(() => {
     window.localStorage.setItem(
       `${HIDE_PRIME_BUTTON_IN_PROFILE_STORAGE_KEY_PREFIX}${currentUser.id}`,
@@ -13475,6 +13485,13 @@ export function WebMessenger({
     !viewedUserId ||
     isViewedUserBlocked ||
     (callSession !== null && !isProfileCallActiveWithViewedUser);
+  const viewedKnownUser = viewedUserId
+    ? knownUsers.find((u) => u.id === viewedUserId) ?? null
+    : null;
+  const viewedUserHasActivePrime =
+    viewedKnownUser !== null &&
+    viewedKnownUser.primeStatus === "active" &&
+    viewedKnownUser.primeExpiresAt > Date.now();
   const startAudioCallFromProfile = useCallback(async () => {
     if (!viewedUserId) {
       setCallNotice(t("callDirectOnly"));
@@ -15239,6 +15256,31 @@ export function WebMessenger({
     setImagePickerTarget(null);
   };
 
+  const giftPrimeWithRubles = async (recipientUserId: string) => {
+    if (giftPrimePending) return;
+    setGiftPrimePending(true);
+    try {
+      const response = await fetch("/api/payments/yookassa/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId: currentUser.id, product: "prime_gift", recipientUserId }),
+      });
+      const payload = (await response.json().catch(() => null)) as { confirmationUrl?: string; error?: string } | null;
+      if (!response.ok || !payload?.confirmationUrl) {
+        showToast(payload?.error?.trim() || (language === "ru" ? "Не удалось создать платёж." : "Unable to create payment."));
+        return;
+      }
+      setIsGiftPrimeDialogOpen(false);
+      if (typeof window !== "undefined") {
+        window.location.href = payload.confirmationUrl;
+      }
+    } catch {
+      showToast(language === "ru" ? "Не удалось создать платёж." : "Unable to create payment.");
+    } finally {
+      setGiftPrimePending(false);
+    }
+  };
+
   const saveProfileEdit = async () => {
     const trimmedName = profileDraft.name.trim();
     const trimmedUsername = profileDraft.username.trim().replace(/^@+/, "");
@@ -15607,18 +15649,6 @@ export function WebMessenger({
     }
     return value;
   };
-  const getPinnedMessageAlignmentLabel = (value: string) => {
-    if (value === "left") {
-      return t("alignLeft");
-    }
-    if (value === "center") {
-      return t("alignCenter");
-    }
-    if (value === "right") {
-      return t("alignRight");
-    }
-    return value;
-  };
   const getFontFamilyLabel = (value: string) => {
     if (value === "default") {
       return t("fontFamilyDefault");
@@ -15718,10 +15748,28 @@ export function WebMessenger({
       <section className="flex min-h-0 w-full flex-1">
         <div
           className={`relative flex h-full min-h-0 w-full overflow-hidden ${
-            uiTheme === "light"
-              ? "border-zinc-700/80 bg-zinc-900/95 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.3)] ring-1 ring-slate-300/70"
-              : "border-zinc-800/90 bg-zinc-950/80 shadow-[0_28px_70px_-42px_rgba(0,0,0,0.95)] ring-1 ring-black/40"
+            uiTheme === "light" ? "border-zinc-700/80 bg-zinc-900/95" : "border-zinc-800/90 bg-zinc-950/80"
           } backdrop-blur-2xl`}
+          style={{
+            boxShadow:
+              uiTheme === "light"
+                ? "0 0 0 1px rgba(203,213,225,0.7), 0 24px 60px -40px rgba(15,23,42,0.3)"
+                : effectiveUiAccent === "titanium"
+                ? "0 0 0 1px rgba(148,163,184,0.45), 0 0 0 2.5px rgba(71,85,105,0.2), inset 0 1px 0 rgba(226,232,240,0.07), 0 32px 80px -44px rgba(0,0,0,0.98)"
+                : effectiveUiAccent === "obsidian"
+                ? "0 0 0 1px rgba(20,15,40,0.97), 0 0 0 2.5px rgba(80,50,130,0.38), inset 0 1px 0 rgba(140,100,210,0.06), 0 32px 80px -44px rgba(0,0,0,1)"
+                : effectiveUiAccent === "violet"
+                ? "0 0 0 1px rgba(109,40,217,0.4), 0 0 0 2px rgba(139,92,246,0.12), 0 28px 70px -42px rgba(0,0,0,0.95)"
+                : effectiveUiAccent === "blue"
+                ? "0 0 0 1px rgba(29,78,216,0.45), 0 0 0 2px rgba(59,130,246,0.12), 0 28px 70px -42px rgba(0,0,0,0.95)"
+                : effectiveUiAccent === "emerald"
+                ? "0 0 0 1px rgba(4,120,87,0.45), 0 0 0 2px rgba(16,185,129,0.12), 0 28px 70px -42px rgba(0,0,0,0.95)"
+                : effectiveUiAccent === "rose"
+                ? "0 0 0 1px rgba(190,18,60,0.45), 0 0 0 2px rgba(244,63,94,0.12), 0 28px 70px -42px rgba(0,0,0,0.95)"
+                : effectiveUiAccent === "amber"
+                ? "0 0 0 1px rgba(180,83,9,0.45), 0 0 0 2px rgba(245,158,11,0.12), 0 28px 70px -42px rgba(0,0,0,0.95)"
+                : "0 0 0 1px rgba(0,0,0,0.4), 0 28px 70px -42px rgba(0,0,0,0.95)",
+          }}
         >
           {isMainSidebarCollapsed ? null : (
             <aside className="hidden w-[82px] flex-col border-r border-zinc-800/90 bg-zinc-950/75 p-3 text-zinc-100 backdrop-blur-xl md:flex">
@@ -15931,7 +15979,7 @@ export function WebMessenger({
                         type="button"
                         ref={(el) => { if (el) folderTabButtonRefs.current.set(folder.id, el); else folderTabButtonRefs.current.delete(folder.id); }}
                         onClick={() => setActiveFolderId(folder.id)}
-                        className={`shrink-0 max-w-[130px] truncate px-4 py-2.5 text-sm font-medium transition-colors ${
+                        className={`shrink-0 max-w-[130px] truncate px-4 py-2.5 text-sm font-medium transition-[color,transform] active:scale-95 ${
                           activeFolderId === folder.id ? "text-primary" : "text-zinc-400 hover:text-zinc-200"
                         }`}
                       >
@@ -15950,9 +15998,8 @@ export function WebMessenger({
                         <Pencil className="size-4" />
                         {language === "ru" ? "Переименовать" : "Rename"}
                       </ContextMenuItem>
-                      <ContextMenuSeparator className={chatActionMenuSeparatorClassName} />
                       <ContextMenuItem
-                        className={`${chatActionMenuItemClassName} text-red-400 focus:text-red-400`}
+                        className={`${chatActionMenuDestructiveItemClassName} mt-1 border-t border-zinc-700/60 pt-2`}
                         onSelect={() => {
                           setDeletingFolderId(folder.id);
                           setIsDeleteFolderOpen(true);
@@ -16402,7 +16449,7 @@ export function WebMessenger({
                                     {`${t("draftLabel")}: ${chatDraftPreview}`}
                                   </span>
                                 ) : (
-                                  chat.lastMessage
+                                  <PreviewText text={chat.lastMessage} />
                                 )}
                               </span>
                             </span>
@@ -19140,13 +19187,7 @@ export function WebMessenger({
                                         </span>
                                       </div>
                                       <p className="mt-4 text-xs text-zinc-400">
-                                        {option.id === "none"
-                                          ? "Clean avatar without effects."
-                                          : option.id === "golden-aura"
-                                            ? "Warm premium glow with a gold ring."
-                                            : option.id === "neon-ring"
-                                              ? "Bright cyber ring with neon colors."
-                                              : "Polished icy frame with crystal highlights."}
+                                        {option.description}
                                       </p>
                                       <div className="mt-3 text-xs font-medium">
                                         {isSelected ? (
@@ -19223,6 +19264,18 @@ export function WebMessenger({
                                     <ShareContactIcon className="size-4" />
                                     {t("shareContact")}
                                   </DropdownMenuItem>
+                                  {!viewedUserHasActivePrime ? (
+                                    <DropdownMenuItem
+                                      className={profileActionMenuItemClassName}
+                                      onSelect={() => {
+                                        setGiftPrimeTargetUserId(viewedUserId);
+                                        setIsGiftPrimeDialogOpen(true);
+                                      }}
+                                    >
+                                      <Crown className="size-4 text-amber-400" />
+                                      {t("giftPrime")}
+                                    </DropdownMenuItem>
+                                  ) : null}
                                   <DropdownMenuSeparator className={profileActionMenuSeparatorClassName} />
                                   <DropdownMenuItem
                                     className={profileActionMenuItemClassName}
@@ -20518,47 +20571,6 @@ export function WebMessenger({
                                   </SelectItem>
                                   <SelectItem value="rounded" className={unifiedSelectItemClassName}>
                                     {t("radiusRounded")}
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-zinc-100">
-                                {t("pinnedMessagePosition")}
-                              </p>
-                              <p className="mt-0.5 text-xs text-zinc-500">
-                                {t("pinnedMessagePositionHint")}
-                              </p>
-                            </div>
-                            <div className="w-full sm:w-[220px]">
-                              <Select
-                                value={uiPinnedMessageAlignment}
-                                onValueChange={(value) => {
-                                  if (
-                                    value === "left" ||
-                                    value === "center" ||
-                                    value === "right"
-                                  ) {
-                                    setUiPinnedMessageAlignment(value);
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className={`h-9 w-full px-2.5 text-xs font-medium ${unifiedSelectTriggerClassName}`}>
-                                  <SelectValue className={`text-zinc-100 ${uiControlTextClass}`}>
-                                    {(value) => getPinnedMessageAlignmentLabel(value)}
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent className={unifiedSelectContentClassName}>
-                                  <SelectItem value="left" className={unifiedSelectItemClassName}>
-                                    {t("alignLeft")}
-                                  </SelectItem>
-                                  <SelectItem value="center" className={unifiedSelectItemClassName}>
-                                    {t("alignCenter")}
-                                  </SelectItem>
-                                  <SelectItem value="right" className={unifiedSelectItemClassName}>
-                                    {t("alignRight")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -23434,44 +23446,43 @@ export function WebMessenger({
 
       {/* Login verification bottom sheet */}
       {loginVerificationAlert && (
-        <div className="fixed inset-x-0 bottom-0 z-[200] flex justify-center px-4 pb-4 sm:justify-end sm:pb-6 sm:pr-6">
-          <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl ring-1 ring-white/5">
-            <div className="bg-yellow-500/10 px-4 py-3 flex items-center gap-2 border-b border-zinc-700">
-              <div className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
-              <p className="text-sm font-semibold text-yellow-300">
-                {language === "ru" ? "Новый вход в аккаунт" : "New sign-in attempt"}
-              </p>
+        <div className="fixed inset-0 z-[200] flex items-end justify-center backdrop-blur-sm bg-black/40 pb-0">
+          <div className="w-full overflow-hidden rounded-t-2xl border-t border-zinc-700/80 bg-zinc-950 shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom duration-300">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div>
+                <p className="text-sm font-semibold text-zinc-100">
+                  {language === "ru" ? "Новый вход в аккаунт" : "New sign-in attempt"}
+                </p>
+                {(loginVerificationAlert.userAgent || loginVerificationAlert.ip) && (
+                  <p className="mt-0.5 text-xs text-zinc-500 truncate max-w-[260px]">
+                    {loginVerificationAlert.ip ? `${loginVerificationAlert.ip} · ` : ""}
+                    {loginVerificationAlert.userAgent ?? ""}
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setLoginVerificationAlert(null)}
-                className="ml-auto text-zinc-500 hover:text-zinc-300"
+                className="ml-3 shrink-0 rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
               >
                 <X className="size-4" />
               </button>
             </div>
-            <div className="px-4 py-4 space-y-3">
-              {loginVerificationAlert.userAgent && (
-                <p className="text-xs text-zinc-400 truncate">
-                  {loginVerificationAlert.userAgent}
-                </p>
-              )}
-              {loginVerificationAlert.ip && (
-                <p className="text-xs text-zinc-500">IP: {loginVerificationAlert.ip}</p>
-              )}
+            <div className="px-5 pb-5 space-y-4">
               <p className="text-xs text-zinc-400">
                 {language === "ru"
                   ? "Код действует 5 минут. Введите его на новом устройстве:"
-                  : "Code is valid for 5 minutes. Enter it on the new device:"}
+                  : "Code valid for 5 minutes. Enter it on the new device:"}
               </p>
-              <div className="flex items-center justify-center rounded-xl border border-zinc-700 bg-zinc-950 py-3">
-                <span className="font-mono text-3xl font-bold tracking-[0.3em] text-zinc-100">
+              <div className="flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 py-4">
+                <span className="font-mono text-4xl font-bold tracking-[0.35em] text-zinc-100 select-all">
                   {loginVerificationAlert.code}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setLoginVerificationAlert(null)}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 text-xs text-zinc-400 hover:bg-zinc-700"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 py-2.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
               >
                 {language === "ru" ? "Это не я — закрыть" : "Not me — dismiss"}
               </button>
@@ -23489,6 +23500,47 @@ export function WebMessenger({
           language={language}
         />
       )}
+
+      {/* Gift Prime Dialog */}
+      <AlertDialog open={isGiftPrimeDialogOpen} onOpenChange={setIsGiftPrimeDialogOpen}>
+        <AlertDialogContent size="sm" className="w-[min(94vw,380px)] max-w-none border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
+          <AlertDialogHeader>
+            <div className="mb-2 flex justify-center">
+              <img src="/bag-dynamic-premium.png" alt="" className="size-24 object-contain drop-shadow-lg" />
+            </div>
+            <AlertDialogTitle className="text-center text-zinc-100">{t("giftPrimeConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-zinc-400">
+              {t("giftPrimeConfirmDesc")}{" "}
+              <span className="font-semibold text-zinc-200">
+                {giftPrimeTargetUserId
+                  ? (knownUsers.find((u) => u.id === giftPrimeTargetUserId)?.name ?? "—")
+                  : "—"}
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button
+              type="button"
+              disabled={giftPrimePending}
+              onClick={() => giftPrimeTargetUserId && void giftPrimeWithRubles(giftPrimeTargetUserId)}
+              className="w-full bg-amber-500 text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+            >
+              {giftPrimePending
+                ? (language === "ru" ? "Создание платежа..." : "Creating payment...")
+                : t("giftPrimeWithRubles")}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsGiftPrimeDialogOpen(false)}
+              className="w-full border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+            >
+              {language === "ru" ? "Отмена" : "Cancel"}
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </>
   );
 }

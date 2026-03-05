@@ -4,6 +4,7 @@ const YOOKASSA_API_BASE = "https://api.yookassa.ru/v3";
 
 export const PRIME_PLAN_CODE = "clore_prime";
 export const AVATAR_DECORATION_PRODUCT_CODE = "avatar_decoration";
+export const GIFT_PRIME_PRODUCT_CODE = "prime_gift";
 export const PRIME_SUBSCRIPTION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type YooKassaPaymentStatus =
@@ -38,6 +39,12 @@ type CreateYooKassaPaymentArgs = {
 type CreateAvatarDecorationPaymentArgs = {
   userId: string;
   avatarDecoration: string;
+  returnUrl?: string;
+};
+
+type CreateGiftPrimePaymentArgs = {
+  senderUserId: string;
+  recipientUserId: string;
   returnUrl?: string;
 };
 
@@ -213,6 +220,44 @@ export async function createAvatarDecorationPayment({
         product: AVATAR_DECORATION_PRODUCT_CODE,
         userId: normalizedUserId,
         avatarDecoration: normalizedAvatarDecoration,
+      },
+    },
+  });
+}
+
+export function getGiftPrimeReturnUrl(): string {
+  const appUrl = getRequiredEnv("APP_URL").replace(/\/+$/, "");
+  return `${appUrl}/?gift_prime=return`;
+}
+
+export async function createGiftPrimePayment({
+  senderUserId,
+  recipientUserId,
+  returnUrl,
+}: CreateGiftPrimePaymentArgs): Promise<YooKassaPayment> {
+  const normalizedSender = senderUserId.trim();
+  const normalizedRecipient = recipientUserId.trim();
+  if (!normalizedSender) throw new Error("Missing senderUserId.");
+  if (!normalizedRecipient) throw new Error("Missing recipientUserId.");
+
+  return yookassaRequest<YooKassaPayment>({
+    method: "POST",
+    path: "/payments",
+    body: {
+      amount: {
+        value: getPrimePriceValue(),
+        currency: "RUB",
+      },
+      capture: true,
+      confirmation: {
+        type: "redirect",
+        return_url: returnUrl?.trim() || getGiftPrimeReturnUrl(),
+      },
+      description: "Clore Prime gift subscription",
+      metadata: {
+        product: GIFT_PRIME_PRODUCT_CODE,
+        userId: normalizedSender,
+        recipientUserId: normalizedRecipient,
       },
     },
   });

@@ -892,3 +892,8 @@ html[data-clore-theme="light"] .clore-skeleton {
   z-index: 1;
 }
 
+@keyframes meteorite-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+

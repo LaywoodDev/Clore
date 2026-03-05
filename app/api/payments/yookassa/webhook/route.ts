@@ -4,6 +4,7 @@ import { isAvatarDecorationId } from "@/lib/shared/avatar-decorations";
 import { getPurchasedAvatarDecorations, updateStore } from "@/lib/server/store";
 import {
   AVATAR_DECORATION_PRODUCT_CODE,
+  GIFT_PRIME_PRODUCT_CODE,
   getYooKassaPayment,
   PRIME_PLAN_CODE,
   PRIME_SUBSCRIPTION_DURATION_MS,
@@ -30,7 +31,9 @@ export async function POST(request: Request) {
     const metadata = payment.metadata ?? {};
     const isPrimePayment = metadata.plan === PRIME_PLAN_CODE;
     const isAvatarDecorationPayment = metadata.product === AVATAR_DECORATION_PRODUCT_CODE;
-    if (!isPrimePayment && !isAvatarDecorationPayment) {
+    const isGiftPrimePayment = metadata.product === GIFT_PRIME_PRODUCT_CODE;
+
+    if (!isPrimePayment && !isAvatarDecorationPayment && !isGiftPrimePayment) {
       return NextResponse.json({ ok: true, ignored: true });
     }
 
@@ -39,6 +42,31 @@ export async function POST(request: Request) {
       throw new Error("YooKassa payment metadata is missing userId.");
     }
 
+    // --- Gift Prime (paid with rubles) ---
+    if (isGiftPrimePayment) {
+      if (event === "payment.succeeded" && payment.status === "succeeded") {
+        const recipientUserId = metadata.recipientUserId?.trim() ?? "";
+        if (!recipientUserId) {
+          throw new Error("YooKassa gift prime payment metadata is missing recipientUserId.");
+        }
+        await updateStore<void>((store) => {
+          const recipient = store.users.find((candidate) => candidate.id === recipientUserId);
+          if (!recipient) throw new Error("Recipient user not found.");
+          const now = Date.now();
+          const currentExpiry =
+            typeof recipient.primeExpiresAt === "number" && Number.isFinite(recipient.primeExpiresAt)
+              ? Math.max(0, Math.trunc(recipient.primeExpiresAt))
+              : 0;
+          const nextPeriodStart = currentExpiry > now ? currentExpiry : now;
+          recipient.primeStatus = "active";
+          recipient.primeExpiresAt = nextPeriodStart + PRIME_SUBSCRIPTION_DURATION_MS;
+          recipient.primePendingPaymentId = "";
+        });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // --- Avatar decoration or Prime (existing logic) ---
     await updateStore<void>((store) => {
       const user = store.users.find((candidate) => candidate.id === userId);
       if (!user) {

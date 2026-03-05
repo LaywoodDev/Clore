@@ -38,3 +38,15 @@ export async function requestJson<T>(
 
   return payload as T;
 }
+
+export async function createYookassaPayment(payload: {
+  userId: string;
+  product: "prime" | "avatar_decoration" | "prime_gift";
+  recipientUserId?: string;
+  avatarDecoration?: string;
+}): Promise<{ paymentId: string; confirmationUrl: string; status: string; product: string }> {
+  return requestJson("/api/payments/yookassa/create", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}

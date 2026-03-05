@@ -340,10 +340,10 @@ const MAX_MESSAGE_LENGTH = 4000;
 const RESPONSE_TIMEOUT_MS = 12_000;
 const ASSISTANT_RESPONSE_BASE_TOKENS = 700;
 const ASSISTANT_RESPONSE_MAX_TOKENS = 1_200;
-const SEND_AI_PLANNER_TIMEOUT_MS = 9_000;
+const SEND_AI_PLANNER_TIMEOUT_MS = 14_000;
 const SEND_AI_COMPOSE_TIMEOUT_MS = 9_000;
-const MAX_SEND_AI_USER_CONTEXT_MESSAGES = 5;
-const MAX_AUTOMATION_TARGETS = 8;
+const MAX_SEND_AI_USER_CONTEXT_MESSAGES = 8;
+const MAX_AUTOMATION_TARGETS = 20;
 const MAX_CONTEXT_MESSAGES_PER_CANDIDATE = 160;
 const MAX_SEND_AI_CONTACTS = 140;
 const ASSISTANT_CONTEXT_RECENT_LIMIT = 6;
@@ -508,6 +508,14 @@ const MULTI_ACTION_COMMAND_SIGNALS: RegExp[] = [
   /(?:прочитать\s+вс|отметить\s+вс|mark\s+all\s+read)/iu,
   /(?:моя\s+статистик|my\s+stats)/iu,
   /(?:найди|поищи|search|find)\s/iu,
+  // Connectors indicating chained/compound actions
+  /(?:\s+и\s+(?:потом|после|затем|ещё|также|дополнительно))/iu,
+  /(?:\s+(?:then|also|after\s+that|and\s+then|additionally))/iu,
+  /(?:затем|после\s+этого|потом\s+(?:также|ещё))/iu,
+  // Bulk: multiple targets in one command
+  /(?:(?:Иван|Маш|Пет|Серг|Андр|Дим|Алекс|Ник)[а-яё]+\s+и\s+(?:Иван|Маш|Пет|Серг|Андр|Дим|Алекс|Ник))/iu,
+  /(?:\bи\b.{1,30}\bи\b)/u, // "X и Y и Z"
+  /(?:всем\s+(?:в\s+)?(?:групп|чат)|everyone\s+in)/iu,
 ];
 const WORKSPACE_QUERY_SPLIT_REGEX = /[,.!?;\n]+/u;
 const WORKSPACE_SHOW_SIGNAL_REGEX =
@@ -5252,25 +5260,39 @@ async function planMultiActionWithAi(
 
   const systemPrompt = language === "ru"
     ? [
-        "Ты AI-оркестратор составных команд в мессенджере.",
-        "Разбери команду пользователя на список типизированных действий.",
-        'Верни ТОЛЬКО JSON без markdown и пояснений: {"actions":[...]}',
+        "Ты AI-оркестратор составных команд в мессенджере Clore.",
+        "Твоя задача: точно разобрать команду пользователя на список конкретных действий.",
+        'Верни ТОЛЬКО валидный JSON без markdown, без пояснений: {"actions":[...]}',
+        "",
         "Доступные типы действий (все поля обязательны если не помечено ?):",
         schemaBlock,
-        "Для send: если передана инструкция вместо готового текста — сгенерируй финальное сообщение.",
-        "scheduledFor — Unix time в мс, добавляй только при явной отложенной отправке.",
-        `Максимум действий: ${MAX_AUTOMATION_TARGETS}.`,
-      ].join(" ")
+        "",
+        "Правила:",
+        "1. Для send: если это инструкция (напр. «поздравь с днём рождения») — сгенерируй готовое финальное сообщение.",
+        "2. scheduledFor — Unix timestamp в мс. Добавляй ТОЛЬКО при явной просьбе отложить.",
+        "3. Если нужно отправить одно и то же нескольким — создай отдельный action send для каждого получателя.",
+        "4. Цепочки: «создай группу X с A и B, потом напиши им» → create_group + send(groupQuery=X).",
+        "5. Используй точные имена из Known contacts/groups. Если имя не найдено — используй как есть.",
+        `6. Максимум ${MAX_AUTOMATION_TARGETS} действий.`,
+        "7. Если команда не требует автоматизации (вопрос, просьба объяснить) — верни {\"actions\":[]}.",
+      ].join("\n")
     : [
-        "You are a multi-action orchestrator for a messenger app.",
-        "Parse the user's compound command into a list of typed actions.",
-        'Return ONLY JSON with no markdown and no explanations: {"actions":[...]}',
+        "You are a multi-action orchestrator for the Clore messenger app.",
+        "Your task: precisely parse the user's compound command into a list of concrete actions.",
+        'Return ONLY valid JSON with no markdown and no explanations: {"actions":[...]}',
+        "",
         "Available action types (all fields required unless marked ?):",
         schemaBlock,
-        "For send: if user gave an instruction instead of final text, generate the outgoing message.",
-        "scheduledFor is Unix time in ms; add it only for explicitly delayed sends.",
-        `Maximum actions: ${MAX_AUTOMATION_TARGETS}.`,
-      ].join(" ");
+        "",
+        "Rules:",
+        "1. For send: if user gave an instruction (e.g. 'congratulate on birthday') — generate the final outgoing message text.",
+        "2. scheduledFor is Unix timestamp in ms. Add ONLY when explicitly asked to delay sending.",
+        "3. Sending the same message to multiple people → one send action per recipient.",
+        "4. Chains: 'create group X with A and B, then message them' → create_group + send(groupQuery=X).",
+        "5. Use exact names from Known contacts/groups. If not found — use the name as-is.",
+        `6. Maximum ${MAX_AUTOMATION_TARGETS} actions.`,
+        "7. If the command is a question or explanation request, return {\"actions\":[]}.",
+      ].join("\n");
 
   for (const model of modelCandidates) {
     const controller = new AbortController();
@@ -5288,7 +5310,7 @@ async function planMultiActionWithAi(
               content: [
                 `Command: ${cleanedCommand}`,
                 `Current timestamp (ms): ${plannerNow}`,
-                "Recent user messages (last 5):",
+                `Recent user messages (last ${MAX_SEND_AI_USER_CONTEXT_MESSAGES}):`,
                 recentUserMessages.length > 0
                   ? recentUserMessages.map((m, i) => `${i + 1}. ${m}`).join("\n")
                   : "(none)",
@@ -5299,7 +5321,8 @@ async function planMultiActionWithAi(
               ].join("\n"),
             },
           ],
-          max_tokens: 1200,
+          max_tokens: 2400,
+          temperature: 0.1,
         }),
         signal: controller.signal,
       });
@@ -5320,84 +5343,135 @@ async function planMultiActionWithAi(
   return [];
 }
 
+async function executeSingleAction(
+  store: StoreData,
+  userId: string,
+  language: "en" | "ru",
+  action: MultiActionItem
+): Promise<string> {
+  if (action.type === "send") {
+    const intent: SendIntent = {
+      recipientQuery: action.recipientQuery,
+      messageText: action.messageText,
+      scheduledFor: action.scheduledFor ?? null,
+    };
+    const summary = await executeSendIntents(userId, language, [intent], []);
+    return buildSendActionReply(language, summary);
+  }
+  if (action.type === "delete") {
+    const intent: DeleteIntent = { recipientQuery: action.chatQuery };
+    const summary = await executeDeleteIntents(userId, language, [intent]);
+    return buildDeleteActionReply(language, summary);
+  }
+  if (action.type === "mute") {
+    const summary = await executeMuteIntents(userId, [{ chatQuery: action.chatQuery, muted: action.muted }]);
+    return buildMuteActionReply(language, summary);
+  }
+  if (action.type === "archive") {
+    const summary = await executeArchiveIntents(userId, [{ chatQuery: action.chatQuery, archived: action.archived }]);
+    return buildArchiveActionReply(language, summary);
+  }
+  if (action.type === "pin") {
+    const summary = await executePinIntents(userId, [{ chatQuery: action.chatQuery, pinned: action.pinned }]);
+    return buildPinActionReply(language, summary);
+  }
+  if (action.type === "create_group") {
+    const intent: CreateGroupIntent = { title: action.title, memberQueries: action.memberQueries };
+    const summary = await executeCreateGroupIntents(userId, language, [intent]);
+    return buildCreateGroupActionReply(language, summary);
+  }
+  if (action.type === "invite") {
+    const intent: InviteToGroupIntent = { groupQuery: action.groupQuery, memberQueries: action.memberQueries };
+    const summary = await executeInviteToGroupIntents(userId, language, [intent]);
+    return buildInviteToGroupActionReply(language, summary);
+  }
+  if (action.type === "remove") {
+    const intent: RemoveFromGroupIntent = { groupQuery: action.groupQuery, memberQueries: action.memberQueries };
+    const summary = await executeRemoveFromGroupIntents(userId, language, [intent]);
+    return buildRemoveFromGroupActionReply(language, summary);
+  }
+  if (action.type === "rename_group") {
+    const intent: UpdateGroupDataIntent = {
+      groupQuery: action.groupQuery,
+      title: action.title,
+      description: action.description,
+    };
+    const summary = await executeUpdateGroupDataIntents(userId, language, [intent]);
+    return buildUpdateGroupDataActionReply(language, summary);
+  }
+  if (action.type === "set_role") {
+    const intent: SetGroupMemberAccessIntent = {
+      groupQuery: action.groupQuery,
+      memberQueries: action.memberQueries,
+      role: action.role,
+    };
+    const summary = await executeSetGroupMemberAccessIntents(userId, language, [intent]);
+    return buildSetGroupMemberAccessActionReply(language, summary);
+  }
+  if (action.type === "mark_all_read") {
+    const { updatedChats } = await executeMarkAllAsRead(userId);
+    return buildMarkAllReadReply(language, updatedChats);
+  }
+  if (action.type === "stats") {
+    const freshStore = await getStore();
+    const stats = calculateUserStatistics(freshStore, userId);
+    return buildStatisticsReply(language, stats);
+  }
+  if (action.type === "search") {
+    const freshStore = await getStore();
+    const results = searchMessages(freshStore, userId, { query: action.query });
+    const summary = { results, totalFound: results.length, query: action.query };
+    return buildSearchReply(language, summary);
+  }
+  return "";
+}
+
+// Actions that write to the store and may conflict if run concurrently on the same entity
+// are tagged as "sequential". Everything else can run in parallel.
+function isSequentialAction(action: MultiActionItem): boolean {
+  return action.type === "create_group" || action.type === "delete";
+}
+
 async function executeMultiActionPlan(
   store: StoreData,
   userId: string,
   language: "en" | "ru",
   plan: MultiActionItem[]
 ): Promise<string> {
-  const parts: string[] = [];
+  if (plan.length === 0) return "";
+
+  // Split into sequential groups separated by blocking actions.
+  // Each "wave" can be parallelized internally; waves must run in order.
+  const waves: MultiActionItem[][] = [];
+  let currentWave: MultiActionItem[] = [];
 
   for (const action of plan) {
-    try {
-      if (action.type === "send") {
-        const intent: SendIntent = {
-          recipientQuery: action.recipientQuery,
-          messageText: action.messageText,
-          scheduledFor: action.scheduledFor ?? null,
-        };
-        const summary = await executeSendIntents(userId, language, [intent], []);
-        parts.push(buildSendActionReply(language, summary));
-      } else if (action.type === "delete") {
-        const intent: DeleteIntent = { recipientQuery: action.chatQuery };
-        const summary = await executeDeleteIntents(userId, language, [intent]);
-        parts.push(buildDeleteActionReply(language, summary));
-      } else if (action.type === "mute") {
-        const summary = await executeMuteIntents(userId, [{ chatQuery: action.chatQuery, muted: action.muted }]);
-        parts.push(buildMuteActionReply(language, summary));
-      } else if (action.type === "archive") {
-        const summary = await executeArchiveIntents(userId, [{ chatQuery: action.chatQuery, archived: action.archived }]);
-        parts.push(buildArchiveActionReply(language, summary));
-      } else if (action.type === "pin") {
-        const summary = await executePinIntents(userId, [{ chatQuery: action.chatQuery, pinned: action.pinned }]);
-        parts.push(buildPinActionReply(language, summary));
-      } else if (action.type === "create_group") {
-        const intent: CreateGroupIntent = { title: action.title, memberQueries: action.memberQueries };
-        const summary = await executeCreateGroupIntents(userId, language, [intent]);
-        parts.push(buildCreateGroupActionReply(language, summary));
-      } else if (action.type === "invite") {
-        const intent: InviteToGroupIntent = { groupQuery: action.groupQuery, memberQueries: action.memberQueries };
-        const summary = await executeInviteToGroupIntents(userId, language, [intent]);
-        parts.push(buildInviteToGroupActionReply(language, summary));
-      } else if (action.type === "remove") {
-        const intent: RemoveFromGroupIntent = { groupQuery: action.groupQuery, memberQueries: action.memberQueries };
-        const summary = await executeRemoveFromGroupIntents(userId, language, [intent]);
-        parts.push(buildRemoveFromGroupActionReply(language, summary));
-      } else if (action.type === "rename_group") {
-        const intent: UpdateGroupDataIntent = {
-          groupQuery: action.groupQuery,
-          title: action.title,
-          description: action.description,
-        };
-        const summary = await executeUpdateGroupDataIntents(userId, language, [intent]);
-        parts.push(buildUpdateGroupDataActionReply(language, summary));
-      } else if (action.type === "set_role") {
-        const intent: SetGroupMemberAccessIntent = {
-          groupQuery: action.groupQuery,
-          memberQueries: action.memberQueries,
-          role: action.role,
-        };
-        const summary = await executeSetGroupMemberAccessIntents(userId, language, [intent]);
-        parts.push(buildSetGroupMemberAccessActionReply(language, summary));
-      } else if (action.type === "mark_all_read") {
-        const { updatedChats } = await executeMarkAllAsRead(userId);
-        parts.push(buildMarkAllReadReply(language, updatedChats));
-      } else if (action.type === "stats") {
-        const freshStore = await getStore();
-        const stats = calculateUserStatistics(freshStore, userId);
-        parts.push(buildStatisticsReply(language, stats));
-      } else if (action.type === "search") {
-        const freshStore = await getStore();
-        const results = searchMessages(freshStore, userId, { query: action.query });
-        const summary = { results, totalFound: results.length, query: action.query };
-        parts.push(buildSearchReply(language, summary));
+    if (isSequentialAction(action)) {
+      if (currentWave.length > 0) {
+        waves.push(currentWave);
+        currentWave = [];
       }
-    } catch {
-      // Skip failed actions silently; continue with the rest
+      waves.push([action]);
+    } else {
+      currentWave.push(action);
+    }
+  }
+  if (currentWave.length > 0) waves.push(currentWave);
+
+  const allParts: string[] = [];
+
+  for (const wave of waves) {
+    const results = await Promise.allSettled(
+      wave.map((action) => executeSingleAction(store, userId, language, action))
+    );
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value.trim()) {
+        allParts.push(result.value);
+      }
     }
   }
 
-  return parts.filter((p) => p.trim().length > 0).join("\n\n");
+  return allParts.join("\n\n");
 }
 
 async function rewriteSendMessageText(
@@ -7480,9 +7554,13 @@ async function generateAssistantReply(
   searchEnabled: boolean,
   latestUserPrompt: string,
   agentEnabled: boolean,
-  screenContext?: AiScreenContextPayload | null
+  screenContext?: AiScreenContextPayload | null,
+  freeTierModel?: string
 ): Promise<string> {
   const primaryConfig = getAiProviderConfig();
+  if (freeTierModel && primaryConfig.provider === "openai-compatible") {
+    primaryConfig.model = freeTierModel;
+  }
   const systemPrompt =
     language === "ru"
       ? "You are ChatGPT in a messenger app. Reply clearly, concretely, and helpfully. Start with the direct answer, then add only the detail that materially helps. Be concise by default, but go deeper when the request is complex, asks for steps, needs troubleshooting, or compares options. Prefer Russian unless the user writes in another language. Use the internal app knowledge context and runtime workspace hints when relevant. Do not invent app APIs, permissions, behaviors, people, chats, or completed actions."
@@ -7709,6 +7787,55 @@ async function generateAssistantReply(
   throw new Error(primaryAttempt.lastErrorMessage || "AI provider request failed.");
 }
 
+// ─── Free-tier rate limiting ──────────────────────────────────────────────────
+// Non-prime users: max 20 requests per 2-hour window. After hitting the limit,
+// a 2-hour cooldown kicks in before the counter resets.
+const FREE_TIER_MODEL = "gpt-4o-2024-08-06";
+const FREE_TIER_MAX_REQUESTS = 20;
+const FREE_TIER_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+type FreeTierBucket = {
+  count: number;
+  windowStart: number;
+  cooldownUntil: number;
+};
+
+const freeTierBuckets = new Map<string, FreeTierBucket>();
+
+function checkFreeTierRateLimit(userId: string): {
+  allowed: boolean;
+  cooldownUntil: number;
+} {
+  const now = Date.now();
+  let bucket = freeTierBuckets.get(userId);
+
+  if (!bucket) {
+    bucket = { count: 0, windowStart: now, cooldownUntil: 0 };
+    freeTierBuckets.set(userId, bucket);
+  }
+
+  // Still in cooldown
+  if (bucket.cooldownUntil > now) {
+    return { allowed: false, cooldownUntil: bucket.cooldownUntil };
+  }
+
+  // Window expired — reset
+  if (now - bucket.windowStart >= FREE_TIER_WINDOW_MS) {
+    bucket.count = 0;
+    bucket.windowStart = now;
+    bucket.cooldownUntil = 0;
+  }
+
+  if (bucket.count >= FREE_TIER_MAX_REQUESTS) {
+    bucket.cooldownUntil = now + FREE_TIER_WINDOW_MS;
+    return { allowed: false, cooldownUntil: bucket.cooldownUntil };
+  }
+
+  bucket.count += 1;
+  return { allowed: true, cooldownUntil: 0 };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function POST(request: Request) {
   if (!AI_FEATURE_ENABLED) {
     return NextResponse.json({ error: "AI is disabled." }, { status: 503 });
@@ -7741,14 +7868,36 @@ export async function POST(request: Request) {
 
   try {
     const store = await getStore();
-    const userExists = store.users.some((user) => user.id === userId);
-    if (!userExists) {
+    const storedUser = store.users.find((u) => u.id === userId);
+    if (!storedUser) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+
+    const now = Date.now();
+    const isPrime =
+      storedUser.primeStatus === "active" &&
+      typeof storedUser.primeExpiresAt === "number" &&
+      storedUser.primeExpiresAt > now;
+
+    // Non-prime: block agent mode and enforce rate limit
+    const effectiveAgentEnabled = isPrime ? agentEnabled : false;
+    const freeTierModel = isPrime ? undefined : FREE_TIER_MODEL;
+
+    if (!isPrime) {
+      const rateLimit = checkFreeTierRateLimit(userId);
+      if (!rateLimit.allowed) {
+        const cooldownMinutes = Math.ceil((rateLimit.cooldownUntil - now) / 60_000);
+        const errorMsg =
+          language === "ru"
+            ? `Превышен лимит запросов. Попробуйте снова через ${cooldownMinutes} мин. Подключите Clore Prime для безлимитного доступа.`
+            : `Request limit reached. Try again in ${cooldownMinutes} min. Subscribe to Clore Prime for unlimited access.`;
+        return NextResponse.json({ error: errorMsg }, { status: 429 });
+      }
     }
 
     const latestUserPrompt = messages[messages.length - 1]?.content ?? "";
 
-    if (agentEnabled) {
+    if (effectiveAgentEnabled) {
       if (STATS_COMMAND_REGEX.test(latestUserPrompt)) {
         const stats = calculateUserStatistics(store, userId);
         return NextResponse.json({ message: buildStatisticsReply(language, stats) });
@@ -7791,7 +7940,7 @@ export async function POST(request: Request) {
       });
     }
 
-    if (agentEnabled) {
+    if (effectiveAgentEnabled) {
       const recentUserMessages = collectRecentUserMessages(messages);
 
       if (isLikelyMultiActionCommand(latestUserPrompt)) {
@@ -7802,13 +7951,13 @@ export async function POST(request: Request) {
           latestUserPrompt,
           recentUserMessages
         );
-        if (plan.length >= 2) {
+        if (plan.length >= 1) {
           const reply = await executeMultiActionPlan(store, userId, language, plan);
           if (reply.trim()) {
             return NextResponse.json({ message: reply });
           }
         }
-        // plan.length <= 1 or empty reply → fall through to single-command handlers
+        // Empty plan or empty reply → fall through to single-command handlers
       }
 
       if (isMarkAllReadCommand(latestUserPrompt)) {
@@ -8026,8 +8175,9 @@ export async function POST(request: Request) {
       messages,
       searchEnabled,
       latestUserPrompt,
-      agentEnabled,
-      screenContext
+      effectiveAgentEnabled,
+      screenContext,
+      freeTierModel
     );
     return NextResponse.json({ message: reply });
   } catch (error) {

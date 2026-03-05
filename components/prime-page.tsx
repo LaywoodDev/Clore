@@ -26,9 +26,18 @@ type SessionData = {
 const SESSION_STORAGE_KEY = "clore_auth_session_v1";
 
 const PRIME_PERKS = [
-  "Премиум-статус в профиле",
-  "Ранний доступ к новым функциям",
-  "Будущие приватные и визуальные улучшения",
+  {
+    title: "Рамки аватаров",
+    desc: "Эксклюзивные декорации для аватара, которые выделяют вас в чатах и профиле.",
+  },
+  {
+    title: "Новые темы оформления",
+    desc: "Доступ к премиум-темам Obsidian и Titanium, а также расширенный выбор акцентных цветов.",
+  },
+  {
+    title: "Продвинутый ассистент",
+    desc: "Расширенный контекст диалога, приоритетные ответы и доступ к более мощным моделям ИИ.",
+  },
 ];
 
 function formatPrimeDate(timestamp: number): string {
@@ -250,21 +259,24 @@ export function PrimePage() {
                   Никакого лишнего.
                 </h1>
                 <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-300 sm:mt-5 sm:text-base sm:leading-7 lg:max-w-2xl lg:text-lg">
-                  Премиум-подписка для тех, кто хочет чистый статус, ранний доступ и
-                  аккуратный премиум-слой внутри Clore.
+                  Рамки аватаров, эксклюзивные темы и продвинутый ИИ-ассистент —
+                  всё в одной подписке.
                 </p>
               </div>
 
               <div className="mt-8 grid gap-2.5 sm:mt-10 sm:max-w-xl sm:gap-3 lg:max-w-2xl">
                 {PRIME_PERKS.map((perk) => (
                   <div
-                    key={perk}
+                    key={perk.title}
                     className="flex items-start gap-3 rounded-2xl border border-white/6 bg-white/[0.03] px-3.5 py-3 sm:px-4 lg:px-5 lg:py-4"
                   >
-                    <span className="inline-flex shrink-0 rounded-full bg-emerald-400/10 p-1.5 text-emerald-300">
+                    <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-emerald-400/10 p-1.5 text-emerald-300">
                       <Check className="size-3.5" />
                     </span>
-                    <span className="text-sm leading-6 text-zinc-200 lg:text-base">{perk}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-zinc-100 lg:text-base">{perk.title}</p>
+                      <p className="mt-0.5 text-xs leading-5 text-zinc-400 lg:text-sm lg:leading-6">{perk.desc}</p>
+                    </div>
                   </div>
                 ))}
               </div>
