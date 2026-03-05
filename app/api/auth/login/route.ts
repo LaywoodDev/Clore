@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       (t) => t.userId === user.id
     );
 
-    if (hasActiveSessions) {
+    if (hasActiveSessions && user.loginVerificationEnabled === true) {
       // Require verification — create pending login
       const pendingId = randomBytes(16).toString("hex");
       const code = generateCode();

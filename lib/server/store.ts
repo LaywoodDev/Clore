@@ -41,6 +41,7 @@ export type StoredUser = {
   purchasedAvatarDecorations?: AvatarDecorationId[];
   archiveLockEnabled?: boolean;
   archivePasscode?: string;
+  loginVerificationEnabled?: boolean;
   primeStatus?: "inactive" | "pending" | "active" | "canceled";
   primeExpiresAt?: number;
   primeAutoRenew?: boolean;
@@ -78,6 +79,7 @@ export type PublicUser = {
   avatarDecoration: AvatarDecorationId;
   purchasedAvatarDecorations: AvatarDecorationId[];
   archiveLockEnabled: boolean;
+  loginVerificationEnabled: boolean;
   primeStatus: "inactive" | "pending" | "active" | "canceled";
   primeExpiresAt: number;
   primeAutoRenew: boolean;
@@ -576,6 +578,7 @@ export function toPublicUser(user: StoredUser): PublicUser {
     avatarDecoration: canUseAvatarDecoration(user, avatarDecoration) ? avatarDecoration : "none",
     purchasedAvatarDecorations,
     archiveLockEnabled: user.archiveLockEnabled === true,
+    loginVerificationEnabled: user.loginVerificationEnabled === true,
     primeStatus:
       user.primeStatus === "pending" ||
       user.primeStatus === "active" ||

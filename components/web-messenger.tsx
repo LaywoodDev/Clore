@@ -5493,6 +5493,23 @@ export function WebMessenger({
   const [archiveLockEnabled, setArchiveLockEnabled] = useState(
     currentUser.archiveLockEnabled === true
   );
+  const [loginVerificationEnabled, setLoginVerificationEnabled] = useState(
+    currentUser.loginVerificationEnabled === true
+  );
+  const [isSavingLoginVerification, setIsSavingLoginVerification] = useState(false);
+
+  const handleLoginVerificationToggle = useCallback(async (enabled: boolean) => {
+    setIsSavingLoginVerification(true);
+    try {
+      await requestJson("/api/auth/login-verification", {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+      setLoginVerificationEnabled(enabled);
+    } finally {
+      setIsSavingLoginVerification(false);
+    }
+  }, []);
   const [hasArchiveLockPasscode, setHasArchiveLockPasscode] = useState(
     currentUser.archiveLockEnabled === true
   );
@@ -20185,6 +20202,25 @@ export function WebMessenger({
                             </div>
                           )
                         ) : null}
+                      </div>
+                      {/* Login verification toggle */}
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-medium text-zinc-100">
+                            {language === "ru" ? "Подтверждение входа" : "Login verification"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-zinc-500">
+                            {language === "ru"
+                              ? "Запрашивать код при входе с нового устройства, если уже есть активные сессии"
+                              : "Require a code when signing in on a new device while other sessions are active"}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={loginVerificationEnabled}
+                          onCheckedChange={(v) => void handleLoginVerificationToggle(v)}
+                          disabled={isSavingLoginVerification}
+                          aria-label={language === "ru" ? "Подтверждение входа" : "Login verification"}
+                        />
                       </div>
                       {/* Sessions management */}
                       <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3">
