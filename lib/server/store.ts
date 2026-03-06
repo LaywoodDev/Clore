@@ -851,6 +851,7 @@ function getPool() {
   pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: resolveDatabaseSsl(),
+    max: 3,
   });
   return pool;
 }
