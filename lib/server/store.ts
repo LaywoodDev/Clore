@@ -2067,17 +2067,17 @@ async function _readStoreTables(q: DbQuerier): Promise<StoreData> {
     pendingLoginsResult,
     pushSubsResult,
   ] = await Promise.all([
-    q.query<{ data: unknown }>("SELECT data FROM clore_users"),
-    q.query<{ data: unknown }>("SELECT data FROM clore_threads"),
-    q.query<{ data: unknown }>("SELECT data FROM clore_messages"),
-    q.query<{ data: unknown }>("SELECT data FROM clore_polls"),
-    q.query<{ data: unknown }>("SELECT data FROM clore_call_signals"),
-    q.query<{ data: unknown }>("SELECT data FROM clore_moderation_reports"),
-    q.query<{ data: unknown }>("SELECT data FROM clore_moderation_audit_logs"),
-    q.query<{ user_id: string; data: unknown }>("SELECT user_id, data FROM clore_user_sanctions"),
-    q.query<{ token: string; data: unknown }>("SELECT token, data FROM clore_auth_tokens"),
-    q.query<{ id: string; data: unknown }>("SELECT id, data FROM clore_pending_logins"),
-    q.query<{ user_id: string; data: unknown }>("SELECT user_id, data FROM clore_push_subscriptions"),
+    q.query("SELECT data FROM clore_users"),
+    q.query("SELECT data FROM clore_threads"),
+    q.query("SELECT data FROM clore_messages"),
+    q.query("SELECT data FROM clore_polls"),
+    q.query("SELECT data FROM clore_call_signals"),
+    q.query("SELECT data FROM clore_moderation_reports"),
+    q.query("SELECT data FROM clore_moderation_audit_logs"),
+    q.query("SELECT user_id, data FROM clore_user_sanctions"),
+    q.query("SELECT token, data FROM clore_auth_tokens"),
+    q.query("SELECT id, data FROM clore_pending_logins"),
+    q.query("SELECT user_id, data FROM clore_push_subscriptions"),
   ]);
 
   const rawUserSanctions: Record<string, unknown> = {};
