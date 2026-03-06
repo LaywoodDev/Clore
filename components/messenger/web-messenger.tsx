@@ -121,9 +121,9 @@ import Dither from "@/components/ui/dither";
 import GradientBlinds from "@/components/ui/gradient-blinds";
 import PixelBlast from "@/components/ui/pixel-blast";
 import Plasma from "@/components/ui/plasma";
-import { requestJson, setAuthToken } from "@/components/messenger/api";
+import { getAuthHeaders, requestJson, setAuthToken } from "@/components/messenger/api";
 import { ModerationPanel } from "@/components/messenger/moderation-panel";
-import { AiCommandBar } from "@/components/ai-command-bar";
+import { AiCommandBar } from "@/components/ai/ai-command-bar";
 import {
   type ModerationActionPayload,
   type ModerationPanelAuditLog,
@@ -143,6 +143,8 @@ import {
   getAvatarDecorationSurfaceClassName,
 } from "@/lib/shared/avatar-decorations";
 import { useRealtimeSync } from "@/components/messenger/use-realtime-sync";
+import ShinyText from "@/components/ui/shiny-text";
+import { motion } from "motion/react";
 import { ADMIN_PANEL_USERNAME } from "@/lib/shared/admin";
 import { AI_FEATURE_ENABLED } from "@/lib/shared/ai-feature";
 
@@ -1908,11 +1910,9 @@ const AI_ASSISTANT_SEARCH_MODE_STORAGE_KEY_PREFIX =
 const AI_ASSISTANT_AGENT_MODE_STORAGE_KEY_PREFIX =
   "clore_ai_assistant_agent_mode_v1_";
 const EMOJI_USAGE_STORAGE_KEY_PREFIX = "clore_emoji_usage_v1_";
-const INCOMING_MESSAGE_SOUND_PATH = "/sounds/meet-message-sound-1.mp3";
-const INCOMING_CALL_RINGTONE_PATH =
-  "/sounds/zapsplat_multimedia_ringtone_smartphone_mallet_musical_001_79295.mp3";
-const OUTGOING_MESSAGE_SOUND_PATH =
-  "/sounds/zapsplat_multimedia_button_click_003_78080.mp3";
+const INCOMING_MESSAGE_SOUND_PATH = "/sounds/message-incoming.mp3";
+const INCOMING_CALL_RINGTONE_PATH = "/sounds/ringtone.mp3";
+const OUTGOING_MESSAGE_SOUND_PATH = "/sounds/message-sent.mp3";
 const MAX_PINNED_CHATS = 5;
 const MIN_BIRTH_YEAR = 1900;
 const ONLINE_STATUS_WINDOW_MS = 20_000;
@@ -2862,6 +2862,10 @@ type AiAssistantRequestMessage = {
   role: AiAssistantMessageRole;
   content: string;
 };
+type AiUiAction =
+  | { type: "navigate"; target: "settings" | "profile" | "home" | "assistant" }
+  | { type: "open_chat"; threadId: string };
+
 type AiAssistantChatResponse = {
   message: string;
   sentMessages?: number;
@@ -2871,6 +2875,7 @@ type AiAssistantChatResponse = {
   removedMembers?: number;
   updatedGroups?: number;
   updatedMemberRoles?: number;
+  uiActions?: AiUiAction[];
 };
 type AiAssistantSegmentExecutionResult = {
   message: string;
@@ -6191,9 +6196,16 @@ export function WebMessenger({
         "show",
         "go to",
         "switch to",
+        "navigate to",
+        "take me to",
         "перейди",
         "открой",
         "покажи",
+        "открыть",
+        "показать",
+        "перейти",
+        "зайди",
+        "зайти",
       ];
       const hasOpenSignal = openSignals.some((signal) => normalizedPrompt.includes(signal));
       if (!hasOpenSignal) {
@@ -7292,6 +7304,18 @@ export function WebMessenger({
               : message
           )
         );
+        for (const action of response.uiActions ?? []) {
+          if (action.type === "navigate") {
+            if (action.target === "assistant") {
+              openAiAssistantCall();
+            } else {
+              setActiveSidebar(action.target);
+            }
+          } else if (action.type === "open_chat") {
+            setActiveSidebar("home");
+            setActiveChatId(action.threadId);
+          }
+        }
         if (
           (response.sentMessages ?? 0) > 0 ||
           (response.deletedChats ?? 0) > 0 ||
@@ -7345,8 +7369,11 @@ export function WebMessenger({
       isAiCallOpen,
       isAiSubmitting,
       language,
+      openAiAssistantCall,
       playAiReplyAudio,
       scrollAiAssistantPanelsToBottom,
+      setActiveChatId,
+      setActiveSidebar,
       t,
       tryExecuteAiSettingsCommand,
     ]
@@ -10154,13 +10181,10 @@ export function WebMessenger({
     try {
       const response = await fetch(
         `/api/messenger/call-signal?userId=${encodeURIComponent(currentUser.id)}`,
-        {
-          cache: "no-store",
-          method: "GET",
-        }
+        { cache: "no-store", headers: getAuthHeaders() }
       );
 
-      if (response.status === 404 || response.status === 400) {
+      if (response.status === 404 || response.status === 400 || response.status === 401 || response.status === 403) {
         isCallSignalingUnavailableRef.current = true;
         return;
       }
@@ -10168,9 +10192,7 @@ export function WebMessenger({
         return;
       }
 
-      const payload = (await response
-        .json()
-        .catch(() => null)) as CallSignalPollResponse | null;
+      const payload = (await response.json().catch(() => null)) as CallSignalPollResponse | null;
       const signals = Array.isArray(payload?.signals) ? payload.signals : [];
       for (const signal of signals) {
         await handleCallSignal(signal);
@@ -18603,7 +18625,7 @@ export function WebMessenger({
             ) : null}
             {AI_FEATURE_ENABLED && activeSidebar === "assistant" ? (
               <div
-                className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+                className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-20 md:pb-0 ${
                   uiTheme === "light"
                     ? "bg-[radial-gradient(circle_at_10%_0%,rgba(59,130,246,0.12),transparent_36%),linear-gradient(180deg,#f8fbff_0%,#eef4fc_100%)]"
                     : "bg-[radial-gradient(circle_at_10%_0%,rgba(139,92,246,0.14),transparent_36%),linear-gradient(180deg,#09090b_0%,#101015_100%)]"
@@ -18622,8 +18644,11 @@ export function WebMessenger({
                       {aiMessages.map((message) => (
                         <ContextMenu key={message.id}>
                           <ContextMenuTrigger asChild>
-                            <div
+                            <motion.div
                               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.25, ease: "easeOut" }}
                             >
                               <div
                                 className={`max-w-[94%] rounded-2xl border px-3.5 py-2.5 text-sm shadow-[0_14px_30px_-24px_rgba(0,0,0,0.9)] sm:max-w-[82%] ${
@@ -18634,12 +18659,20 @@ export function WebMessenger({
                                       : "border-zinc-700/90 bg-zinc-900/90 text-zinc-100"
                                 }`}
                               >
-                                {renderFormattedMessageText(
-                                  message.content,
-                                  handleMentionClick
-                                )}
+                                {message.pending ? (
+                                  <ShinyText
+                                    text={t("aiAssistantThinking")}
+                                    speed={2.5}
+                                    color="rgba(161,161,170,0.7)"
+                                    shineColor="rgba(255,255,255,0.95)"
+                                    spread={100}
+                                  />
+                                ) : renderFormattedMessageText(
+                                    message.content,
+                                    handleMentionClick
+                                  )}
                               </div>
-                            </div>
+                            </motion.div>
                           </ContextMenuTrigger>
                           {!message.pending && message.content.trim().length > 0 ? (
                             <ContextMenuContent className={chatActionMenuContentClassName}>
@@ -20825,10 +20858,10 @@ export function WebMessenger({
       {shouldShowMobileNavigation ? (
         <nav
           aria-label={t("menu")}
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800/60 bg-zinc-950/95 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 backdrop-blur-xl md:hidden"
+          className="fixed bottom-[max(env(safe-area-inset-bottom),0.75rem)] left-4 right-4 z-50 rounded-2xl border border-zinc-700/60 bg-zinc-950/80 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur-2xl md:hidden"
         >
           <div
-            className="grid"
+            className="grid py-1"
             style={{
               gridTemplateColumns: `repeat(${Math.max(1, renderableSidebarItems.length)}, minmax(0, 1fr))`,
             }}
@@ -20854,7 +20887,7 @@ export function WebMessenger({
                   }`}
                   aria-label={t(item.id)}
                 >
-                  <div className={`flex items-center justify-center rounded-full px-4 py-1 transition-colors ${active ? "bg-primary/15" : ""}`}>
+                  <div className="flex items-center justify-center px-4 py-1">
                     <Icon className="size-5" />
                   </div>
                   <span className="leading-none">{t(item.id)}</span>
@@ -22948,9 +22981,12 @@ export function WebMessenger({
                   </div>
                 ) : (
                   aiMessages.map((message) => (
-                    <div
+                    <motion.div
                       key={`ai-call-${message.id}`}
                       className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
                     >
                       <div
                         className={`max-w-[88%] rounded-3xl border px-4 py-3 text-sm ${
@@ -22961,9 +22997,17 @@ export function WebMessenger({
                               : "border-zinc-700/80 bg-zinc-900/85 text-zinc-100"
                         }`}
                       >
-                        {renderFormattedMessageText(message.content, handleMentionClick)}
+                        {message.pending ? (
+                          <ShinyText
+                            text={t("aiAssistantThinking")}
+                            speed={2.5}
+                            color="rgba(161,161,170,0.7)"
+                            shineColor="rgba(255,255,255,0.95)"
+                            spread={100}
+                          />
+                        ) : renderFormattedMessageText(message.content, handleMentionClick)}
                       </div>
-                    </div>
+                    </motion.div>
                   ))
                 )}
               </div>
@@ -23542,7 +23586,7 @@ export function WebMessenger({
         <AlertDialogContent size="sm" className="w-[min(94vw,380px)] max-w-none border border-zinc-800/90 bg-zinc-950/95 text-zinc-100 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
           <AlertDialogHeader>
             <div className="mb-2 flex justify-center">
-              <img src="/bag-dynamic-premium.png" alt="" className="size-24 object-contain drop-shadow-lg" />
+              <img src="/images/bag-dynamic-premium.png" alt="" className="size-24 object-contain drop-shadow-lg" />
             </div>
             <AlertDialogTitle className="text-center text-zinc-100">{t("giftPrimeConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription className="text-center text-zinc-400">

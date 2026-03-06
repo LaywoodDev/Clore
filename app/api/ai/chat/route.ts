@@ -7634,6 +7634,16 @@ async function generateAssistantReply(
           : "Agent mode is disabled for this conversation. You cannot execute messenger automation actions (send, delete, create groups, invite/remove members, update group data, change member roles, moderation, profile changes). Provide only guidance and drafts, and never claim an action was executed.",
     });
   }
+  systemMessages.push({
+    role: "system",
+    content:
+      "UI Navigation: You can open screens in the app by appending a special marker at the very end of your reply (after all text). Available markers:\n" +
+      "- [UI:navigate:settings] — open the Settings screen\n" +
+      "- [UI:navigate:profile] — open the Profile screen\n" +
+      "- [UI:navigate:home] — go to the main chat list\n" +
+      "- [UI:navigate:assistant] — open the AI Assistant\n" +
+      "Use a marker ONLY when the user explicitly asks to open or navigate to that screen. Do NOT use markers for general questions or information requests. The marker is invisible to the user — do not mention it in your text.",
+  });
   if (knowledgeContext) {
     systemMessages.push({
       role: "system",
@@ -7834,6 +7844,26 @@ function checkFreeTierRateLimit(userId: string): {
   bucket.count += 1;
   return { allowed: true, cooldownUntil: 0 };
 }
+// ─── UI action marker extraction ─────────────────────────────────────────────
+
+type UiNavigateAction = { type: "navigate"; target: "settings" | "profile" | "home" | "assistant" };
+type UiAction = UiNavigateAction;
+
+const UI_ACTION_MARKER_REGEX = /\[UI:navigate:(settings|profile|home|assistant)\]/gi;
+
+function extractUiActionsFromReply(raw: string): { reply: string; uiActions: UiAction[] } {
+  const uiActions: UiAction[] = [];
+  const markers = raw.match(UI_ACTION_MARKER_REGEX) ?? [];
+  for (const marker of markers) {
+    const target = marker.replace(/\[UI:navigate:/i, "").replace(/\]/g, "").toLowerCase() as UiNavigateAction["target"];
+    if (!uiActions.some((a) => a.type === "navigate" && a.target === target)) {
+      uiActions.push({ type: "navigate", target });
+    }
+  }
+  const reply = raw.replace(UI_ACTION_MARKER_REGEX, "").trim();
+  return { reply, uiActions };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -8168,7 +8198,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const reply = await generateAssistantReply(
+    const rawReply = await generateAssistantReply(
       store,
       userId,
       language,
@@ -8179,6 +8209,10 @@ export async function POST(request: Request) {
       screenContext,
       freeTierModel
     );
+    const { reply, uiActions } = extractUiActionsFromReply(rawReply);
+    if (uiActions.length > 0) {
+      return NextResponse.json({ message: reply, uiActions });
+    }
     return NextResponse.json({ message: reply });
   } catch (error) {
     const message =

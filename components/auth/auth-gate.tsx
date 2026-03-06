@@ -196,7 +196,7 @@ const LEGACY_USERS_STORAGE_KEY = "clore_auth_users_v1";
 const SESSION_STORAGE_KEY = "clore_auth_session_v1";
 const UI_THEME_STORAGE_KEY = "clore_ui_theme_v1";
 const WebMessenger = dynamic(
-  () => import("@/components/web-messenger").then((module) => module.WebMessenger),
+  () => import("@/components/messenger/web-messenger").then((module) => module.WebMessenger),
   {
     ssr: false,
     loading: () => <MessengerLoadingSkeleton />,
@@ -278,7 +278,11 @@ function readLegacyUsers(): Array<Required<LegacyStoredUser>> {
 
 
 async function parseAuthResponse(response: Response): Promise<AuthResponse> {
-  return (await response.json().catch(() => null)) as AuthResponse;
+  const payload = await response.json().catch(() => null);
+  if (!payload || typeof payload !== "object") {
+    return { error: `Server error (${response.status})` } as AuthResponse;
+  }
+  return payload as AuthResponse;
 }
 
 export function AuthGate() {

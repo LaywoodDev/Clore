@@ -10,6 +10,10 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/push-notifications": "^8.0.2",
+    "@gsap/react": "^2.1.2",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
     "@sapphi-red/web-noise-suppressor": "^0.3.5",
@@ -17,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "firebase-admin": "^13.7.0",
     "gsap": "^3.14.2",
     "lucide-react": "^0.564.0",
     "motion": "^12.34.0",
@@ -36,6 +41,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.2.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",

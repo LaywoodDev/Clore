@@ -28,8 +28,8 @@ self.addEventListener("push", (event) => {
   const title = data.title ?? "Clore";
   const options = {
     body: data.body ?? "",
-    icon: "/icon-192.svg",
-    badge: "/icon-192.svg",
+    icon: "/favicon.ico",
+    badge: "/favicon.ico",
     tag: data.chatId ? `chat-${data.chatId}` : "clore-message",
     data: { url: "/" },
     renotify: true,

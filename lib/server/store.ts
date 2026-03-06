@@ -1835,23 +1835,128 @@ async function ensureDatabaseStore(): Promise<void> {
       return;
     }
     ensureDatabaseReadyPromise = (async () => {
+      // Create relational tables
       await currentPool.query(`
-        CREATE TABLE IF NOT EXISTS clore_store (
+        CREATE TABLE IF NOT EXISTS clore_users (
           id TEXT PRIMARY KEY,
           data JSONB NOT NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
-      await currentPool.query(
-        `
-          INSERT INTO clore_store (id, data, updated_at)
-          VALUES ($1, $2::jsonb, NOW())
-          ON CONFLICT (id) DO NOTHING
-        `,
-        [STORE_ROW_ID, JSON.stringify(EMPTY_STORE)]
-      );
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_threads (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_messages (
+          id TEXT PRIMARY KEY,
+          chat_id TEXT NOT NULL,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE INDEX IF NOT EXISTS clore_messages_chat_id_idx ON clore_messages (chat_id)
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_polls (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_call_signals (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_moderation_reports (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_moderation_audit_logs (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_user_sanctions (
+          user_id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_auth_tokens (
+          token TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_pending_logins (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await currentPool.query(`
+        CREATE TABLE IF NOT EXISTS clore_push_subscriptions (
+          user_id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      // Migrate data from legacy clore_store blob table if it exists
+      const legacyExists = await currentPool.query<{ exists: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_name = 'clore_store'
+        ) AS exists
+      `);
+      if (legacyExists.rows[0]?.exists) {
+        const legacyResult = await currentPool.query<{ data: unknown }>(
+          "SELECT data FROM clore_store WHERE id = $1 LIMIT 1",
+          [STORE_ROW_ID]
+        );
+        const legacyData = legacyResult.rows[0]?.data;
+        if (legacyData) {
+          const store = sanitizeStore(legacyData);
+          // Only migrate if there is real data and relational tables are empty
+          const usersCount = await currentPool.query<{ count: string }>(
+            "SELECT COUNT(*) AS count FROM clore_users"
+          );
+          if (parseInt(usersCount.rows[0]?.count ?? "0", 10) === 0 && store.users.length > 0) {
+            console.log("[store] Migrating legacy clore_store blob into relational tables...");
+            const client = await currentPool.connect();
+            try {
+              await client.query("BEGIN");
+              await _writeStoreTables(client, store);
+              await client.query("COMMIT");
+              console.log("[store] Migration complete.");
+            } catch (err) {
+              await client.query("ROLLBACK").catch(() => undefined);
+              console.error("[store] Migration failed, keeping legacy table:", err);
+            } finally {
+              client.release();
+            }
+          }
+        }
+      }
     })().catch((error) => {
       ensureDatabaseReadyPromise = null;
+      console.error("[store] Failed to initialize database tables:", error);
       throw error;
     });
   }
@@ -1859,26 +1964,379 @@ async function ensureDatabaseStore(): Promise<void> {
   await ensureDatabaseReadyPromise;
 }
 
+// Low-level helper: write all StoreData into relational tables using an existing client.
+// Does full UPSERT for all entities present in `store`, but does NOT delete removed rows.
+// Used by migration only. updateStoreInDatabase handles deletes via diff.
+async function _writeStoreTables(
+  client: import("pg").PoolClient,
+  store: StoreData
+): Promise<void> {
+  for (const user of store.users) {
+    await client.query(
+      `INSERT INTO clore_users (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [user.id, JSON.stringify(user)]
+    );
+  }
+  for (const thread of store.threads) {
+    await client.query(
+      `INSERT INTO clore_threads (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [thread.id, JSON.stringify(thread)]
+    );
+  }
+  for (const message of store.messages) {
+    await client.query(
+      `INSERT INTO clore_messages (id, chat_id, data, updated_at) VALUES ($1, $2, $3::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [message.id, message.chatId, JSON.stringify(message)]
+    );
+  }
+  for (const poll of store.polls) {
+    await client.query(
+      `INSERT INTO clore_polls (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [poll.id, JSON.stringify(poll)]
+    );
+  }
+  for (const signal of store.callSignals) {
+    await client.query(
+      `INSERT INTO clore_call_signals (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [signal.id, JSON.stringify(signal)]
+    );
+  }
+  for (const report of store.moderationReports) {
+    await client.query(
+      `INSERT INTO clore_moderation_reports (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [report.id, JSON.stringify(report)]
+    );
+  }
+  for (const log of store.moderationAuditLogs) {
+    await client.query(
+      `INSERT INTO clore_moderation_audit_logs (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [log.id, JSON.stringify(log)]
+    );
+  }
+  for (const [userId, sanction] of Object.entries(store.userSanctions)) {
+    await client.query(
+      `INSERT INTO clore_user_sanctions (user_id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [userId, JSON.stringify(sanction)]
+    );
+  }
+  for (const [token, tokenData] of Object.entries(store.authTokens)) {
+    await client.query(
+      `INSERT INTO clore_auth_tokens (token, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (token) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [token, JSON.stringify(tokenData)]
+    );
+  }
+  for (const [loginId, pendingLogin] of Object.entries(store.pendingLogins)) {
+    await client.query(
+      `INSERT INTO clore_pending_logins (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [loginId, JSON.stringify(pendingLogin)]
+    );
+  }
+  for (const [userId, subs] of Object.entries(store.pushSubscriptions)) {
+    await client.query(
+      `INSERT INTO clore_push_subscriptions (user_id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [userId, JSON.stringify(subs)]
+    );
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DbQuerier = { query(sql: string, params?: any[]): Promise<{ rows: any[] }> };
+
+async function _readStoreTables(q: DbQuerier): Promise<StoreData> {
+  const [
+    usersResult,
+    threadsResult,
+    messagesResult,
+    pollsResult,
+    callSignalsResult,
+    modReportsResult,
+    modAuditResult,
+    sanctionsResult,
+    authTokensResult,
+    pendingLoginsResult,
+    pushSubsResult,
+  ] = await Promise.all([
+    q.query<{ data: unknown }>("SELECT data FROM clore_users"),
+    q.query<{ data: unknown }>("SELECT data FROM clore_threads"),
+    q.query<{ data: unknown }>("SELECT data FROM clore_messages"),
+    q.query<{ data: unknown }>("SELECT data FROM clore_polls"),
+    q.query<{ data: unknown }>("SELECT data FROM clore_call_signals"),
+    q.query<{ data: unknown }>("SELECT data FROM clore_moderation_reports"),
+    q.query<{ data: unknown }>("SELECT data FROM clore_moderation_audit_logs"),
+    q.query<{ user_id: string; data: unknown }>("SELECT user_id, data FROM clore_user_sanctions"),
+    q.query<{ token: string; data: unknown }>("SELECT token, data FROM clore_auth_tokens"),
+    q.query<{ id: string; data: unknown }>("SELECT id, data FROM clore_pending_logins"),
+    q.query<{ user_id: string; data: unknown }>("SELECT user_id, data FROM clore_push_subscriptions"),
+  ]);
+
+  const rawUserSanctions: Record<string, unknown> = {};
+  for (const row of sanctionsResult.rows) rawUserSanctions[row.user_id] = row.data;
+  const rawAuthTokens: Record<string, unknown> = {};
+  for (const row of authTokensResult.rows) rawAuthTokens[row.token] = row.data;
+  const rawPendingLogins: Record<string, unknown> = {};
+  for (const row of pendingLoginsResult.rows) rawPendingLogins[row.id] = row.data;
+  const rawPushSubs: Record<string, unknown> = {};
+  for (const row of pushSubsResult.rows) rawPushSubs[row.user_id] = row.data;
+
+  return sanitizeStore({
+    users: usersResult.rows.map((r) => r.data),
+    threads: threadsResult.rows.map((r) => r.data),
+    messages: messagesResult.rows.map((r) => r.data),
+    polls: pollsResult.rows.map((r) => r.data),
+    callSignals: callSignalsResult.rows.map((r) => r.data),
+    moderationReports: modReportsResult.rows.map((r) => r.data),
+    moderationAuditLogs: modAuditResult.rows.map((r) => r.data),
+    userSanctions: rawUserSanctions,
+    authTokens: rawAuthTokens,
+    pendingLogins: rawPendingLogins,
+    pushSubscriptions: rawPushSubs,
+  });
+}
+
 async function readStoreFromDatabase(): Promise<StoreData> {
   await ensureDatabaseStore();
   const currentPool = getPool();
   if (!currentPool) {
-    return {
-      ...EMPTY_STORE,
-    };
+    return { ...EMPTY_STORE };
+  }
+  return _readStoreTables(currentPool);
+}
+
+// Applies diff between old and new store, writing only changed/new rows and deleting removed rows.
+async function _applyStoreDiff(
+  client: import("pg").PoolClient,
+  oldStore: StoreData,
+  newStore: StoreData
+): Promise<void> {
+  // Build lookup maps of old JSON snapshots for fast comparison
+  const oldUserJson = new Map(oldStore.users.map((u) => [u.id, JSON.stringify(u)]));
+  const oldThreadJson = new Map(oldStore.threads.map((t) => [t.id, JSON.stringify(t)]));
+  const oldMessageJson = new Map(oldStore.messages.map((m) => [m.id, JSON.stringify(m)]));
+  const oldPollJson = new Map(oldStore.polls.map((p) => [p.id, JSON.stringify(p)]));
+  const oldSignalJson = new Map(oldStore.callSignals.map((s) => [s.id, JSON.stringify(s)]));
+  const oldReportJson = new Map(oldStore.moderationReports.map((r) => [r.id, JSON.stringify(r)]));
+  const oldAuditJson = new Map(oldStore.moderationAuditLogs.map((l) => [l.id, JSON.stringify(l)]));
+
+  // --- Users ---
+  const newUserIds = new Set<string>();
+  for (const user of newStore.users) {
+    newUserIds.add(user.id);
+    const json = JSON.stringify(user);
+    if (oldUserJson.get(user.id) !== json) {
+      await client.query(
+        `INSERT INTO clore_users (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [user.id, json]
+      );
+    }
+  }
+  const deletedUserIds = [...oldUserJson.keys()].filter((id) => !newUserIds.has(id));
+  if (deletedUserIds.length > 0) {
+    await client.query("DELETE FROM clore_users WHERE id = ANY($1::text[])", [deletedUserIds]);
   }
 
-  const result = await currentPool.query<{ data: unknown }>(
-    "SELECT data FROM clore_store WHERE id = $1 LIMIT 1",
-    [STORE_ROW_ID]
-  );
-  const rawData = result.rows[0]?.data;
-  if (!rawData) {
-    return {
-      ...EMPTY_STORE,
-    };
+  // --- Threads ---
+  const newThreadIds = new Set<string>();
+  for (const thread of newStore.threads) {
+    newThreadIds.add(thread.id);
+    const json = JSON.stringify(thread);
+    if (oldThreadJson.get(thread.id) !== json) {
+      await client.query(
+        `INSERT INTO clore_threads (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [thread.id, json]
+      );
+    }
   }
-  return sanitizeStore(rawData);
+  const deletedThreadIds = [...oldThreadJson.keys()].filter((id) => !newThreadIds.has(id));
+  if (deletedThreadIds.length > 0) {
+    await client.query("DELETE FROM clore_threads WHERE id = ANY($1::text[])", [deletedThreadIds]);
+  }
+
+  // --- Messages ---
+  const newMessageIds = new Set<string>();
+  for (const message of newStore.messages) {
+    newMessageIds.add(message.id);
+    const json = JSON.stringify(message);
+    if (oldMessageJson.get(message.id) !== json) {
+      await client.query(
+        `INSERT INTO clore_messages (id, chat_id, data, updated_at) VALUES ($1, $2, $3::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [message.id, message.chatId, json]
+      );
+    }
+  }
+  const deletedMessageIds = [...oldMessageJson.keys()].filter((id) => !newMessageIds.has(id));
+  if (deletedMessageIds.length > 0) {
+    await client.query("DELETE FROM clore_messages WHERE id = ANY($1::text[])", [deletedMessageIds]);
+  }
+
+  // --- Polls ---
+  const newPollIds = new Set<string>();
+  for (const poll of newStore.polls) {
+    newPollIds.add(poll.id);
+    const json = JSON.stringify(poll);
+    if (oldPollJson.get(poll.id) !== json) {
+      await client.query(
+        `INSERT INTO clore_polls (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [poll.id, json]
+      );
+    }
+  }
+  const deletedPollIds = [...oldPollJson.keys()].filter((id) => !newPollIds.has(id));
+  if (deletedPollIds.length > 0) {
+    await client.query("DELETE FROM clore_polls WHERE id = ANY($1::text[])", [deletedPollIds]);
+  }
+
+  // --- Call signals ---
+  const newSignalIds = new Set<string>();
+  for (const signal of newStore.callSignals) {
+    newSignalIds.add(signal.id);
+    const json = JSON.stringify(signal);
+    if (oldSignalJson.get(signal.id) !== json) {
+      await client.query(
+        `INSERT INTO clore_call_signals (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [signal.id, json]
+      );
+    }
+  }
+  const deletedSignalIds = [...oldSignalJson.keys()].filter((id) => !newSignalIds.has(id));
+  if (deletedSignalIds.length > 0) {
+    await client.query("DELETE FROM clore_call_signals WHERE id = ANY($1::text[])", [deletedSignalIds]);
+  }
+
+  // --- Moderation reports ---
+  const newReportIds = new Set<string>();
+  for (const report of newStore.moderationReports) {
+    newReportIds.add(report.id);
+    const json = JSON.stringify(report);
+    if (oldReportJson.get(report.id) !== json) {
+      await client.query(
+        `INSERT INTO clore_moderation_reports (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [report.id, json]
+      );
+    }
+  }
+  const deletedReportIds = [...oldReportJson.keys()].filter((id) => !newReportIds.has(id));
+  if (deletedReportIds.length > 0) {
+    await client.query("DELETE FROM clore_moderation_reports WHERE id = ANY($1::text[])", [deletedReportIds]);
+  }
+
+  // --- Audit logs ---
+  const newAuditIds = new Set<string>();
+  for (const log of newStore.moderationAuditLogs) {
+    newAuditIds.add(log.id);
+    const json = JSON.stringify(log);
+    if (oldAuditJson.get(log.id) !== json) {
+      await client.query(
+        `INSERT INTO clore_moderation_audit_logs (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [log.id, json]
+      );
+    }
+  }
+  const deletedAuditIds = [...oldAuditJson.keys()].filter((id) => !newAuditIds.has(id));
+  if (deletedAuditIds.length > 0) {
+    await client.query("DELETE FROM clore_moderation_audit_logs WHERE id = ANY($1::text[])", [deletedAuditIds]);
+  }
+
+  // --- User sanctions (keyed by userId) ---
+  const oldSanctionJson = new Map(
+    Object.entries(oldStore.userSanctions).map(([k, v]) => [k, JSON.stringify(v)])
+  );
+  const newSanctionIds = new Set<string>();
+  for (const [userId, sanction] of Object.entries(newStore.userSanctions)) {
+    newSanctionIds.add(userId);
+    const json = JSON.stringify(sanction);
+    if (oldSanctionJson.get(userId) !== json) {
+      await client.query(
+        `INSERT INTO clore_user_sanctions (user_id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [userId, json]
+      );
+    }
+  }
+  const deletedSanctionIds = [...oldSanctionJson.keys()].filter((id) => !newSanctionIds.has(id));
+  if (deletedSanctionIds.length > 0) {
+    await client.query("DELETE FROM clore_user_sanctions WHERE user_id = ANY($1::text[])", [deletedSanctionIds]);
+  }
+
+  // --- Auth tokens ---
+  const oldTokenJson = new Map(
+    Object.entries(oldStore.authTokens).map(([k, v]) => [k, JSON.stringify(v)])
+  );
+  const newTokenIds = new Set<string>();
+  for (const [token, tokenData] of Object.entries(newStore.authTokens)) {
+    newTokenIds.add(token);
+    const json = JSON.stringify(tokenData);
+    if (oldTokenJson.get(token) !== json) {
+      await client.query(
+        `INSERT INTO clore_auth_tokens (token, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (token) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [token, json]
+      );
+    }
+  }
+  const deletedTokenIds = [...oldTokenJson.keys()].filter((t) => !newTokenIds.has(t));
+  if (deletedTokenIds.length > 0) {
+    await client.query("DELETE FROM clore_auth_tokens WHERE token = ANY($1::text[])", [deletedTokenIds]);
+  }
+
+  // --- Pending logins ---
+  const oldLoginJson = new Map(
+    Object.entries(oldStore.pendingLogins).map(([k, v]) => [k, JSON.stringify(v)])
+  );
+  const newLoginIds = new Set<string>();
+  for (const [loginId, pendingLogin] of Object.entries(newStore.pendingLogins)) {
+    newLoginIds.add(loginId);
+    const json = JSON.stringify(pendingLogin);
+    if (oldLoginJson.get(loginId) !== json) {
+      await client.query(
+        `INSERT INTO clore_pending_logins (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [loginId, json]
+      );
+    }
+  }
+  const deletedLoginIds = [...oldLoginJson.keys()].filter((id) => !newLoginIds.has(id));
+  if (deletedLoginIds.length > 0) {
+    await client.query("DELETE FROM clore_pending_logins WHERE id = ANY($1::text[])", [deletedLoginIds]);
+  }
+
+  // --- Push subscriptions ---
+  const oldPushJson = new Map(
+    Object.entries(oldStore.pushSubscriptions).map(([k, v]) => [k, JSON.stringify(v)])
+  );
+  const newPushIds = new Set<string>();
+  for (const [userId, subs] of Object.entries(newStore.pushSubscriptions)) {
+    newPushIds.add(userId);
+    const json = JSON.stringify(subs);
+    if (oldPushJson.get(userId) !== json) {
+      await client.query(
+        `INSERT INTO clore_push_subscriptions (user_id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [userId, json]
+      );
+    }
+  }
+  const deletedPushIds = [...oldPushJson.keys()].filter((id) => !newPushIds.has(id));
+  if (deletedPushIds.length > 0) {
+    await client.query("DELETE FROM clore_push_subscriptions WHERE user_id = ANY($1::text[])", [deletedPushIds]);
+  }
 }
 
 async function updateStoreInDatabase<T>(
@@ -1894,37 +2352,16 @@ async function updateStoreInDatabase<T>(
   try {
     await client.query("BEGIN");
 
-    const selectResult = await client.query<{ data: unknown }>(
-      "SELECT data FROM clore_store WHERE id = $1 FOR UPDATE",
-      [STORE_ROW_ID]
-    );
-    let store = sanitizeStore(selectResult.rows[0]?.data);
+    // Read current state using the same transaction client
+    const oldStore = await _readStoreTables(client);
+    ensureBotUserInStore(oldStore);
 
-    if (selectResult.rows.length === 0) {
-      store = {
-        ...EMPTY_STORE,
-      };
-      await client.query(
-        `
-          INSERT INTO clore_store (id, data, updated_at)
-          VALUES ($1, $2::jsonb, NOW())
-          ON CONFLICT (id) DO NOTHING
-        `,
-        [STORE_ROW_ID, JSON.stringify(store)]
-      );
-    }
+    // Clone via sanitize so updater gets a clean object; diff against oldStore after
+    const newStore: StoreData = sanitizeStore(oldStore);
+    const result = await updater(newStore);
 
-    ensureBotUserInStore(store);
-
-    const result = await updater(store);
-    await client.query(
-      `
-        UPDATE clore_store
-        SET data = $2::jsonb, updated_at = NOW()
-        WHERE id = $1
-      `,
-      [STORE_ROW_ID, JSON.stringify(store)]
-    );
+    // Only write rows that actually changed
+    await _applyStoreDiff(client, oldStore, newStore);
 
     await client.query("COMMIT");
     return result;
@@ -2035,15 +2472,22 @@ export async function getStoreUpdateMarker(): Promise<number> {
     if (!currentPool) {
       return 0;
     }
-    const result = await currentPool.query<{ updated_at_ms: number | string }>(
-      `
-        SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_at_ms
-        FROM clore_store
-        WHERE id = $1
-        LIMIT 1
-      `,
-      [STORE_ROW_ID]
-    );
+    // Return the latest updated_at across all relational tables
+    const result = await currentPool.query<{ updated_at_ms: number | string }>(`
+      SELECT EXTRACT(EPOCH FROM MAX(updated_at)) * 1000 AS updated_at_ms FROM (
+        SELECT updated_at FROM clore_users
+        UNION ALL SELECT updated_at FROM clore_threads
+        UNION ALL SELECT updated_at FROM clore_messages
+        UNION ALL SELECT updated_at FROM clore_polls
+        UNION ALL SELECT updated_at FROM clore_call_signals
+        UNION ALL SELECT updated_at FROM clore_moderation_reports
+        UNION ALL SELECT updated_at FROM clore_moderation_audit_logs
+        UNION ALL SELECT updated_at FROM clore_user_sanctions
+        UNION ALL SELECT updated_at FROM clore_auth_tokens
+        UNION ALL SELECT updated_at FROM clore_pending_logins
+        UNION ALL SELECT updated_at FROM clore_push_subscriptions
+      ) AS all_tables
+    `);
     const rawValue = result.rows[0]?.updated_at_ms;
     const marker = typeof rawValue === "number" ? rawValue : Number(rawValue);
     return Number.isFinite(marker) ? marker : 0;

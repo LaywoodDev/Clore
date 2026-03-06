@@ -8,6 +8,10 @@ export function setAuthToken(token: string): void {
   _authToken = token;
 }
 
+export function getAuthHeaders(): Record<string, string> {
+  return _authToken ? { Authorization: `Bearer ${_authToken}` } : {};
+}
+
 export async function requestJson<T>(
   input: string,
   init?: RequestInit
